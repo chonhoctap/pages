@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chốn Học Tập — KienDev_</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg1:#020617;
+    --neon1:#7C3AED;
+    --neon2:#06B6D4;
+    --muted:#95a5c7;
+    --pink1:#ffb86b;
+    --pink2:#ff6bcb;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Poppins",sans-serif;
+    background:#030516;
+    color:#e7f0ff;
+  }
+
+  .wrap{max-width:1200px;margin:auto;padding:20px;}
+
+  .top{
+    display:flex;flex-wrap:wrap;align-items:center;gap:16px;
+    padding:16px;border-radius:14px;
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(255,255,255,0.05);
+    backdrop-filter:blur(6px);
+  }
+  .brand{display:flex;align-items:center;gap:14px;}
+  .avatar{width:70px;height:70px;border-radius:14px;object-fit:cover}
+
+  .title h1{
+    margin:0;
+    font-family:"Poppins",sans-serif;
+    font-size:20px;
+    color:white;
+    font-weight:600;
+  }
+
+  .title p{margin:3px 0 0;color:var(--muted);font-size:13px}
+
+  .controls{
+    display:flex;gap:10px;margin-left:auto;
+    flex-wrap:wrap;
+  }
+  .search{
+    padding:11px 14px;border-radius:10px;
+    border:1px solid rgba(255,255,255,0.06);
+    background:rgba(255,255,255,0.08);
+    color:white;
+    width:240px;
+  }
+  button.small{
+    padding:10px 14px;border-radius:10px;
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.08);
+    color:white;cursor:pointer;
+  }
+  .btn-primary{
+    padding:10px 14px;border-radius:10px;
+    background:linear-gradient(90deg,var(--neon1),var(--neon2));
+    color:white;border:0;cursor:pointer;font-weight:700;
+  }
+
+  .grid{
+    margin-top:22px;
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+    gap:18px;
+  }
+
+  .card{
+    padding:16px;border-radius:14px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.04);
+    transition:0.2s;
+  }
+  .card:hover{
+    transform:translateY(-6px);
+    box-shadow:0 10px 30px rgba(0,0,0,0.2);
+  }
+
+  .card-top{display:flex;gap:12px;align-items:center;}
+  .file-icon{
+    width:52px;height:52px;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:26px;
+    background:rgba(255,255,255,0.04);
+  }
+
+  .name{font-weight:700;font-size:15px;}
+  .sub{font-size:12px;color:var(--muted);margin-top:5px}
+
+  .card-actions{
+    display:flex;gap:10px;margin-top:14px;
+  }
+  .action-btn{
+    flex:1;padding:10px 12px;border-radius:10px;
+    font-weight:700;border:0;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    gap:6px;
+  }
+
+  .view-btn{
+    background:linear-gradient(90deg,#0ea5e9,#7c3aed);
+    color:white;
+  }
+  .download-btn{
+    background:linear-gradient(90deg,var(--pink1),var(--pink2));
+    color:#071023;text-decoration:none;
+  }
+
+  .top-badge{
+    position:absolute;left:14px;top:14px;
+    padding:4px 8px;font-size:11px;font-weight:700;
+    background:linear-gradient(90deg,#ffb86b,#ff6bcb);
+    border-radius:6px;color:#071023;
+  }
+
+  @media (max-width:600px){
+    .controls{margin-left:0;width:100%;justify-content:space-between;}
+    .search{flex:1}
+  }
+</style>
+</head>
+<body>
+
+<div id="inapp-warning" style="
+  display:none;
+  background:#fff3cd;
+  color:#000;
+  padding:16px;
+  margin:12px;
+  border-radius:10px;
+  font-size:14px;
+  border:1px solid #ffe299;
+">
+  ⚠️ <b>Bạn đang mở trang này trong ứng dụng (TikTok, Messenger, Zalo...)</b><br>
+  Các ứng dụng này <b>không cho tải file</b>.<br><br>
+  ➤ Nhấn nút bên dưới để mở bằng trình duyệt thật:
+  <br><br>
+  <button onclick="openExternalBrowser()" style="
+    padding:10px 16px;
+    background:#0ea5e9;
+    color:white;
+    border:0;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:700;
+  ">
+    🌐 Mở bằng Chrome / Cốc Cốc
+  </button>
+</div>
+
+
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand">
+      <img src="avatar.png" class="avatar">
+      <div class="title">
+        <h1>CHỐN HỌC TẬP</h1>
+        <p>Code by KienDev — Xem & Tải tài liệu</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <input id="q" class="search" placeholder="Tìm tài liệu...">
+      <button id="refresh" class="small">⟳</button>
+      <button id="new" class="btn-primary">Làm mới</button>
+    </div>
+  </div>
+
+  <div id="grid" class="grid"></div>
+
+</div>
+
+<script>
+const owner="chonhoctap";
+const repo="pages";
+const folder="files";
+const api=`https://api.github.com/repos/${owner}/${repo}/contents/${folder}`;
+
+function extIcon(name){
+  const e=name.split('.').pop().toLowerCase();
+  if(/doc|docx/.test(e)) return "📘";
+  if(e==="pdf") return "📕";
+  if(/png|jpe?g|gif/.test(e)) return "🖼️";
+  if(/ppt|pptx/.test(e)) return "📊";
+  return "📄";
+}
+function clean(n){
+  return n.replace(/\.(docx?|pdf|png|jpe?g|pptx?)$/i,"");
+}
+
+const grid=document.getElementById("grid");
+let all=[];
+
+async function load(){
+  grid.innerHTML="Đang tải...";
+  const r=await fetch(api); 
+  const d=await r.json();
+  all=d.filter(f=>f.type==="file");
+  render(all);
+}
+
+function render(list){
+  if(!list.length){grid.innerHTML="Không có file.";return;}
+  grid.innerHTML="";
+  list.forEach(f=>{
+    const n=f.name;
+    const s=clean(n);
+    const badge=s.split("-")[0];
+    const title=s.split("-").slice(1).join(" ")||s;
+    const raw=f.download_url;
+
+    const el=document.createElement("div");
+    el.className="card";
+    el.innerHTML=`
+      <div class="top-badge">${badge}</div>
+      <div class="card-top">
+        <div class="file-icon">${extIcon(n)}</div>
+        <div>
+          <div class="name">${title}</div>
+          <div class="sub">${n}</div>
+        </div>
+      </div>
+
+      <div class="card-actions">
+        <button class="action-btn view-btn" onclick="openView('${encodeURIComponent(raw)}','${encodeURIComponent(n)}')">
+          👁 Xem
+        </button>
+
+        <a class="action-btn download-btn" href="${raw}" download>
+          ⬇ Tải
+        </a>
+      </div>
+    `;
+    grid.appendChild(el);
+  });
+}
+
+function openView(raw,name){
+  location.href=`vd/view.html?file=${raw}&name=${name}`;
+}
+
+document.getElementById("q").oninput=e=>{
+  const k=e.target.value.toLowerCase();
+  render(all.filter(f=>f.name.toLowerCase().includes(k)));
+};
+
+document.getElementById("refresh").onclick=load;
+document.getElementById("new").onclick=load;
+
+load();
+
+
+
+
+function isInAppBrowser() {
+  const ua = navigator.userAgent || navigator.vendor || window.opera;
+  return (
+    ua.includes("FBAN") || ua.includes("FBAV") ||
+    ua.includes("Instagram") ||
+    ua.includes("Line") ||
+    ua.includes("Zalo") || ua.includes("ZaloPC") ||
+    ua.includes("TikTok") ||
+    (ua.includes("wv") && ua.includes("Android"))
+  );
+}
+
+if (isInAppBrowser()) {
+  document.getElementById("inapp-warning").style.display = "block";
+}
+
+
+function openExternalBrowser() {
+  const url = window.location.href;
+  window.location.href =
+    `intent://${url.replace("https://","")}` +
+    "#Intent;scheme=https;package=com.android.chrome;end;";
+}
+</script>
+
+</body>
+</html>
+
+
+

@@ -219,7 +219,7 @@ function render(list){
     const n=f.name;
     const s=clean(n);
     const badge=s.split("-")[0];
-    const title=s.split("-").slice(1).join(" ")||s;
+    const title = s.split("-").pop();
     const raw=f.download_url;
 
     const el=document.createElement("div");
@@ -292,6 +292,7 @@ function openExternalBrowser() {
 
 </body>
 </html>
+
 
 
 

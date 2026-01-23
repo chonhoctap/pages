@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Chốn Học Tập — KienDev_</title>
+<link rel="icon" href="avatar.png">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#030516;
+  --card:#081225;
+  --muted:#95a5c7;
+  --accent1:#7C3AED;
+  --accent2:#06B6D4;
+  --pink1:#ffb86b;
+  --pink2:#ff6bcb;
+}
+*{box-sizing:border-box;font-family:Poppins}
+body{margin:0;background:var(--bg);color:#eaf2ff}
+.wrap{max-width:1200px;margin:auto;padding:20px}
+
+/* ===== TOP ===== */
+.top{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:16px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
+.avatar{width:64px;height:64px;border-radius:14px}
+.title h1{
+  margin:0;
+  font-size:22px;
+  font-family:'Palatino Linotype','Book Antiqua',Palatino,serif;
+  font-weight:700;
+  letter-spacing:-0.3px;
+}
+.title p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.controls{margin-left:auto}
+.search{padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:white}
+
+/* ===== FILTERS ===== */
+.filters{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
+.filters button{height:36px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:white;cursor:pointer;font-size:13px}
+.filters button.active{background:linear-gradient(90deg,var(--accent1),var(--accent2));font-weight:700}
+
+/* ===== SECTIONS ===== */
+.section{margin-top:22px}
+.section h3{margin:0 0 10px;font-size:14px;color:var(--muted)}
+
+/* ===== RECENT ===== */
+.recent-row{display:flex;gap:16px;overflow-x:auto;padding-bottom:12px;scroll-behavior:smooth}
+.recent-row .card{min-width:260px}
+.recent-row::-webkit-scrollbar{height:8px}
+.recent-row::-webkit-scrollbar-thumb{background:linear-gradient(90deg,var(--accent1),var(--accent2));border-radius:10px}
+
+/* ===== GRID ===== */
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
+
+/* Ensure grade rows in 'Gần đây' span full width and stack vertically */
+.grade-block{grid-column:1 / -1; margin-bottom:14px} 
+
+/* ===== CARD ===== */
+.card{padding:16px;border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);border:1px solid rgba(255,255,255,.05);position:relative;transition:.2s}
+.card:hover{transform:translateY(-6px)}
+.top-badge{
+  position:absolute;
+  top:14px;
+  left:14px;
+  padding:4px 8px;
+  font-size:11px;
+  font-weight:700;
+  border-radius:8px;
+  background:linear-gradient(90deg,var(--pink1),var(--pink2));
+  color:#071023;
+
+  /* hidden by default, appear on card hover/focus */
+  opacity:0;
+  transform:translateY(-6px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease;
+  pointer-events:none;
+}
+
+/* show badge when hovering (or focusing inside) the card */
+.card:hover .top-badge,
+.card:focus-within .top-badge{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+
+.card-top{display:flex;gap:12px;align-items:center}
+.file-icon{width:52px;height:52px;border-radius:12px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:26px}
+.name{font-weight:700;font-size:15px}
+.sub{font-size:12px;color:var(--muted);margin-top:4px}
+
+.actions{margin-top:14px;display:flex;gap:10px}
+.btn-view{flex:1;padding:10px;border-radius:10px;border:0;font-weight:700;cursor:pointer;background:linear-gradient(90deg,#0ea5e9,#7c3aed);color:white}
+.btn-dl{flex:1;padding:10px;border-radius:10px;font-weight:700;text-decoration:none;background:linear-gradient(90deg,var(--pink1),var(--pink2));color:#071023;display:flex;align-items:center;justify-content:center}
+
+/* small helper: ellipsis for long descriptions */
+.desc-ellipsis{display:block;max-height:2.6em;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <img src="avatar.png" class="avatar">
+    <div class="title">
+      <h1>CHỐN HỌC TẬP</h1>
+      <p>Code by KienDev — Xem & Tải tài liệu</p>
+    </div>
+    <div class="controls">
+      <input id="q" class="search" placeholder="Tìm mã đề...">
+    </div>
+  </div>
+
+  <div class="filters">
+    <button class="active" onclick="setFilter('all',this)">Tất cả</button>
+    <button onclick="setFilter('recent',this)">🆕 Gần đây</button>
+    <button onclick="setFilter('10',this)">Lớp 10</button>
+    <button onclick="setFilter('11',this)">Lớp 11</button>
+    <button onclick="setFilter('12',this)">Lớp 12</button>
+  </div>
+
+  <!-- FILE GẦN ĐÂY (phần riêng, hiển thị khi không ở tab Gần đây) -->
+  <div class="section" id="recentSection">
+    <h3>File gần đây</h3>
+    <div id="recent" class="recent-row"></div>
+  </div>
+
+  <div class="section">
+    <h3 id="mainTitle">Tất cả</h3>
+    <div id="grid" class="grid"></div>
+  </div>
+
+</div>
+
+<script>
+const owner="kientrng", repo="pages", folder="files";
+const api=`https://api.github.com/repos/${owner}/${repo}/contents/${folder}`;
+
+const grid=document.getElementById("grid");
+const recent=document.getElementById("recent");
+const q=document.getElementById("q");
+let all=[],current="all";
+
+// remove extension and preserve unicode
+const clean = n => n.replace(/\.(docx?|pdf|png|jpe?g)$/i,"");
+// choose icon by extension
+const icon = n => /\.pdf$/i.test(n)? '📕' : /\.doc/i.test(n)? '📘' : '📄';
+
+/*
+  Parse filename format: (lớp)-(số)-(môn)-(mô tả).ext
+  - grade: p[0]
+  - num: p[1]
+  - subject: p[2]
+  - desc: p[3..].join('-') (optional)
+*/
+function parse(f){
+  const base = clean(f.name);
+  const p = base.split('-');
+  const grade = p[0] || '';
+  const num = p[1] || '';
+  const subject = p[2] || '';
+  const desc = p.slice(3).join('-') || '(không mô tả)';
+  return {...f, grade, num, subject, desc };
+}
+
+// sort theo (lớp)-(số)-(môn) giảm dần
+const sortDesc = (a,b)=>{
+  // lớp: 12 -> 11 -> 10
+  const g = Number(b.grade) - Number(a.grade);
+  if(g!==0) return g;
+  // số: lớn -> nhỏ
+  const n = Number(b.num) - Number(a.num);
+  if(n!==0) return n;
+  // môn: so sánh chữ (Z -> A)
+  return b.subject.localeCompare(a.subject,'vi',{sensitivity:'base'});
+};
+
+function card(f){
+  const topLine = `${f.grade}-${f.num}-${f.subject}`.replace(/^-|-$|--/g,'');
+  return `
+<div class="card">
+  <div class="top-badge">${f.grade}</div>
+  <div class="card-top">
+    <div class="file-icon">${icon(f.name)}</div>
+    <div>
+      <div class="name">${topLine}</div>
+      <div class="sub desc-ellipsis">${escapeHtml(f.desc)}</div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn-view" onclick="openView('${f.download_url}','${f.name}')">👁 Xem</button>
+    <a class="btn-dl" href="${f.download_url}" download>⬇ Tải</a>
+  </div>
+</div>`;
+}
+
+function render(list){grid.innerHTML=list.map(card).join('');}
+
+function renderRecent(){
+  // Chỉ lấy 2 file mới nhất cho mỗi lớp → ghép thành 1 dòng ngang (File gần đây)
+  const pick = g => all.filter(f=>f.grade==g).sort(sortDesc).slice(0,2);
+  const recentList = [...pick('12'), ...pick('11'), ...pick('10')];
+  recent.innerHTML = `<div class="recent-row">${recentList.map(card).join('')}</div>`;
+}
+
+function setFilter(t,b){
+  document.querySelectorAll('.filters button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  current=t;
+  document.getElementById('mainTitle').innerText = b.innerText;
+
+  // Khi chọn tab GẦN ĐÂY → ẩn section "File gần đây" ở trên cùng
+  document.getElementById('recentSection').style.display = (t==='recent') ? 'none' : 'block';
+
+  apply();
+}
+
+function apply(){
+  let list=[...all];
+
+  // search filter applies to all tabs
+  const keyword = q.value.trim().toLowerCase();
+  if(keyword){
+    list = list.filter(f => `${f.grade}-${f.num}-${f.subject}-${f.desc}`.toLowerCase().includes(keyword));
+  }
+
+  // TAB "TẤT CẢ": sort and render all
+  if(current==='all'){
+    render(list.sort(sortDesc));
+    return;
+  }
+
+  // TAB "GẦN ĐÂY": render 3 separate horizontal rows (10,11,12) each full-width
+  if(current==='recent'){
+    // hide top "File gần đây" section
+    document.getElementById('recentSection').style.display = 'none';
+    const grades = ['10','11','12']; // user requested 10,11,12 order
+    grid.innerHTML = grades.map(g=>{
+      const items = list.filter(f=>f.grade==g).sort(sortDesc);
+      if(!items.length) return '';
+      return `
+        <div class="section grade-block">
+          <h3 style="margin:0 0 8px;color:var(--muted)">Lớp ${g}</h3>
+          <div class="recent-row">
+            ${items.map(card).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+    return;
+  }
+
+  // TAB THEO LỚP (10/11/12)
+  if(['10','11','12'].includes(current)){
+    // ensure top "File gần đây" shown when viewing a single class
+    document.getElementById('recentSection').style.display = 'block';
+    render(list.filter(f=>f.grade==current).sort(sortDesc));
+    return;
+  }
+}
+
+
+q.oninput = apply;
+
+function openView(u,n){ location.href = `view.html?file=${encodeURIComponent(u)}&name=${encodeURIComponent(n)}` }
+
+// simple html escape to avoid accidental html injection from filenames
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+fetch(api).then(r=>r.json()).then(d=>{
+  all = d.filter(x=>x.type==='file').map(parse);
+  renderRecent();
+  apply();
+});
+</script>
+</body>
+</html>

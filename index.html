@@ -23,15 +23,15 @@ try{
 
 <style>
 :root{
-  --bg:#eef5ff;
-  --bg-soft:#f8fbff;
-  --surface:rgba(255,255,255,.94);
+  --bg:#e9f1fb;
+  --bg-soft:#f5f8fc;
+  --surface:#ffffff;
   --surface-strong:#ffffff;
-  --surface-hover:#f8fbff;
-  --text:#14243d;
-  --muted:#667892;
-  --line:rgba(38,82,145,.11);
-  --line-strong:rgba(38,82,145,.19);
+  --surface-hover:#f4f9ff;
+  --text:#102a48;
+  --muted:#566d89;
+  --line:rgba(24,77,136,.18);
+  --line-strong:rgba(24,77,136,.30);
   --violet:#2563eb;
   --blue:#1597ee;
   --cyan:#06b6d4;
@@ -39,7 +39,7 @@ try{
   --orange:#f59e0b;
   --green:#10b981;
   --danger:#ef4444;
-  --shadow:0 18px 50px rgba(54,96,160,.12);
+  --shadow:0 18px 46px rgba(39,74,116,.16);
   --notice-height:0px;
 }
 
@@ -72,9 +72,9 @@ body{
   min-height:100vh;
   overflow-x:hidden;
   background:
-    radial-gradient(circle at 10% 3%,rgba(99,102,241,.08),transparent 30rem),
-    radial-gradient(circle at 90% 22%,rgba(34,211,238,.12),transparent 32rem),
-    linear-gradient(180deg,#f9fbff 0%,#eef5ff 40%,#edf9fb 100%);
+    radial-gradient(circle at 10% 3%,rgba(37,99,235,.08),transparent 30rem),
+    radial-gradient(circle at 90% 22%,rgba(14,165,233,.10),transparent 32rem),
+    linear-gradient(180deg,#f5f8fc 0%,#e9f1fb 42%,#edf5fb 100%);
   color:var(--text);
   font-family:Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;
   transition:padding-top .25s ease,background .25s ease,color .25s ease;
@@ -559,13 +559,15 @@ main.section,
   background:var(--green);
   box-shadow:0 0 10px rgba(52,211,153,.55);
 }
-.file-icon.subject-math{background:linear-gradient(145deg,rgba(14,165,233,.18),rgba(37,99,235,.12));color:#0369a1}
-.file-icon.subject-physics{background:linear-gradient(145deg,rgba(99,102,241,.18),rgba(14,165,233,.12));color:#4338ca}
-.file-icon.subject-chemistry{background:linear-gradient(145deg,rgba(16,185,129,.16),rgba(56,189,248,.12));color:#0f766e}
-[data-theme="dark"] .file-icon.subject-math{color:#7dd3fc}
-[data-theme="dark"] .file-icon.subject-physics{color:#c4b5fd}
-[data-theme="dark"] .file-icon.subject-chemistry{color:#99f6e4}
-.file-icon-glyph{font-size:24px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.file-icon.subject-math{background:linear-gradient(145deg,rgba(59,130,246,.18),rgba(14,165,233,.12));color:#60a5fa}
+.file-icon.subject-physics{background:linear-gradient(145deg,rgba(251,146,60,.20),rgba(245,158,11,.12));color:#fb923c}
+.file-icon.subject-chemistry{background:linear-gradient(145deg,rgba(196,181,253,.26),rgba(167,139,250,.16));color:#c4b5fd}
+[data-theme="dark"] .file-icon.subject-math{color:#93c5fd}
+[data-theme="dark"] .file-icon.subject-physics{color:#fdba74}
+[data-theme="dark"] .file-icon.subject-chemistry{color:#d8b4fe}
+.file-icon-glyph{font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.file-icon-glyph--book{width:24px;height:24px}
+.file-icon-glyph--book svg{width:24px;height:24px;display:block}
 .file-info{min-width:0;flex:1}
 .name{font-size:14px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
 .sub{margin-top:5px;color:var(--muted);font-size:11.5px;line-height:1.45}
@@ -775,16 +777,16 @@ main.section,
   box-shadow:0 8px 20px rgba(44,120,184,.11),inset 0 1px 0 #fff;
 }
 :root:not([data-theme="dark"]) .file-icon.subject-math{
-  color:#fff;
-  background:linear-gradient(145deg,#2d7ff0,#08b7d6);
+  color:#2f80ed;
+  background:linear-gradient(145deg,#edf6ff,#dff3ff);
 }
 :root:not([data-theme="dark"]) .file-icon.subject-physics{
-  color:#fff;
-  background:linear-gradient(145deg,#6366f1,#2d7ff0);
+  color:#f59e0b;
+  background:linear-gradient(145deg,#fff5e9,#ffedd5);
 }
 :root:not([data-theme="dark"]) .file-icon.subject-chemistry{
-  color:#fff;
-  background:linear-gradient(145deg,#10b981,#06b6d4);
+  color:#a78bfa;
+  background:linear-gradient(145deg,#f6f0ff,#efe7ff);
 }
 :root:not([data-theme="dark"]) .name{color:#14243d}
 :root:not([data-theme="dark"]) .meta-pill{
@@ -832,6 +834,90 @@ main.section,
 :root:not([data-theme="dark"]) .sheet-steps li{color:#334b68}
 :root:not([data-theme="dark"]) .step-number{color:#1477bd;background:#e9f6ff}
 :root:not([data-theme="dark"]) .sheet-handle{background:rgba(45,78,120,.18)}
+
+/* ===== LIGHT MODE — HIGHER CONTRAST ===== */
+:root:not([data-theme="dark"]) .hero{
+  border:1px solid rgba(24,77,136,.18);
+  background:
+    radial-gradient(circle at 92% 4%,rgba(14,165,233,.08),transparent 18rem),
+    #ffffff;
+  box-shadow:0 18px 42px rgba(39,74,116,.16),inset 0 1px 0 #fff;
+}
+:root:not([data-theme="dark"]) .title h1,
+:root:not([data-theme="dark"]) .name,
+:root:not([data-theme="dark"]) .section-heading,
+:root:not([data-theme="dark"]) .stat-value{color:#102a48}
+:root:not([data-theme="dark"]) .title p,
+:root:not([data-theme="dark"]) .sub,
+:root:not([data-theme="dark"]) .section-hint,
+:root:not([data-theme="dark"]) .stat-label{color:#5a708d}
+:root:not([data-theme="dark"]) .search{
+  background:#fff;
+  border:1px solid rgba(24,77,136,.22);
+  box-shadow:0 8px 20px rgba(39,74,116,.10);
+}
+:root:not([data-theme="dark"]) .stat-chip{
+  background:#fff;
+  border:1px solid rgba(24,77,136,.18);
+  box-shadow:0 6px 16px rgba(39,74,116,.09);
+}
+:root:not([data-theme="dark"]) .filter-shell{
+  border:1px solid rgba(24,77,136,.18);
+  background:rgba(244,248,253,.96);
+  box-shadow:0 10px 26px rgba(39,74,116,.12);
+}
+:root:not([data-theme="dark"]) .filters button{
+  color:#2f4663;
+  border-color:rgba(24,77,136,.18);
+  box-shadow:0 5px 14px rgba(39,74,116,.09);
+}
+:root:not([data-theme="dark"]) .card{
+  border:1px solid rgba(24,77,136,.20);
+  background:#ffffff;
+  box-shadow:0 12px 30px rgba(39,74,116,.14),inset 0 1px 0 #fff;
+}
+:root:not([data-theme="dark"]) .card:hover{
+  border-color:rgba(14,116,214,.40);
+  background:#ffffff;
+  box-shadow:0 20px 42px rgba(39,74,116,.20),0 0 0 1px rgba(14,116,214,.06);
+}
+:root:not([data-theme="dark"]) .file-icon{
+  border-color:rgba(255,255,255,.55);
+  box-shadow:0 9px 20px rgba(14,116,214,.22),inset 0 1px 0 rgba(255,255,255,.35);
+}
+:root:not([data-theme="dark"]) .file-icon-glyph{
+  text-shadow:0 1px 2px rgba(0,0,0,.10);
+}
+:root:not([data-theme="dark"]) .meta-pill{
+  color:#3f5876;
+  background:#edf3f9;
+  border-color:rgba(24,77,136,.17);
+}
+:root:not([data-theme="dark"]) .meta-pill.grade{
+  color:#0f63c9;
+  background:#e7f1ff;
+  border-color:rgba(14,116,214,.25);
+}
+:root:not([data-theme="dark"]) .btn-view{
+  color:#fff;
+  background:linear-gradient(105deg,#1677e8,#08a9cc);
+  box-shadow:0 9px 20px rgba(14,116,214,.24);
+}
+:root:not([data-theme="dark"]) .btn-dl{
+  color:#0e5b9c;
+  background:#f3f8fd;
+  border-color:rgba(14,116,214,.28);
+}
+:root:not([data-theme="dark"]) .btn-dl:hover{
+  color:#084a83;
+  background:#e5f1fc;
+  border-color:rgba(14,116,214,.42);
+}
+:root:not([data-theme="dark"]) .theme-toggle{
+  color:#1c3554;
+  border-color:rgba(24,77,136,.20);
+  box-shadow:0 8px 20px rgba(39,74,116,.11);
+}
 
 /* Restore the existing dark appearance without changing its behavior */
 [data-theme="dark"] .hero{
@@ -1067,14 +1153,41 @@ const THEME_KEY = 'chonhoctap-theme';
 
 const clean = name => String(name).replace(/\.(docx?|pdf|png|jpe?g)$/i,'');
 const extensionOf = name => String(name).split('.').pop()?.toUpperCase() || 'FILE';
-const fallbackIcon = name => /\.pdf$/i.test(name) ? '📕' : /\.docx?$/i.test(name) ? '📘' : /\.(png|jpe?g)$/i.test(name) ? '🖼️' : '📄';
+const fallbackIcon = name => /\.(png|jpe?g)$/i.test(name) ? '▧' : '▤';
 const normalizeText = value => String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
 function getSubjectVisual(subject,name=''){
-  const key = normalizeText(subject);
-  if(/toan|math|giaitich|daiso|hinhhoc/.test(key)) return {glyph:'√x', className:'subject-math', label:'Toán'};
-  if(/vatly|ly|physics|quanghoc|cohoc|dienhoc/.test(key)) return {glyph:'⚛', className:'subject-physics', label:'Vật Lý'};
-  if(/hoahoc|hoa|chem|chemistry|huuco|vo co/.test(key)) return {glyph:'⚗', className:'subject-chemistry', label:'Hóa Học'};
+  const subjectKey = normalizeText(subject);
+  const fullKey = normalizeText(`${subject} ${name}`);
+  const bookGlyph = '▤';
+
+  if(subjectKey === 'toan' || /toan|math|giaitich|daiso|hinhhoc|luonggiac|xacsuat/.test(fullKey)){
+    return {glyph:bookGlyph, className:'subject-math', label:'Toán'};
+  }
+
+  if(['li','ly','vat','vatli','vatly'].includes(subjectKey) || /vatly|vatli|lyhoc|lihoc|physics|quanghoc|cohoc|dienhoc|nhiethoc|hatnhan/.test(fullKey)){
+    return {glyph:bookGlyph, className:'subject-physics', label:'Vật Lý'};
+  }
+
+  if(['hoa','hoahoc'].includes(subjectKey) || /hoahoc|chem|chemistry|huuco|voco|phanung|nguyentu/.test(fullKey)){
+    return {glyph:bookGlyph, className:'subject-chemistry', label:'Hóa Học'};
+  }
+
   return {glyph:fallbackIcon(name), className:'', label:'Tài liệu'};
+}
+
+function createIconGlyph(visual){
+  if(['subject-math','subject-physics','subject-chemistry'].includes(visual.className)){
+    const wrapper = createElement('span','file-icon-glyph file-icon-glyph--book');
+    wrapper.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="3.5" y="3.5" width="1.8" height="16" rx="0.8" fill="currentColor" opacity=".95"/>
+      <rect x="5.3" y="3.5" width="10.6" height="16" rx="1.2" fill="currentColor" opacity=".82"/>
+      <rect x="6.7" y="3.5" width="10.8" height="16" rx="1.2" fill="currentColor"/>
+      <rect x="5.3" y="19.8" width="12.2" height="1.9" rx="0.9" fill="currentColor" opacity=".92"/>
+      <rect x="8" y="5.3" width="7.2" height=".9" rx=".45" fill="#ffffff" opacity=".18"/>
+    </svg>`;
+    return wrapper;
+  }
+  return createElement('span','file-icon-glyph',visual.glyph);
 }
 
 function parseFile(file){
@@ -1112,7 +1225,7 @@ function createCard(file,index = 0){
 
   const cardTop = createElement('div','card-top');
   const fileIcon = createElement('div',`file-icon ${subjectVisual.className}`.trim());
-  const iconGlyph = createElement('span','file-icon-glyph',subjectVisual.glyph);
+  const iconGlyph = createIconGlyph(subjectVisual);
   fileIcon.appendChild(iconGlyph);
   fileIcon.setAttribute('aria-hidden','true');
 

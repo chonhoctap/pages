@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#eef6ff">
 <meta name="color-scheme" content="light dark">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Xem tài liệu — Chốn Học Tập</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -49,11 +52,13 @@
 }
 
 *{box-sizing:border-box}
-html,body{margin:0;min-width:280px;min-height:100%;background:var(--bg)}
+html,body{margin:0;min-width:280px;width:100%;height:100%;background:var(--bg)}
 html{color-scheme:light;scroll-behavior:smooth}
 [data-theme="dark"]{color-scheme:dark}
 body{
-  min-height:100dvh;
+  height:100vh;
+  height:var(--app-height,100dvh);
+  min-height:100svh;
   display:flex;
   flex-direction:column;
   overflow:hidden;
@@ -220,14 +225,15 @@ button:focus-visible,a:focus-visible{
 /* ===== VIEWER ===== */
 .workspace{
   min-height:0;
-  flex:1 1 auto;
+  height:0;
+  flex:1 1 0;
   padding:10px 14px max(14px,env(safe-area-inset-bottom));
   overflow:auto;
 }
 .workspace-inner{
   width:min(1500px,100%);
   height:100%;
-  min-height:420px;
+  min-height:0;
   margin:auto;
   display:flex;
   justify-content:center;
@@ -237,7 +243,7 @@ button:focus-visible,a:focus-visible{
   width:100%;
   min-width:0;
   height:100%;
-  min-height:420px;
+  min-height:0;
   display:flex;
   justify-content:center;
   align-items:stretch;
@@ -248,6 +254,7 @@ button:focus-visible,a:focus-visible{
   width:100%;
   min-width:0;
   height:100%;
+  min-height:0;
   overflow:hidden;
   border:1px solid var(--line-strong);
   border-radius:20px;
@@ -265,23 +272,28 @@ button:focus-visible,a:focus-visible{
   pointer-events:none;
 }
 .viewer-content{
+  position:relative;
   width:100%;
   height:100%;
   min-height:0;
-  overflow:auto;
+  overflow:hidden;
   background:#fff;
 }
 .viewer-content iframe{
+  position:absolute;
+  inset:0;
   display:block;
   width:100%;
   height:100%;
-  min-height:100%;
+  min-height:0;
   border:0;
   background:#fff;
 }
 .image-viewer{
   width:100%;
+  height:100%;
   min-height:100%;
+  overflow:auto;
   padding:22px;
   display:flex;
   align-items:flex-start;
@@ -317,8 +329,9 @@ body[data-view-mode="mobile"] .device-stage{
 }
 body[data-view-mode="mobile"] .document-shell{
   width:min(390px,100%);
-  height:min(820px,100%);
-  min-height:560px;
+  height:100%;
+  max-height:820px;
+  min-height:0;
   border-width:7px;
   border-color:#172033;
   border-radius:34px;
@@ -393,7 +406,7 @@ body[data-view-mode="mobile"] .viewer-content{padding-top:12px}
   .mode-switch{width:100%;display:grid;grid-template-columns:1fr 1fr}
   .mode-btn{min-height:38px}
   .workspace{padding:8px 8px max(8px,env(safe-area-inset-bottom))}
-  .workspace-inner,.device-stage{min-height:360px}
+  .workspace-inner,.device-stage{height:100%;min-height:0}
   .document-shell{border-radius:15px}
   body[data-view-mode="desktop"] .workspace-inner{justify-content:flex-start}
   body[data-view-mode="desktop"] .device-stage{width:1040px;min-width:1040px}
@@ -402,6 +415,7 @@ body[data-view-mode="mobile"] .viewer-content{padding-top:12px}
   body[data-view-mode="mobile"] .document-shell{
     width:100%;
     height:100%;
+    max-height:none;
     min-height:0;
     border-width:1px;
     border-color:var(--line-strong);
@@ -417,6 +431,132 @@ body[data-view-mode="mobile"] .viewer-content{padding-top:12px}
   .doc-heading{gap:6px}
   .topbar-inner{gap:6px}
   .mode-btn{padding:0 8px}
+}
+
+
+@media(max-width:820px){
+  body[data-view-mode="mobile"] .workspace{overflow:hidden}
+  body[data-view-mode="desktop"] .workspace{overflow:auto}
+}
+
+
+/* ===== TRUE FULL-VIEWPORT LAYOUT =====
+   Dùng vị trí cố định thay cho chuỗi height:100% qua nhiều lớp flex.
+   Cách này ổn định hơn trên Chrome Android, Samsung Internet và WebView. */
+html,body{
+  width:100%;
+  height:100%;
+  overflow:hidden;
+}
+body{
+  display:block;
+  height:var(--app-height,100dvh);
+  min-height:0;
+}
+.topbar,.viewer-controls{position:relative;z-index:20}
+.workspace{
+  position:fixed;
+  z-index:1;
+  left:0;
+  right:0;
+  top:var(--viewer-top,140px);
+  bottom:0;
+  width:100%;
+  height:auto;
+  min-height:0;
+  padding:10px 14px max(10px,env(safe-area-inset-bottom));
+  overflow:hidden;
+}
+.workspace-inner{
+  position:relative;
+  width:min(1500px,100%);
+  height:100%;
+  min-height:0;
+  margin:0 auto;
+  display:block;
+}
+.device-stage{
+  position:relative;
+  width:100%;
+  height:100%;
+  min-height:0;
+  display:flex;
+  align-items:stretch;
+  justify-content:center;
+  padding:0!important;
+}
+.document-shell{
+  position:relative;
+  flex:0 1 auto;
+  width:100%;
+  height:100%!important;
+  min-height:0;
+  max-height:none!important;
+}
+.viewer-content{
+  position:absolute;
+  inset:0;
+  width:auto;
+  height:auto;
+  min-width:0;
+  min-height:0;
+  padding:0!important;
+}
+.viewer-content iframe{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  max-width:none!important;
+  max-height:none!important;
+}
+body[data-view-mode="desktop"] .document-shell{
+  width:100%;
+  height:100%!important;
+}
+body[data-view-mode="mobile"] .document-shell{
+  width:min(390px,100%);
+  height:100%!important;
+  max-height:none!important;
+  border-width:5px;
+  border-radius:28px;
+}
+body[data-view-mode="mobile"] .document-shell::after{
+  display:none;
+}
+
+@media(max-width:820px){
+  .workspace{
+    padding:0;
+  }
+  .workspace-inner{
+    width:100%;
+    max-width:none;
+  }
+  body[data-view-mode="mobile"] .document-shell{
+    width:100%;
+    height:100%!important;
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+  }
+  body[data-view-mode="desktop"] .workspace{
+    overflow-x:auto;
+    overflow-y:hidden;
+  }
+  body[data-view-mode="desktop"] .workspace-inner,
+  body[data-view-mode="desktop"] .device-stage{
+    width:1040px;
+    min-width:1040px;
+    max-width:none;
+  }
+  body[data-view-mode="desktop"] .document-shell{
+    width:1040px;
+    height:100%!important;
+    border-radius:0;
+  }
 }
 
 @media(prefers-reduced-motion:reduce){
@@ -506,6 +646,30 @@ const elements = {
   modeButtons:[...document.querySelectorAll('.mode-btn[data-mode]')]
 };
 
+
+function syncViewportLayout(){
+  const viewportHeight = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
+  const topbarHeight = Math.ceil(document.querySelector('.topbar')?.getBoundingClientRect().height || 0);
+  const controlsHeight = Math.ceil(document.querySelector('.viewer-controls')?.getBoundingClientRect().height || 0);
+  const viewerTop = topbarHeight + controlsHeight;
+
+  document.documentElement.style.setProperty('--app-height',`${viewportHeight}px`);
+  document.documentElement.style.setProperty('--viewer-top',`${viewerTop}px`);
+
+  // Gán trực tiếp để tránh Chrome Android rơi về chiều cao iframe mặc định.
+  const workspace = document.querySelector('.workspace');
+  if(workspace){
+    workspace.style.height = `${Math.max(1,viewportHeight - viewerTop)}px`;
+  }
+}
+
+function scheduleViewportLayout(){
+  window.requestAnimationFrame(() => {
+    syncViewportLayout();
+    window.requestAnimationFrame(syncViewportLayout);
+  });
+}
+
 function safeDecode(value){
   try{return decodeURIComponent(value)}catch{return value}
 }
@@ -563,6 +727,7 @@ function createIframe(src,title){
   frame.loading = 'eager';
   frame.allowFullscreen = true;
   frame.referrerPolicy = 'no-referrer-when-downgrade';
+  frame.addEventListener('load',scheduleViewportLayout);
   return frame;
 }
 
@@ -636,13 +801,15 @@ function getDefaultViewMode(){
 function applyViewMode(mode){
   const normalized = mode === 'mobile' ? 'mobile' : 'desktop';
   document.body.dataset.viewMode = normalized;
-  elements.viewerStatus.textContent = normalized === 'mobile' ? 'Khung xem điện thoại · 390 px' : 'Khung xem máy tính · Toàn chiều rộng';
+  elements.viewerStatus.textContent = normalized === 'mobile' ? 'Khung xem điện thoại · Toàn chiều cao' : 'Khung xem máy tính · Toàn chiều rộng';
 
   elements.modeButtons.forEach(button => {
     const active = button.dataset.mode === normalized;
     button.classList.toggle('active',active);
     button.setAttribute('aria-pressed',String(active));
   });
+
+  scheduleViewportLayout();
 }
 
 function setViewMode(mode){
@@ -661,9 +828,18 @@ elements.download.addEventListener('click',event => {
   if(!rawFileUrl || !isValidRemoteUrl(rawFileUrl)) event.preventDefault();
 });
 
+scheduleViewportLayout();
+window.addEventListener('resize',scheduleViewportLayout,{passive:true});
+window.addEventListener('orientationchange',scheduleViewportLayout,{passive:true});
+window.addEventListener('pageshow',scheduleViewportLayout,{passive:true});
+window.visualViewport?.addEventListener('resize',scheduleViewportLayout,{passive:true});
+window.visualViewport?.addEventListener('scroll',scheduleViewportLayout,{passive:true});
+document.fonts?.ready?.then(scheduleViewportLayout);
+
 applyTheme(getStoredTheme());
 applyViewMode(getDefaultViewMode());
 renderDocument(rawFileUrl,rawName);
+scheduleViewportLayout();
 </script>
 </body>
 </html>

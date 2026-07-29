@@ -3,336 +3,682 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#030516">
+<meta name="theme-color" content="#07111f">
+<meta name="color-scheme" content="dark">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Chốn Học Tập — KienDev_</title>
 <link rel="icon" href="avatar.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
 :root{
-  --bg:#030516;
-  --card:#081225;
-  --muted:#95a5c7;
-  --accent1:#7c3aed;
-  --accent2:#06b6d4;
-  --pink1:#ffb86b;
-  --pink2:#ff6bcb;
+  --bg:#050a14;
+  --bg-soft:#091321;
+  --surface:rgba(14,27,47,.74);
+  --surface-strong:rgba(11,23,41,.94);
+  --surface-hover:rgba(20,38,65,.88);
+  --text:#f5f8ff;
+  --muted:#9baccc;
+  --line:rgba(184,210,255,.12);
+  --line-strong:rgba(184,210,255,.22);
+  --violet:#8b5cf6;
+  --blue:#38bdf8;
+  --cyan:#22d3ee;
+  --pink:#f472b6;
+  --orange:#fb923c;
+  --green:#34d399;
   --danger:#fb7185;
-  --text:#eaf2ff;
-  --border:rgba(255,255,255,.08);
-  --surface:rgba(255,255,255,.045);
+  --shadow:0 24px 70px rgba(0,0,0,.38);
+  --notice-height:0px;
 }
 
 *{box-sizing:border-box}
-html{color-scheme:dark}
+html{scroll-behavior:smooth;background:var(--bg)}
 body{
   margin:0;
   min-width:280px;
-  background:var(--bg);
+  min-height:100vh;
+  overflow-x:hidden;
+  background:
+    radial-gradient(circle at 8% 4%,rgba(139,92,246,.16),transparent 32rem),
+    radial-gradient(circle at 92% 18%,rgba(34,211,238,.12),transparent 30rem),
+    linear-gradient(180deg,#050a14 0%,#07111f 45%,#050a14 100%);
   color:var(--text);
   font-family:Poppins,system-ui,-apple-system,"Segoe UI",sans-serif;
+  transition:padding-top .25s ease;
 }
-button,input{font:inherit}
+body.has-browser-notice{padding-top:var(--notice-height)}
+button,input,a{font:inherit}
 button,a{-webkit-tap-highlight-color:transparent}
+a{color:inherit}
 button:focus-visible,a:focus-visible,input:focus-visible{
-  outline:3px solid rgba(6,182,212,.45);
-  outline-offset:2px;
+  outline:3px solid rgba(56,189,248,.45);
+  outline-offset:3px;
 }
-.wrap{max-width:1200px;margin:auto;padding:20px}
+
+/* ===== BACKGROUND DECORATION ===== */
+.ambient{
+  position:fixed;
+  inset:0;
+  overflow:hidden;
+  pointer-events:none;
+  z-index:-1;
+}
+.ambient::before,
+.ambient::after{
+  content:"";
+  position:absolute;
+  width:28rem;
+  height:28rem;
+  border-radius:50%;
+  filter:blur(90px);
+  opacity:.14;
+  animation:ambientFloat 15s ease-in-out infinite alternate;
+}
+.ambient::before{left:-10rem;top:15%;background:var(--violet)}
+.ambient::after{right:-12rem;top:48%;background:var(--cyan);animation-delay:-6s}
+@keyframes ambientFloat{
+  from{transform:translate3d(0,-18px,0) scale(.95)}
+  to{transform:translate3d(34px,28px,0) scale(1.08)}
+}
 
 /* ===== IN-APP BROWSER NOTICE ===== */
-.inapp-notice{
-  position:sticky;
-  top:0;
-  z-index:1000;
+.browser-notice{
+  position:fixed;
+  inset:0 0 auto;
+  z-index:9999;
   display:none;
-  padding:max(10px,env(safe-area-inset-top)) 14px 10px;
-  background:rgba(8,18,37,.97);
-  border-bottom:1px solid rgba(6,182,212,.35);
-  box-shadow:0 10px 30px rgba(0,0,0,.28);
-  backdrop-filter:blur(14px);
+  padding:max(10px,env(safe-area-inset-top)) 12px 10px;
+  pointer-events:none;
 }
-.inapp-notice.show{display:block}
-.inapp-inner{
-  max-width:1200px;
+.browser-notice.show{display:block}
+.browser-notice-card{
+  width:min(860px,100%);
   margin:auto;
-  display:flex;
+  display:grid;
+  grid-template-columns:auto 1fr auto;
   align-items:center;
-  gap:12px;
+  gap:13px;
+  padding:12px;
+  border:1px solid rgba(125,211,252,.28);
+  border-radius:18px;
+  background:rgba(8,20,36,.94);
+  box-shadow:0 20px 60px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.06);
+  -webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);
+  pointer-events:auto;
+  animation:noticeDrop .48s cubic-bezier(.2,.85,.25,1.15) both;
 }
-.inapp-icon{font-size:22px;line-height:1}
-.inapp-copy{min-width:0;flex:1}
-.inapp-title{font-weight:700;font-size:13px}
-.inapp-text{margin-top:2px;color:var(--muted);font-size:12px;line-height:1.45}
-.inapp-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.open-browser-btn,
-.notice-close{
+@keyframes noticeDrop{
+  from{opacity:0;transform:translateY(-22px) scale(.97)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+.browser-notice-icon{
+  width:43px;
+  height:43px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  background:linear-gradient(145deg,rgba(56,189,248,.23),rgba(139,92,246,.22));
+  border:1px solid rgba(125,211,252,.22);
+  font-size:21px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09);
+}
+.browser-notice-copy{min-width:0}
+.browser-notice-title{font-size:13px;font-weight:700;letter-spacing:.01em}
+.browser-notice-text{margin-top:3px;color:var(--muted);font-size:11.5px;line-height:1.45}
+.browser-notice-actions{display:flex;align-items:center;gap:8px}
+.browser-primary,
+.browser-secondary,
+.browser-close{
+  min-height:40px;
+  border-radius:12px;
   border:0;
   cursor:pointer;
-  color:white;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  transition:transform .18s ease,filter .18s ease,background .18s ease;
 }
-.open-browser-btn{
-  min-height:38px;
-  padding:8px 13px;
-  border-radius:10px;
+.browser-primary:hover,
+.browser-secondary:hover,
+.browser-close:hover{transform:translateY(-1px);filter:brightness(1.08)}
+.browser-primary{
+  padding:9px 14px;
+  gap:7px;
+  color:#03101b;
+  background:linear-gradient(100deg,#67e8f9,#60a5fa 48%,#a78bfa);
   font-size:12px;
-  font-weight:700;
-  background:linear-gradient(90deg,var(--accent2),var(--accent1));
+  font-weight:800;
   white-space:nowrap;
+  box-shadow:0 8px 24px rgba(56,189,248,.16);
 }
-.notice-close{
-  width:36px;
-  height:36px;
-  border-radius:10px;
+.browser-secondary{
+  width:40px;
+  color:#dcecff;
   background:rgba(255,255,255,.07);
-  font-size:18px;
+  border:1px solid rgba(255,255,255,.08);
+}
+.browser-close{
+  width:40px;
+  color:#b8c6df;
+  background:transparent;
+  font-size:19px;
 }
 
-/* ===== TOP ===== */
-.top{
-  display:flex;
-  gap:16px;
-  align-items:center;
-  flex-wrap:wrap;
-  padding:16px;
-  border-radius:16px;
-  background:rgba(255,255,255,.03);
-  border:1px solid rgba(255,255,255,.05);
+/* ===== FALLBACK SHEET ===== */
+.sheet-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:10000;
+  display:grid;
+  place-items:end center;
+  padding:18px;
+  background:rgba(1,6,14,.64);
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+  opacity:0;
+  visibility:hidden;
+  transition:opacity .2s ease,visibility .2s ease;
 }
-.avatar{width:64px;height:64px;border-radius:14px;object-fit:cover}
+.sheet-backdrop.show{opacity:1;visibility:visible}
+.sheet{
+  width:min(520px,100%);
+  padding:19px;
+  border-radius:22px;
+  border:1px solid var(--line-strong);
+  background:var(--surface-strong);
+  box-shadow:var(--shadow);
+  transform:translateY(24px) scale(.98);
+  transition:transform .28s cubic-bezier(.2,.8,.2,1);
+}
+.sheet-backdrop.show .sheet{transform:translateY(0) scale(1)}
+.sheet-handle{width:44px;height:4px;margin:0 auto 16px;border-radius:99px;background:rgba(255,255,255,.2)}
+.sheet h2{margin:0;font-size:17px}
+.sheet p{margin:7px 0 0;color:var(--muted);font-size:12.5px;line-height:1.65}
+.sheet-steps{margin:15px 0 0;padding:0;list-style:none;display:grid;gap:9px}
+.sheet-steps li{display:flex;gap:10px;align-items:flex-start;color:#dce8fb;font-size:12.5px;line-height:1.5}
+.step-number{width:23px;height:23px;flex:0 0 23px;display:grid;place-items:center;border-radius:8px;background:rgba(56,189,248,.12);color:#7dd3fc;font-weight:700}
+.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:17px}
+.sheet-actions button{
+  min-height:44px;
+  border-radius:13px;
+  border:1px solid var(--line);
+  cursor:pointer;
+  color:white;
+  background:rgba(255,255,255,.06);
+  font-weight:700;
+}
+.sheet-actions .copy-sheet-btn{border:0;background:linear-gradient(100deg,var(--blue),var(--violet))}
+
+/* ===== PAGE ===== */
+.wrap{width:min(1200px,100%);margin:auto;padding:22px 20px 52px}
+.hero{
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  grid-template-columns:1fr minmax(260px,400px);
+  gap:24px;
+  align-items:center;
+  min-height:190px;
+  padding:24px;
+  border:1px solid var(--line);
+  border-radius:26px;
+  background:
+    linear-gradient(135deg,rgba(139,92,246,.11),transparent 42%),
+    linear-gradient(315deg,rgba(34,211,238,.09),transparent 38%),
+    var(--surface);
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.055);
+  -webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);
+  animation:pageEnter .65s ease both;
+}
+.hero::after{
+  content:"";
+  position:absolute;
+  width:210px;
+  height:210px;
+  right:-75px;
+  top:-105px;
+  border-radius:50%;
+  border:1px solid rgba(125,211,252,.13);
+  box-shadow:0 0 0 35px rgba(139,92,246,.035),0 0 0 72px rgba(34,211,238,.025);
+}
+@keyframes pageEnter{
+  from{opacity:0;transform:translateY(14px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.brand{position:relative;z-index:1;display:flex;align-items:center;gap:16px}
+.avatar-wrap{position:relative;flex:0 0 auto}
+.avatar{
+  width:72px;
+  height:72px;
+  display:block;
+  border-radius:21px;
+  object-fit:cover;
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 14px 35px rgba(0,0,0,.34);
+}
+.avatar-wrap::after{
+  content:"";
+  position:absolute;
+  right:-2px;
+  bottom:-2px;
+  width:17px;
+  height:17px;
+  border:4px solid #0a1525;
+  border-radius:50%;
+  background:var(--green);
+  box-shadow:0 0 16px rgba(52,211,153,.5);
+}
+.eyebrow{display:flex;align-items:center;gap:7px;margin-bottom:4px;color:#91dff8;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.15em}
+.eyebrow::before{content:"";width:18px;height:1px;background:currentColor}
 .title h1{
   margin:0;
-  font-size:22px;
   font-family:"Palatino Linotype","Book Antiqua",Palatino,serif;
-  font-weight:700;
-  letter-spacing:-.3px;
+  font-size:clamp(25px,4vw,36px);
+  line-height:1.08;
+  letter-spacing:-.035em;
 }
-.title p{margin:4px 0 0;color:var(--muted);font-size:13px}
-.controls{margin-left:auto;min-width:min(100%,220px)}
+.title p{margin:8px 0 0;color:var(--muted);font-size:13px;line-height:1.6}
+.hero-side{position:relative;z-index:1}
+.search-box{position:relative}
+.search-icon{
+  position:absolute;
+  left:15px;
+  top:50%;
+  transform:translateY(-50%);
+  color:#8ca3c4;
+  pointer-events:none;
+}
 .search{
   width:100%;
-  padding:10px 14px;
-  border-radius:12px;
-  border:1px solid rgba(255,255,255,.1);
-  background:rgba(255,255,255,.05);
+  height:52px;
+  padding:0 16px 0 43px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:rgba(3,11,22,.5);
   color:white;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+  transition:border-color .2s ease,box-shadow .2s ease,background .2s ease;
 }
-.search::placeholder{color:#8190b1}
-
-/* ===== FILTERS ===== */
-.filters{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
-.filters button{
-  min-height:36px;
-  padding:0 14px;
-  border-radius:999px;
-  border:1px solid rgba(255,255,255,.1);
-  background:rgba(255,255,255,.06);
-  color:white;
-  cursor:pointer;
-  font-size:13px;
-  transition:transform .18s ease,background .18s ease;
-}
-.filters button:hover{transform:translateY(-1px)}
-.filters button.active{background:linear-gradient(90deg,var(--accent1),var(--accent2));font-weight:700}
-
-/* ===== SECTIONS ===== */
-.section{margin-top:22px}
-.section h3{margin:0 0 10px;font-size:14px;color:var(--muted)}
-
-/* ===== STATUS ===== */
-.status{
-  display:none;
-  grid-column:1/-1;
-  padding:18px;
-  border:1px solid var(--border);
-  border-radius:14px;
-  background:var(--surface);
-  color:var(--muted);
+.search::placeholder{color:#7183a3}
+.search:focus{border-color:rgba(56,189,248,.45);box-shadow:0 0 0 4px rgba(56,189,248,.08);background:rgba(4,13,27,.78)}
+.hero-stats{display:flex;gap:8px;margin-top:11px}
+.stat-chip{
+  flex:1;
+  min-width:0;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:rgba(255,255,255,.035);
   text-align:center;
-  font-size:13px;
 }
-.status.show{display:block}
-.status.error{color:#fecdd3;border-color:rgba(251,113,133,.35)}
-.retry-btn{
-  margin-top:10px;
-  padding:8px 12px;
+.stat-value{display:block;font-size:13px;font-weight:700}
+.stat-label{display:block;margin-top:2px;color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.08em}
+
+.filter-shell{
+  position:sticky;
+  top:calc(var(--notice-height) + 10px);
+  z-index:100;
+  margin-top:17px;
+  padding:7px;
+  border:1px solid var(--line);
+  border-radius:17px;
+  background:rgba(6,14,27,.78);
+  box-shadow:0 10px 35px rgba(0,0,0,.22);
+  -webkit-backdrop-filter:blur(16px);
+  backdrop-filter:blur(16px);
+  animation:pageEnter .65s .08s ease both;
+}
+.filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.filters button{
+  position:relative;
+  min-width:max-content;
+  min-height:39px;
+  padding:0 15px;
   border:0;
-  border-radius:9px;
-  background:linear-gradient(90deg,var(--accent2),var(--accent1));
-  color:white;
+  border-radius:12px;
+  background:transparent;
+  color:#9fb0cd;
   cursor:pointer;
-  font-weight:700;
+  font-size:12.5px;
+  font-weight:600;
+  transition:color .2s ease,background .2s ease,transform .2s ease;
 }
+.filters button:hover{color:white;background:rgba(255,255,255,.055)}
+.filters button.active{
+  color:white;
+  background:linear-gradient(105deg,rgba(56,189,248,.2),rgba(139,92,246,.25));
+  box-shadow:inset 0 0 0 1px rgba(125,211,252,.18),0 8px 25px rgba(0,0,0,.16);
+}
+.filters button.active::after{
+  content:"";
+  position:absolute;
+  left:30%;right:30%;bottom:4px;height:2px;
+  border-radius:99px;
+  background:linear-gradient(90deg,var(--cyan),var(--violet));
+}
+
+.section{margin-top:26px}
+.section-head{display:flex;align-items:end;justify-content:space-between;gap:14px;margin-bottom:12px}
+.section-heading{display:flex;align-items:center;gap:9px;margin:0;font-size:15px;font-weight:700}
+.section-heading::before{content:"";width:4px;height:17px;border-radius:99px;background:linear-gradient(var(--cyan),var(--violet))}
+.section-hint{color:var(--muted);font-size:10.5px}
 
 /* ===== RECENT ===== */
 .recent-row{
   display:flex;
-  gap:16px;
+  gap:15px;
   overflow-x:auto;
-  padding:2px 2px 12px;
+  padding:3px 3px 13px;
   scroll-behavior:smooth;
+  scroll-snap-type:x proximity;
   overscroll-behavior-inline:contain;
-  scrollbar-color:var(--accent1) transparent;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(139,92,246,.55) transparent;
 }
-.recent-row .card{min-width:260px;max-width:320px}
-.recent-row::-webkit-scrollbar{height:8px}
-.recent-row::-webkit-scrollbar-thumb{background:linear-gradient(90deg,var(--accent1),var(--accent2));border-radius:10px}
+.recent-row::-webkit-scrollbar{height:6px}
+.recent-row::-webkit-scrollbar-thumb{border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--violet))}
+.recent-row .card{min-width:270px;max-width:330px;scroll-snap-align:start}
 
 /* ===== GRID ===== */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
-.grade-block{grid-column:1/-1;margin-bottom:14px;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.grade-block{grid-column:1/-1;min-width:0;margin-top:4px}
+.grade-block .section-head{margin-bottom:9px}
 
 /* ===== CARD ===== */
 .card{
+  --delay:0ms;
+  position:relative;
+  overflow:hidden;
   min-width:0;
   padding:16px;
-  border-radius:16px;
-  background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);
-  border:1px solid rgba(255,255,255,.05);
-  position:relative;
-  transition:transform .2s ease,border-color .2s ease;
+  border:1px solid var(--line);
+  border-radius:19px;
+  background:
+    linear-gradient(145deg,rgba(255,255,255,.055),transparent 42%),
+    rgba(10,22,39,.73);
+  box-shadow:0 15px 42px rgba(0,0,0,.19),inset 0 1px 0 rgba(255,255,255,.04);
+  transition:transform .24s cubic-bezier(.2,.8,.2,1),border-color .24s ease,background .24s ease,box-shadow .24s ease;
+  animation:cardEnter .52s var(--delay) cubic-bezier(.2,.8,.2,1) both;
 }
-.card:hover{transform:translateY(-6px);border-color:rgba(124,58,237,.35)}
-.top-badge{
+.card::before{
+  content:"";
   position:absolute;
-  top:14px;
-  left:14px;
-  padding:4px 8px;
-  font-size:11px;
-  font-weight:700;
-  border-radius:8px;
-  background:linear-gradient(90deg,var(--pink1),var(--pink2));
-  color:#071023;
-  opacity:0;
-  transform:translateY(-6px) scale(.98);
-  transition:opacity .18s ease,transform .18s ease;
+  inset:-80% auto auto -35%;
+  width:38%;
+  height:250%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.07),transparent);
+  transform:rotate(18deg) translateX(-160%);
+  transition:transform .65s ease;
   pointer-events:none;
 }
-.card:hover .top-badge,
-.card:focus-within .top-badge{opacity:1;transform:translateY(0) scale(1)}
-.card-top{display:flex;gap:12px;align-items:center;min-width:0}
+.card:hover{
+  transform:translateY(-6px);
+  border-color:rgba(125,211,252,.26);
+  background:var(--surface-hover);
+  box-shadow:0 23px 55px rgba(0,0,0,.27),0 0 0 1px rgba(139,92,246,.04);
+}
+.card:hover::before{transform:rotate(18deg) translateX(480%)}
+@keyframes cardEnter{
+  from{opacity:0;transform:translateY(15px) scale(.98)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+.card-top{display:flex;gap:13px;align-items:center;min-width:0}
 .file-icon{
-  width:52px;
-  height:52px;
-  flex:0 0 52px;
+  position:relative;
+  width:54px;
+  height:54px;
+  flex:0 0 54px;
+  display:grid;
+  place-items:center;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(145deg,rgba(56,189,248,.15),rgba(139,92,246,.13));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+  font-size:25px;
+}
+.file-icon::after{
+  content:"";
+  position:absolute;
+  right:7px;
+  bottom:6px;
+  width:7px;
+  height:7px;
+  border-radius:50%;
+  background:var(--green);
+  box-shadow:0 0 10px rgba(52,211,153,.55);
+}
+.file-info{min-width:0;flex:1}
+.name{font-size:14px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.sub{margin-top:5px;color:var(--muted);font-size:11.5px;line-height:1.45}
+.desc-ellipsis{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.file-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}
+.meta-pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:23px;
+  padding:3px 8px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:rgba(255,255,255,.035);
+  color:#aebdd5;
+  font-size:9.5px;
+  font-weight:600;
+}
+.meta-pill.grade{color:#c4b5fd;background:rgba(139,92,246,.09);border-color:rgba(139,92,246,.2)}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+.btn-view,.btn-dl{
+  min-height:41px;
+  padding:9px 10px;
   border-radius:12px;
-  background:rgba(255,255,255,.08);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:26px;
-}
-.file-info{min-width:0}
-.name{font-weight:700;font-size:15px;overflow-wrap:anywhere}
-.sub{font-size:12px;color:var(--muted);margin-top:4px}
-.actions{margin-top:14px;display:flex;gap:10px}
-.btn-view,
-.btn-dl{
-  flex:1;
-  min-height:42px;
-  padding:10px;
-  border-radius:10px;
-  font-weight:700;
+  border:1px solid var(--line);
   cursor:pointer;
+  text-decoration:none;
   display:flex;
   align-items:center;
   justify-content:center;
-  text-align:center;
+  gap:6px;
+  font-size:11.5px;
+  font-weight:700;
+  transition:transform .18s ease,filter .18s ease,border-color .18s ease;
 }
-.btn-view{border:0;background:linear-gradient(90deg,#0ea5e9,#7c3aed);color:white}
-.btn-dl{border:0;text-decoration:none;background:linear-gradient(90deg,var(--pink1),var(--pink2));color:#071023}
-.desc-ellipsis{
-  display:-webkit-box;
-  overflow:hidden;
-  -webkit-line-clamp:2;
-  -webkit-box-orient:vertical;
-  line-height:1.3;
-}
+.btn-view:hover,.btn-dl:hover{transform:translateY(-1px);filter:brightness(1.09)}
+.btn-view{color:white;background:linear-gradient(105deg,rgba(14,165,233,.8),rgba(124,58,237,.8));border-color:transparent}
+.btn-dl{color:#fff1f8;background:linear-gradient(105deg,rgba(244,114,182,.13),rgba(251,146,60,.12));border-color:rgba(244,114,182,.2)}
 
+/* ===== STATUS / TOAST ===== */
+.status{
+  grid-column:1/-1;
+  min-height:116px;
+  padding:20px;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  gap:10px;
+  border:1px dashed var(--line-strong);
+  border-radius:19px;
+  background:rgba(255,255,255,.025);
+  color:var(--muted);
+  text-align:center;
+  font-size:12.5px;
+}
+.status-spinner{
+  width:24px;
+  height:24px;
+  border:3px solid rgba(255,255,255,.1);
+  border-top-color:var(--blue);
+  border-radius:50%;
+  animation:spin .75s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.status.error{color:#fecdd3;border-color:rgba(251,113,133,.28);background:rgba(251,113,133,.035)}
+.retry-btn{
+  min-height:38px;
+  padding:8px 13px;
+  border:0;
+  border-radius:11px;
+  color:white;
+  background:linear-gradient(100deg,var(--blue),var(--violet));
+  cursor:pointer;
+  font-weight:700;
+}
 .toast{
   position:fixed;
   left:50%;
   bottom:max(22px,env(safe-area-inset-bottom));
-  z-index:2000;
+  z-index:12000;
   max-width:calc(100% - 32px);
-  padding:10px 14px;
-  border-radius:10px;
-  background:#13213d;
-  border:1px solid var(--border);
+  padding:11px 15px;
+  border:1px solid var(--line-strong);
+  border-radius:13px;
+  background:rgba(11,25,45,.96);
   color:white;
-  box-shadow:0 12px 35px rgba(0,0,0,.4);
+  box-shadow:0 18px 50px rgba(0,0,0,.42);
+  -webkit-backdrop-filter:blur(12px);
+  backdrop-filter:blur(12px);
   font-size:12px;
   opacity:0;
-  transform:translate(-50%,12px);
+  transform:translate(-50%,14px) scale(.98);
   pointer-events:none;
-  transition:.2s ease;
+  transition:opacity .2s ease,transform .2s ease;
 }
-.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.show{opacity:1;transform:translate(-50%,0) scale(1)}
 
-@media (max-width:640px){
-  .wrap{padding:14px}
-  .top{align-items:flex-start}
-  .avatar{width:56px;height:56px}
-  .controls{width:100%;margin-left:0}
+[hidden]{display:none!important}
+
+@media (max-width:760px){
+  .wrap{padding:14px 13px 42px}
+  .hero{grid-template-columns:1fr;gap:20px;min-height:0;padding:19px;border-radius:22px}
+  .avatar{width:62px;height:62px;border-radius:18px}
+  .hero-stats{margin-top:10px}
+  .filter-shell{margin-top:13px;border-radius:15px}
+  .section{margin-top:22px}
   .grid{grid-template-columns:1fr}
-  .recent-row .card{min-width:82vw}
-  .inapp-inner{align-items:flex-start;flex-wrap:wrap}
-  .inapp-copy{width:calc(100% - 40px)}
-  .inapp-actions{width:100%;padding-left:34px}
-  .open-browser-btn{flex:1}
+  .recent-row .card{min-width:84vw;max-width:84vw}
+  .browser-notice-card{grid-template-columns:auto 1fr auto;align-items:start;border-radius:16px}
+  .browser-notice-actions{grid-column:2/-1;width:100%}
+  .browser-primary{flex:1}
+  .browser-close{position:absolute;right:17px;top:max(14px,env(safe-area-inset-top))}
+}
+
+@media (max-width:430px){
+  .brand{align-items:flex-start}
+  .title h1{font-size:26px}
+  .hero-stats{gap:6px}
+  .stat-chip{padding:8px 6px}
+  .browser-notice{padding-left:8px;padding-right:8px}
+  .browser-notice-card{gap:10px;padding:11px}
+  .browser-notice-icon{width:39px;height:39px;border-radius:12px}
+  .browser-notice-copy{padding-right:30px}
+  .browser-notice-actions{grid-column:1/-1}
+  .browser-secondary{width:42px}
+  .sheet-actions{grid-template-columns:1fr}
+}
+
+@media (hover:none){
+  .card:hover{transform:none}
+  .card::before{display:none}
 }
 
 @media (prefers-reduced-motion:reduce){
-  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
+  *,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
 }
 </style>
 </head>
 <body>
+<div class="ambient" aria-hidden="true"></div>
 
-<div id="inAppNotice" class="inapp-notice" role="status" aria-live="polite">
-  <div class="inapp-inner">
-    <div class="inapp-icon" aria-hidden="true">🌐</div>
-    <div class="inapp-copy">
-      <div id="inAppTitle" class="inapp-title">Bạn đang mở trang trong ứng dụng</div>
-      <div class="inapp-text">Để xem và tải tài liệu ổn định hơn, hãy mở trang bằng Google Chrome.</div>
+<div id="browserNotice" class="browser-notice" role="status" aria-live="polite">
+  <div class="browser-notice-card">
+    <div class="browser-notice-icon" aria-hidden="true">🌐</div>
+    <div class="browser-notice-copy">
+      <div id="browserNoticeTitle" class="browser-notice-title">Bạn đang mở trang trong ứng dụng</div>
+      <div class="browser-notice-text">Mở bằng Chrome hoặc trình duyệt mặc định để xem và tải tài liệu ổn định hơn.</div>
     </div>
-    <div class="inapp-actions">
-      <button id="openExternalBrowser" class="open-browser-btn" type="button">Mở bằng Chrome</button>
-      <button id="closeNotice" class="notice-close" type="button" aria-label="Đóng thông báo">×</button>
+    <div class="browser-notice-actions">
+      <a id="openExternalBrowser" class="browser-primary" href="#" aria-label="Mở trang bằng trình duyệt bên ngoài">
+        <span aria-hidden="true">↗</span>
+        <span>Mở trình duyệt</span>
+      </a>
+      <button id="copyBrowserLink" class="browser-secondary" type="button" aria-label="Sao chép liên kết" title="Sao chép liên kết">⧉</button>
+    </div>
+    <button id="closeBrowserNotice" class="browser-close" type="button" aria-label="Đóng thông báo">×</button>
+  </div>
+</div>
+
+<div id="fallbackSheet" class="sheet-backdrop" role="dialog" aria-modal="true" aria-labelledby="fallbackTitle">
+  <div class="sheet">
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <h2 id="fallbackTitle">Không tự chuyển được trình duyệt?</h2>
+    <p>Một số phiên bản Messenger, Zalo hoặc TikTok chặn liên kết mở ứng dụng khác. Bạn vẫn có thể mở trang theo cách sau:</p>
+    <ol class="sheet-steps">
+      <li><span class="step-number">1</span><span>Nhấn nút <strong>⋮</strong> hoặc biểu tượng chia sẻ ở góc màn hình.</span></li>
+      <li><span class="step-number">2</span><span>Chọn <strong>Mở bằng trình duyệt</strong>, <strong>Mở trong Chrome</strong> hoặc <strong>Open externally</strong>.</span></li>
+    </ol>
+    <div class="sheet-actions">
+      <button id="closeFallbackSheet" type="button">Đã hiểu</button>
+      <button id="copySheetLink" class="copy-sheet-btn" type="button">Sao chép liên kết</button>
     </div>
   </div>
 </div>
 
 <div class="wrap">
-  <header class="top">
-    <img src="avatar.png" class="avatar" alt="Ảnh đại diện Chốn Học Tập">
-    <div class="title">
-      <h1>CHỐN HỌC TẬP</h1>
-      <p>Xem &amp; Tải tài liệu</p>
+  <header class="hero">
+    <div class="brand">
+      <div class="avatar-wrap">
+        <img src="avatar.png" class="avatar" alt="Ảnh đại diện Chốn Học Tập">
+      </div>
+      <div class="title">
+        <div class="eyebrow">Kho tài liệu học tập</div>
+        <h1>CHỐN HỌC TẬP</h1>
+        <p>Xem nhanh, tìm kiếm và tải tài liệu theo từng khối lớp.</p>
+      </div>
     </div>
-    <div class="controls">
-      <label for="q" hidden>Tìm mã đề</label>
-      <input id="q" class="search" type="search" autocomplete="off" placeholder="Tìm mã đề...">
+
+    <div class="hero-side">
+      <label class="search-box" for="q">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input id="q" class="search" type="search" autocomplete="off" inputmode="search" placeholder="Tìm mã đề, môn học, mô tả...">
+      </label>
+      <div class="hero-stats" aria-label="Thống kê tài liệu">
+        <div class="stat-chip"><span id="totalCount" class="stat-value">—</span><span class="stat-label">Tài liệu</span></div>
+        <div class="stat-chip"><span class="stat-value">3</span><span class="stat-label">Khối lớp</span></div>
+        <div class="stat-chip"><span class="stat-value">24/7</span><span class="stat-label">Truy cập</span></div>
+      </div>
     </div>
   </header>
 
-  <nav class="filters" aria-label="Bộ lọc tài liệu">
-    <button class="active" type="button" data-filter="all">Tất cả</button>
-    <button type="button" data-filter="recent">🆕 Gần đây</button>
-    <button type="button" data-filter="10">Lớp 10</button>
-    <button type="button" data-filter="11">Lớp 11</button>
-    <button type="button" data-filter="12">Lớp 12</button>
-  </nav>
+  <div class="filter-shell">
+    <nav class="filters" aria-label="Bộ lọc tài liệu">
+      <button class="active" type="button" data-filter="all">Tất cả</button>
+      <button type="button" data-filter="recent">🆕 Gần đây</button>
+      <button type="button" data-filter="10">Lớp 10</button>
+      <button type="button" data-filter="11">Lớp 11</button>
+      <button type="button" data-filter="12">Lớp 12</button>
+    </nav>
+  </div>
 
   <section class="section" id="recentSection">
-    <h3>File gần đây</h3>
+    <div class="section-head">
+      <h2 class="section-heading">File gần đây</h2>
+      <span class="section-hint">Vuốt ngang để xem thêm</span>
+    </div>
     <div id="recent" class="recent-row" aria-live="polite"></div>
   </section>
 
   <main class="section">
-    <h3 id="mainTitle">Tất cả</h3>
+    <div class="section-head">
+      <h2 id="mainTitle" class="section-heading">Tất cả tài liệu</h2>
+      <span id="resultCount" class="section-hint"></span>
+    </div>
     <div id="grid" class="grid" aria-live="polite"></div>
   </main>
 </div>
@@ -343,126 +689,141 @@ button:focus-visible,a:focus-visible,input:focus-visible{
 'use strict';
 
 const CONFIG = Object.freeze({
-  owner: 'chonhoctap',
-  repo: 'pages',
-  folder: 'files'
+  owner:'chonhoctap',
+  repo:'pages',
+  folder:'files',
+  cacheKey:'chonhoctap-files-v3',
+  cacheMaxAge:24 * 60 * 60 * 1000,
+  requestTimeout:12000
 });
 
 const api = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.folder}`;
 
 const elements = {
-  grid: document.getElementById('grid'),
-  recent: document.getElementById('recent'),
-  recentSection: document.getElementById('recentSection'),
-  mainTitle: document.getElementById('mainTitle'),
-  search: document.getElementById('q'),
-  filters: document.querySelector('.filters'),
-  inAppNotice: document.getElementById('inAppNotice'),
-  inAppTitle: document.getElementById('inAppTitle'),
-  openExternalBrowser: document.getElementById('openExternalBrowser'),
-  closeNotice: document.getElementById('closeNotice'),
-  toast: document.getElementById('toast')
+  grid:document.getElementById('grid'),
+  recent:document.getElementById('recent'),
+  recentSection:document.getElementById('recentSection'),
+  mainTitle:document.getElementById('mainTitle'),
+  resultCount:document.getElementById('resultCount'),
+  totalCount:document.getElementById('totalCount'),
+  search:document.getElementById('q'),
+  filters:document.querySelector('.filters'),
+  browserNotice:document.getElementById('browserNotice'),
+  browserNoticeTitle:document.getElementById('browserNoticeTitle'),
+  openExternalBrowser:document.getElementById('openExternalBrowser'),
+  copyBrowserLink:document.getElementById('copyBrowserLink'),
+  closeBrowserNotice:document.getElementById('closeBrowserNotice'),
+  fallbackSheet:document.getElementById('fallbackSheet'),
+  closeFallbackSheet:document.getElementById('closeFallbackSheet'),
+  copySheetLink:document.getElementById('copySheetLink'),
+  toast:document.getElementById('toast')
 };
 
 let allFiles = [];
 let currentFilter = 'all';
 let toastTimer;
+let externalOpenTimer;
+let noticeResizeObserver;
 
-const clean = name => String(name).replace(/\.(docx?|pdf|png|jpe?g)$/i, '');
-const icon = name => /\.pdf$/i.test(name) ? '📕' : /\.docx?$/i.test(name) ? '📘' : '📄';
+const clean = name => String(name).replace(/\.(docx?|pdf|png|jpe?g)$/i,'');
+const extensionOf = name => String(name).split('.').pop()?.toUpperCase() || 'FILE';
+const icon = name => /\.pdf$/i.test(name) ? '📕' : /\.docx?$/i.test(name) ? '📘' : /\.(png|jpe?g)$/i.test(name) ? '🖼️' : '📄';
 
 function parseFile(file){
   const parts = clean(file.name).split('-');
   return {
-    name: file.name || '',
-    downloadUrl: file.download_url || '',
-    grade: parts[0] || '',
-    num: parts[1] || '',
-    subject: parts[2] || '',
-    desc: parts.slice(3).join('-') || '(không mô tả)'
+    name:file.name || '',
+    downloadUrl:file.download_url || '',
+    grade:parts[0] || '',
+    num:parts[1] || '',
+    subject:parts[2] || '',
+    desc:parts.slice(3).join('-') || '(không mô tả)'
   };
 }
 
 function sortDesc(a,b){
   const gradeDifference = Number(b.grade) - Number(a.grade);
   if(gradeDifference !== 0) return gradeDifference;
-
   const numberDifference = Number(b.num) - Number(a.num);
   if(numberDifference !== 0) return numberDifference;
-
-  return b.subject.localeCompare(a.subject, 'vi', {sensitivity:'base'});
+  return b.subject.localeCompare(a.subject,'vi',{sensitivity:'base'});
 }
 
-function createElement(tag, className, text){
+function createElement(tag,className,text){
   const element = document.createElement(tag);
   if(className) element.className = className;
   if(text !== undefined) element.textContent = text;
   return element;
 }
 
-function createCard(file){
-  const card = createElement('article', 'card');
-  const topLine = [file.grade, file.num, file.subject].filter(Boolean).join('-');
+function createCard(file,index = 0){
+  const card = createElement('article','card');
+  card.style.setProperty('--delay',`${Math.min(index * 42,336)}ms`);
+  const topLine = [file.grade,file.num,file.subject].filter(Boolean).join('-');
 
-  const badge = createElement('div', 'top-badge', file.grade || '?');
-  const cardTop = createElement('div', 'card-top');
-  const fileIcon = createElement('div', 'file-icon', icon(file.name));
-  fileIcon.setAttribute('aria-hidden', 'true');
+  const cardTop = createElement('div','card-top');
+  const fileIcon = createElement('div','file-icon',icon(file.name));
+  fileIcon.setAttribute('aria-hidden','true');
 
-  const fileInfo = createElement('div', 'file-info');
-  const name = createElement('div', 'name', topLine || clean(file.name));
-  const description = createElement('div', 'sub desc-ellipsis', file.desc);
+  const fileInfo = createElement('div','file-info');
+  const name = createElement('div','name',topLine || clean(file.name));
+  const description = createElement('div','sub desc-ellipsis',file.desc);
   description.title = file.desc;
+  fileInfo.append(name,description);
+  cardTop.append(fileIcon,fileInfo);
 
-  const actions = createElement('div', 'actions');
-  const viewButton = createElement('button', 'btn-view', '👁 Xem');
+  const meta = createElement('div','file-meta');
+  meta.append(
+    createElement('span','meta-pill grade',file.grade ? `Lớp ${file.grade}` : 'Chưa phân lớp'),
+    createElement('span','meta-pill',extensionOf(file.name))
+  );
+
+  const actions = createElement('div','actions');
+  const viewButton = createElement('button','btn-view','👁 Xem');
   viewButton.type = 'button';
-  viewButton.addEventListener('click', () => openView(file.downloadUrl, file.name));
+  viewButton.addEventListener('click',() => openView(file.downloadUrl,file.name));
 
-  const downloadLink = createElement('a', 'btn-dl', '⬇ Tải');
+  const downloadLink = createElement('a','btn-dl','⬇ Tải');
   downloadLink.href = file.downloadUrl;
-  downloadLink.setAttribute('download', file.name);
+  downloadLink.setAttribute('download',file.name);
   downloadLink.rel = 'noopener';
 
-  fileInfo.append(name, description);
-  cardTop.append(fileIcon, fileInfo);
-  actions.append(viewButton, downloadLink);
-  card.append(badge, cardTop, actions);
+  actions.append(viewButton,downloadLink);
+  card.append(cardTop,meta,actions);
   return card;
 }
 
-function renderCards(container, list){
+function renderCards(container,list){
   const fragment = document.createDocumentFragment();
-  list.forEach(file => fragment.appendChild(createCard(file)));
+  list.forEach((file,index) => fragment.appendChild(createCard(file,index)));
   container.replaceChildren(fragment);
 }
 
-function showStatus(container, message, type = ''){
-  const status = createElement('div', `status show ${type}`.trim(), message);
+function showStatus(container,message,type = '',loading = false){
+  const status = createElement('div',`status ${type}`.trim());
+  if(loading) status.appendChild(createElement('div','status-spinner'));
+  status.appendChild(createElement('div','',message));
   container.replaceChildren(status);
   return status;
 }
 
-function renderRecent(){
-  const pick = grade => allFiles
-    .filter(file => file.grade === grade)
-    .sort(sortDesc)
-    .slice(0,2);
-
-  const recentFiles = [...pick('12'), ...pick('11'), ...pick('10')];
-
-  if(recentFiles.length){
-    renderCards(elements.recent, recentFiles);
-  }else{
-    showStatus(elements.recent, 'Chưa có file gần đây.');
-  }
+function updateStats(){
+  elements.totalCount.textContent = String(allFiles.length);
 }
 
-function setFilter(filter, button){
+function renderRecent(){
+  const pick = grade => allFiles.filter(file => file.grade === grade).sort(sortDesc).slice(0,2);
+  const recentFiles = [...pick('12'),...pick('11'),...pick('10')];
+  recentFiles.length
+    ? renderCards(elements.recent,recentFiles)
+    : showStatus(elements.recent,'Chưa có file gần đây.');
+}
+
+function setFilter(filter,button){
   document.querySelectorAll('.filters button').forEach(item => item.classList.remove('active'));
   button.classList.add('active');
   currentFilter = filter;
-  elements.mainTitle.textContent = button.textContent.trim();
+  elements.mainTitle.textContent = filter === 'all' ? 'Tất cả tài liệu' : button.textContent.trim();
   elements.recentSection.hidden = filter === 'recent';
   applyFilters();
 }
@@ -473,7 +834,7 @@ function applyFilters(){
 
   if(keyword){
     list = list.filter(file =>
-      `${file.grade}-${file.num}-${file.subject}-${file.desc}`
+      `${file.grade}-${file.num}-${file.subject}-${file.desc}-${file.name}`
         .toLocaleLowerCase('vi')
         .includes(keyword)
     );
@@ -481,7 +842,8 @@ function applyFilters(){
 
   if(currentFilter === 'all'){
     const sorted = list.sort(sortDesc);
-    sorted.length ? renderCards(elements.grid, sorted) : showStatus(elements.grid, 'Không tìm thấy tài liệu phù hợp.');
+    elements.resultCount.textContent = `${sorted.length} kết quả`;
+    sorted.length ? renderCards(elements.grid,sorted) : showStatus(elements.grid,'Không tìm thấy tài liệu phù hợp.');
     return;
   }
 
@@ -494,129 +856,236 @@ function applyFilters(){
       if(!items.length) return;
       total += items.length;
 
-      const block = createElement('section', 'section grade-block');
-      const heading = createElement('h3', '', `Lớp ${grade}`);
-      const row = createElement('div', 'recent-row');
-      renderCards(row, items);
-      block.append(heading, row);
+      const block = createElement('section','grade-block');
+      const head = createElement('div','section-head');
+      const heading = createElement('h3','section-heading',`Lớp ${grade}`);
+      const count = createElement('span','section-hint',`${items.length} tài liệu`);
+      const row = createElement('div','recent-row');
+      renderCards(row,items);
+      head.append(heading,count);
+      block.append(head,row);
       fragment.appendChild(block);
     });
 
-    if(total){
-      elements.grid.replaceChildren(fragment);
-    }else{
-      showStatus(elements.grid, 'Không tìm thấy tài liệu gần đây phù hợp.');
-    }
+    elements.resultCount.textContent = `${total} kết quả`;
+    total ? elements.grid.replaceChildren(fragment) : showStatus(elements.grid,'Không tìm thấy tài liệu gần đây phù hợp.');
     return;
   }
 
   if(['10','11','12'].includes(currentFilter)){
     const filtered = list.filter(file => file.grade === currentFilter).sort(sortDesc);
-    filtered.length ? renderCards(elements.grid, filtered) : showStatus(elements.grid, `Không tìm thấy tài liệu lớp ${currentFilter}.`);
+    elements.resultCount.textContent = `${filtered.length} kết quả`;
+    filtered.length ? renderCards(elements.grid,filtered) : showStatus(elements.grid,`Không tìm thấy tài liệu lớp ${currentFilter}.`);
   }
 }
 
-function openView(url, name){
-  if(!url) return showToast('Không tìm thấy đường dẫn của file.');
-  const params = new URLSearchParams({file:url, name:name});
+function openView(url,name){
+  if(!url){
+    showToast('Không tìm thấy đường dẫn của file.');
+    return;
+  }
+  const params = new URLSearchParams({file:url,name});
   window.location.assign(`view.html?${params.toString()}`);
 }
 
+function readCache(){
+  try{
+    const cached = JSON.parse(localStorage.getItem(CONFIG.cacheKey) || 'null');
+    if(!cached || !Array.isArray(cached.data)) return null;
+    if(Date.now() - Number(cached.savedAt || 0) > CONFIG.cacheMaxAge) return null;
+    return cached.data;
+  }catch{
+    return null;
+  }
+}
+
+function writeCache(data){
+  try{
+    localStorage.setItem(CONFIG.cacheKey,JSON.stringify({savedAt:Date.now(),data}));
+  }catch{
+    // WebView có thể chặn localStorage; trang vẫn hoạt động bình thường.
+  }
+}
+
+function displayFiles(files){
+  allFiles = files;
+  updateStats();
+  renderRecent();
+  applyFilters();
+}
+
 async function loadFiles(){
-  showStatus(elements.grid, 'Đang tải danh sách tài liệu...');
-  showStatus(elements.recent, 'Đang tải file gần đây...');
+  const cachedFiles = readCache();
+  if(cachedFiles?.length){
+    displayFiles(cachedFiles);
+  }else{
+    showStatus(elements.grid,'Đang tải danh sách tài liệu...','',true);
+    showStatus(elements.recent,'Đang tải file gần đây...','',true);
+  }
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(),CONFIG.requestTimeout);
 
   try{
-    const response = await fetch(api, {
+    const response = await fetch(api,{
       headers:{Accept:'application/vnd.github+json'},
-      cache:'no-store'
+      cache:'no-store',
+      signal:controller.signal
     });
-
-    if(!response.ok){
-      throw new Error(`GitHub API trả về mã ${response.status}`);
-    }
+    if(!response.ok) throw new Error(`GitHub API trả về mã ${response.status}`);
 
     const data = await response.json();
     if(!Array.isArray(data)) throw new Error('Dữ liệu GitHub API không hợp lệ');
 
-    allFiles = data
+    const files = data
       .filter(item => item.type === 'file' && item.download_url)
       .map(parseFile);
 
-    renderRecent();
-    applyFilters();
+    writeCache(files);
+    displayFiles(files);
   }catch(error){
     console.error(error);
-    const status = showStatus(elements.grid, 'Không thể tải danh sách tài liệu. Vui lòng kiểm tra mạng rồi thử lại.', 'error');
-    const retry = createElement('button', 'retry-btn', 'Thử lại');
+    if(cachedFiles?.length){
+      showToast('Không cập nhật được dữ liệu mới. Đang dùng danh sách đã lưu.');
+      return;
+    }
+
+    const status = showStatus(elements.grid,'Không thể tải danh sách tài liệu. Vui lòng kiểm tra mạng rồi thử lại.','error');
+    const retry = createElement('button','retry-btn','Thử lại');
     retry.type = 'button';
-    retry.addEventListener('click', loadFiles, {once:true});
-    status.appendChild(document.createElement('br'));
+    retry.addEventListener('click',loadFiles,{once:true});
     status.appendChild(retry);
-    showStatus(elements.recent, 'Không thể tải file gần đây.', 'error');
+    showStatus(elements.recent,'Không thể tải file gần đây.','error');
+  }finally{
+    window.clearTimeout(timeout);
   }
 }
 
+// ===== WEBVIEW / IN-APP BROWSER =====
 function detectInAppBrowser(){
-  const ua = navigator.userAgent || navigator.vendor || '';
-  const browsers = [
-    {name:'Messenger/Facebook', pattern:/FBAN|FBAV|FB_IAB|Messenger/i},
-    {name:'Zalo', pattern:/Zalo/i},
-    {name:'TikTok', pattern:/TikTok|BytedanceWebview|musical_ly/i},
-    {name:'Instagram', pattern:/Instagram/i},
-    {name:'LINE', pattern:/Line\//i},
-    {name:'WeChat', pattern:/MicroMessenger/i}
+  const ua = [navigator.userAgent,navigator.vendor,navigator.platform].filter(Boolean).join(' ');
+  const referrer = document.referrer || '';
+  const brands = navigator.userAgentData?.brands?.map(item => item.brand).join(' ') || '';
+  const testMode = new URLSearchParams(window.location.search).get('webview-test');
+  if(testMode === '1') return 'chế độ kiểm tra WebView';
+
+  const appRules = [
+    {name:'Messenger/Facebook',ua:/FBAN|FBAV|FB_IAB|FB4A|FBIOS|FBSS|Messenger|Orca-Android|com\.facebook\.(?:orca|katana)/i,ref:/facebook\.com|messenger\.com|fb\.me|l\.facebook\.com/i},
+    {name:'Zalo',ua:/Zalo|com\.zing\.zalo|ZaloTheme|ZaloWebView/i,ref:/zalo\.me|zaloapp\.com|zalo\.cloud/i},
+    {name:'TikTok',ua:/TikTok|musical_ly|BytedanceWebview|ByteDance|com\.zhiliaoapp\.musically|trill|aweme|TTWebView|ToutiaoMicroApp/i,ref:/tiktok\.com|tiktokv\.com|musical\.ly/i},
+    {name:'Instagram',ua:/Instagram/i,ref:/instagram\.com/i},
+    {name:'LINE',ua:/Line\/|LIFF/i,ref:/line\.me/i},
+    {name:'WeChat',ua:/MicroMessenger|WeChat/i,ref:/weixin\.qq\.com|wechat\.com/i}
   ];
 
-  const matched = browsers.find(browser => browser.pattern.test(ua));
-  if(matched) return matched.name;
+  const matchedByUa = appRules.find(app => app.ua.test(ua));
+  if(matchedByUa) return matchedByUa.name;
+  const matchedByReferrer = appRules.find(app => app.ref.test(referrer));
+  if(matchedByReferrer) return matchedByReferrer.name;
 
-  const androidWebView = /;\s*wv\)|\bwv\b|Version\/[\d.]+\s+Chrome\/[\d.]+.*Mobile Safari/i.test(ua);
-  const iosWebView = /(iPhone|iPad|iPod).*AppleWebKit(?!.*Safari)/i.test(ua);
-  return androidWebView || iosWebView ? 'trình duyệt trong ứng dụng' : '';
+  const android = /Android/i.test(ua);
+  const ios = /iPhone|iPad|iPod/i.test(ua);
+  const androidWebView = android && /\bwv\b|;\s*wv\)|Version\/4\.0.*Chrome\/[\d.]+.*Mobile Safari|Android WebView/i.test(`${ua} ${brands}`);
+  const knownIosBrowser = /CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|GSA/i.test(ua);
+  const iosWebView = ios && /AppleWebKit/i.test(ua) && (!/Safari\//i.test(ua) || Boolean(window.ReactNativeWebView)) && !knownIosBrowser;
+  const nativeBridge = Boolean(window.ReactNativeWebView || window.AndroidInterface || window.JSBridge || window.webkit?.messageHandlers?.nativeApp);
+
+  return androidWebView || iosWebView || nativeBridge ? 'trình duyệt bên trong ứng dụng' : '';
 }
 
-function initInAppNotice(){
-  const browserName = detectInAppBrowser();
-  if(!browserName || sessionStorage.getItem('hideInAppNotice') === '1') return;
-
-  elements.inAppTitle.textContent = `Bạn đang mở bằng ${browserName}`;
-  elements.inAppNotice.classList.add('show');
+function getCleanCurrentUrl(){
+  const url = new URL(window.location.href);
+  url.searchParams.delete('webview-test');
+  return url.toString();
 }
 
-function openInChrome(){
-  const currentUrl = window.location.href;
+function buildExternalBrowserUrl(){
+  const currentUrl = getCleanCurrentUrl();
   const ua = navigator.userAgent || '';
 
   if(/Android/i.test(ua)){
     const parsed = new URL(currentUrl);
-    const intentUrl = `intent://${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}` +
-      `#Intent;scheme=${parsed.protocol.replace(':','')};package=com.android.chrome;end`;
-    window.location.href = intentUrl;
-    return;
+    const target = `${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}`;
+    return `intent://${target}` +
+      `#Intent;scheme=${parsed.protocol.replace(':','')};` +
+      `action=android.intent.action.VIEW;` +
+      `category=android.intent.category.BROWSABLE;` +
+      `S.browser_fallback_url=${encodeURIComponent(currentUrl)};end`;
   }
 
   if(/iPhone|iPad|iPod/i.test(ua)){
-    const chromeScheme = currentUrl.startsWith('https://') ? 'googlechromes://' : 'googlechrome://';
-    window.location.href = chromeScheme + currentUrl.replace(/^https?:\/\//i, '');
-    window.setTimeout(() => {
-      if(document.visibilityState === 'visible'){
-        copyCurrentUrl('Chrome chưa mở. Đã sao chép liên kết để bạn dán vào Chrome.');
-      }
-    }, 1200);
-    return;
+    const scheme = currentUrl.startsWith('https://') ? 'googlechromes://' : 'googlechrome://';
+    return scheme + currentUrl.replace(/^https?:\/\//i,'');
   }
 
-  const opened = window.open(currentUrl, '_blank', 'noopener,noreferrer');
-  if(!opened) copyCurrentUrl('Đã sao chép liên kết. Hãy dán vào Chrome.');
+  return currentUrl;
 }
 
-async function copyCurrentUrl(successMessage){
+function syncNoticeSpacing(){
+  if(!elements.browserNotice.classList.contains('show')) return;
+  const height = Math.ceil(elements.browserNotice.getBoundingClientRect().height);
+  document.documentElement.style.setProperty('--notice-height',`${height}px`);
+}
+
+function showBrowserNotice(browserName){
+  elements.browserNoticeTitle.textContent = `Bạn đang mở bằng ${browserName}`;
+  elements.openExternalBrowser.href = buildExternalBrowserUrl();
+  elements.browserNotice.classList.add('show');
+  document.body.classList.add('has-browser-notice');
+  window.requestAnimationFrame(syncNoticeSpacing);
+
+  if('ResizeObserver' in window){
+    noticeResizeObserver?.disconnect();
+    noticeResizeObserver = new ResizeObserver(syncNoticeSpacing);
+    noticeResizeObserver.observe(elements.browserNotice);
+  }
+}
+
+function hideBrowserNotice(){
+  elements.browserNotice.classList.remove('show');
+  document.body.classList.remove('has-browser-notice');
+  document.documentElement.style.setProperty('--notice-height','0px');
+  noticeResizeObserver?.disconnect();
+}
+
+function initBrowserNotice(){
+  const browserName = detectInAppBrowser();
+  if(browserName) showBrowserNotice(browserName);
+}
+
+function armExternalOpenFallback(){
+  window.clearTimeout(externalOpenTimer);
+  externalOpenTimer = window.setTimeout(() => {
+    if(document.visibilityState === 'visible') showFallbackSheet();
+  },1800);
+}
+
+function showFallbackSheet(){
+  elements.fallbackSheet.classList.add('show');
+}
+
+function hideFallbackSheet(){
+  elements.fallbackSheet.classList.remove('show');
+}
+
+async function copyCurrentUrl(message = 'Đã sao chép liên kết. Hãy dán vào Chrome.'){
+  const value = getCleanCurrentUrl();
   try{
-    await navigator.clipboard.writeText(window.location.href);
-    showToast(successMessage);
+    if(navigator.clipboard?.writeText){
+      await navigator.clipboard.writeText(value);
+    }else{
+      const input = document.createElement('textarea');
+      input.value = value;
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand('copy');
+      input.remove();
+    }
+    showToast(message);
   }catch{
-    showToast('Hãy mở menu ⋮ của ứng dụng và chọn “Mở bằng trình duyệt”.');
+    showToast('Không sao chép tự động được. Hãy dùng menu ⋮ và chọn “Mở bằng trình duyệt”.');
   }
 }
 
@@ -624,22 +1093,34 @@ function showToast(message){
   window.clearTimeout(toastTimer);
   elements.toast.textContent = message;
   elements.toast.classList.add('show');
-  toastTimer = window.setTimeout(() => elements.toast.classList.remove('show'), 3200);
+  toastTimer = window.setTimeout(() => elements.toast.classList.remove('show'),3400);
 }
 
-elements.filters.addEventListener('click', event => {
+elements.filters.addEventListener('click',event => {
   const button = event.target.closest('button[data-filter]');
-  if(button) setFilter(button.dataset.filter, button);
+  if(button) setFilter(button.dataset.filter,button);
 });
 
-elements.search.addEventListener('input', applyFilters);
-elements.openExternalBrowser.addEventListener('click', openInChrome);
-elements.closeNotice.addEventListener('click', () => {
-  elements.inAppNotice.classList.remove('show');
-  sessionStorage.setItem('hideInAppNotice', '1');
+elements.search.addEventListener('input',applyFilters);
+elements.openExternalBrowser.addEventListener('click',armExternalOpenFallback);
+elements.copyBrowserLink.addEventListener('click',() => copyCurrentUrl());
+elements.copySheetLink.addEventListener('click',() => copyCurrentUrl('Đã sao chép liên kết. Bây giờ hãy dán vào Chrome.'));
+elements.closeBrowserNotice.addEventListener('click',hideBrowserNotice);
+elements.closeFallbackSheet.addEventListener('click',hideFallbackSheet);
+elements.fallbackSheet.addEventListener('click',event => {
+  if(event.target === elements.fallbackSheet) hideFallbackSheet();
+});
+document.addEventListener('keydown',event => {
+  if(event.key === 'Escape') hideFallbackSheet();
+});
+document.addEventListener('visibilitychange',() => {
+  if(document.visibilityState === 'hidden') window.clearTimeout(externalOpenTimer);
 });
 
-initInAppNotice();
+initBrowserNotice();
+window.addEventListener('pageshow',() => {
+  if(!elements.browserNotice.classList.contains('show')) initBrowserNotice();
+});
 loadFiles();
 </script>
 </body>

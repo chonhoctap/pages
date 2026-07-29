@@ -562,9 +562,11 @@ main.section,
 .file-icon.subject-math{background:linear-gradient(145deg,rgba(59,130,246,.18),rgba(14,165,233,.12));color:#60a5fa}
 .file-icon.subject-physics{background:linear-gradient(145deg,rgba(251,146,60,.20),rgba(245,158,11,.12));color:#fb923c}
 .file-icon.subject-chemistry{background:linear-gradient(145deg,rgba(196,181,253,.26),rgba(167,139,250,.16));color:#c4b5fd}
+.file-icon.subject-generic{background:linear-gradient(145deg,rgba(59,130,246,.18),rgba(14,165,233,.12));color:#60a5fa}
 [data-theme="dark"] .file-icon.subject-math{color:#93c5fd}
 [data-theme="dark"] .file-icon.subject-physics{color:#fdba74}
 [data-theme="dark"] .file-icon.subject-chemistry{color:#d8b4fe}
+[data-theme="dark"] .file-icon.subject-generic{color:#93c5fd}
 .file-icon-glyph{font-size:23px;font-weight:800;letter-spacing:-.02em;line-height:1;display:inline-flex;align-items:center;justify-content:center}
 .file-icon-glyph--book{width:24px;height:24px}
 .file-icon-glyph--book svg{width:24px;height:24px;display:block}
@@ -787,6 +789,10 @@ main.section,
 :root:not([data-theme="dark"]) .file-icon.subject-chemistry{
   color:#a78bfa;
   background:linear-gradient(145deg,#f6f0ff,#efe7ff);
+}
+:root:not([data-theme="dark"]) .file-icon.subject-generic{
+  color:#2f80ed;
+  background:linear-gradient(145deg,#edf6ff,#dff3ff);
 }
 :root:not([data-theme="dark"]) .name{color:#14243d}
 :root:not([data-theme="dark"]) .meta-pill{
@@ -1172,11 +1178,11 @@ function getSubjectVisual(subject,name=''){
     return {glyph:bookGlyph, className:'subject-chemistry', label:'Hóa Học'};
   }
 
-  return {glyph:fallbackIcon(name), className:'', label:'Tài liệu'};
+  return {glyph:'book', className:'subject-generic', label:'Tài liệu'};
 }
 
 function createIconGlyph(visual){
-  if(['subject-math','subject-physics','subject-chemistry'].includes(visual.className)){
+  if(['subject-math','subject-physics','subject-chemistry','subject-generic'].includes(visual.className)){
     const wrapper = createElement('span','file-icon-glyph file-icon-glyph--book');
     wrapper.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="3.5" y="3.5" width="1.8" height="16" rx="0.8" fill="currentColor" opacity=".95"/>

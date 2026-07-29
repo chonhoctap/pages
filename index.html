@@ -1,64 +1,200 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#030516">
 <title>Chốn Học Tập — KienDev_</title>
 <link rel="icon" href="avatar.png">
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 
 <style>
 :root{
   --bg:#030516;
   --card:#081225;
   --muted:#95a5c7;
-  --accent1:#7C3AED;
-  --accent2:#06B6D4;
+  --accent1:#7c3aed;
+  --accent2:#06b6d4;
   --pink1:#ffb86b;
   --pink2:#ff6bcb;
+  --danger:#fb7185;
+  --text:#eaf2ff;
+  --border:rgba(255,255,255,.08);
+  --surface:rgba(255,255,255,.045);
 }
-*{box-sizing:border-box;font-family:Poppins}
-body{margin:0;background:var(--bg);color:#eaf2ff}
+
+*{box-sizing:border-box}
+html{color-scheme:dark}
+body{
+  margin:0;
+  min-width:280px;
+  background:var(--bg);
+  color:var(--text);
+  font-family:Poppins,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+button,input{font:inherit}
+button,a{-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible,input:focus-visible{
+  outline:3px solid rgba(6,182,212,.45);
+  outline-offset:2px;
+}
 .wrap{max-width:1200px;margin:auto;padding:20px}
 
+/* ===== IN-APP BROWSER NOTICE ===== */
+.inapp-notice{
+  position:sticky;
+  top:0;
+  z-index:1000;
+  display:none;
+  padding:max(10px,env(safe-area-inset-top)) 14px 10px;
+  background:rgba(8,18,37,.97);
+  border-bottom:1px solid rgba(6,182,212,.35);
+  box-shadow:0 10px 30px rgba(0,0,0,.28);
+  backdrop-filter:blur(14px);
+}
+.inapp-notice.show{display:block}
+.inapp-inner{
+  max-width:1200px;
+  margin:auto;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+.inapp-icon{font-size:22px;line-height:1}
+.inapp-copy{min-width:0;flex:1}
+.inapp-title{font-weight:700;font-size:13px}
+.inapp-text{margin-top:2px;color:var(--muted);font-size:12px;line-height:1.45}
+.inapp-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.open-browser-btn,
+.notice-close{
+  border:0;
+  cursor:pointer;
+  color:white;
+}
+.open-browser-btn{
+  min-height:38px;
+  padding:8px 13px;
+  border-radius:10px;
+  font-size:12px;
+  font-weight:700;
+  background:linear-gradient(90deg,var(--accent2),var(--accent1));
+  white-space:nowrap;
+}
+.notice-close{
+  width:36px;
+  height:36px;
+  border-radius:10px;
+  background:rgba(255,255,255,.07);
+  font-size:18px;
+}
+
 /* ===== TOP ===== */
-.top{display:flex;gap:16px;align-items:center;flex-wrap:wrap;padding:16px;border-radius:16px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05)}
-.avatar{width:64px;height:64px;border-radius:14px}
+.top{
+  display:flex;
+  gap:16px;
+  align-items:center;
+  flex-wrap:wrap;
+  padding:16px;
+  border-radius:16px;
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.05);
+}
+.avatar{width:64px;height:64px;border-radius:14px;object-fit:cover}
 .title h1{
   margin:0;
   font-size:22px;
-  font-family:'Palatino Linotype','Book Antiqua',Palatino,serif;
+  font-family:"Palatino Linotype","Book Antiqua",Palatino,serif;
   font-weight:700;
-  letter-spacing:-0.3px;
+  letter-spacing:-.3px;
 }
 .title p{margin:4px 0 0;color:var(--muted);font-size:13px}
-.controls{margin-left:auto}
-.search{padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:white}
+.controls{margin-left:auto;min-width:min(100%,220px)}
+.search{
+  width:100%;
+  padding:10px 14px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.05);
+  color:white;
+}
+.search::placeholder{color:#8190b1}
 
 /* ===== FILTERS ===== */
 .filters{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
-.filters button{height:36px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.06);color:white;cursor:pointer;font-size:13px}
+.filters button{
+  min-height:36px;
+  padding:0 14px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.06);
+  color:white;
+  cursor:pointer;
+  font-size:13px;
+  transition:transform .18s ease,background .18s ease;
+}
+.filters button:hover{transform:translateY(-1px)}
 .filters button.active{background:linear-gradient(90deg,var(--accent1),var(--accent2));font-weight:700}
 
 /* ===== SECTIONS ===== */
 .section{margin-top:22px}
 .section h3{margin:0 0 10px;font-size:14px;color:var(--muted)}
 
+/* ===== STATUS ===== */
+.status{
+  display:none;
+  grid-column:1/-1;
+  padding:18px;
+  border:1px solid var(--border);
+  border-radius:14px;
+  background:var(--surface);
+  color:var(--muted);
+  text-align:center;
+  font-size:13px;
+}
+.status.show{display:block}
+.status.error{color:#fecdd3;border-color:rgba(251,113,133,.35)}
+.retry-btn{
+  margin-top:10px;
+  padding:8px 12px;
+  border:0;
+  border-radius:9px;
+  background:linear-gradient(90deg,var(--accent2),var(--accent1));
+  color:white;
+  cursor:pointer;
+  font-weight:700;
+}
+
 /* ===== RECENT ===== */
-.recent-row{display:flex;gap:16px;overflow-x:auto;padding-bottom:12px;scroll-behavior:smooth}
-.recent-row .card{min-width:260px}
+.recent-row{
+  display:flex;
+  gap:16px;
+  overflow-x:auto;
+  padding:2px 2px 12px;
+  scroll-behavior:smooth;
+  overscroll-behavior-inline:contain;
+  scrollbar-color:var(--accent1) transparent;
+}
+.recent-row .card{min-width:260px;max-width:320px}
 .recent-row::-webkit-scrollbar{height:8px}
 .recent-row::-webkit-scrollbar-thumb{background:linear-gradient(90deg,var(--accent1),var(--accent2));border-radius:10px}
 
 /* ===== GRID ===== */
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px}
-
-/* Ensure grade rows in 'Gần đây' span full width and stack vertically */
-.grade-block{grid-column:1 / -1; margin-bottom:14px} 
+.grade-block{grid-column:1/-1;margin-bottom:14px;min-width:0}
 
 /* ===== CARD ===== */
-.card{padding:16px;border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);border:1px solid rgba(255,255,255,.05);position:relative;transition:.2s}
-.card:hover{transform:translateY(-6px)}
+.card{
+  min-width:0;
+  padding:16px;
+  border-radius:16px;
+  background:linear-gradient(180deg,rgba(255,255,255,.04),transparent);
+  border:1px solid rgba(255,255,255,.05);
+  position:relative;
+  transition:transform .2s ease,border-color .2s ease;
+}
+.card:hover{transform:translateY(-6px);border-color:rgba(124,58,237,.35)}
 .top-badge{
   position:absolute;
   top:14px;
@@ -69,212 +205,442 @@ body{margin:0;background:var(--bg);color:#eaf2ff}
   border-radius:8px;
   background:linear-gradient(90deg,var(--pink1),var(--pink2));
   color:#071023;
-
-  /* hidden by default, appear on card hover/focus */
   opacity:0;
   transform:translateY(-6px) scale(.98);
-  transition:opacity .18s ease, transform .18s ease;
+  transition:opacity .18s ease,transform .18s ease;
   pointer-events:none;
 }
-
-/* show badge when hovering (or focusing inside) the card */
 .card:hover .top-badge,
-.card:focus-within .top-badge{
-  opacity:1;
-  transform:translateY(0) scale(1);
+.card:focus-within .top-badge{opacity:1;transform:translateY(0) scale(1)}
+.card-top{display:flex;gap:12px;align-items:center;min-width:0}
+.file-icon{
+  width:52px;
+  height:52px;
+  flex:0 0 52px;
+  border-radius:12px;
+  background:rgba(255,255,255,.08);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:26px;
+}
+.file-info{min-width:0}
+.name{font-weight:700;font-size:15px;overflow-wrap:anywhere}
+.sub{font-size:12px;color:var(--muted);margin-top:4px}
+.actions{margin-top:14px;display:flex;gap:10px}
+.btn-view,
+.btn-dl{
+  flex:1;
+  min-height:42px;
+  padding:10px;
+  border-radius:10px;
+  font-weight:700;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+.btn-view{border:0;background:linear-gradient(90deg,#0ea5e9,#7c3aed);color:white}
+.btn-dl{border:0;text-decoration:none;background:linear-gradient(90deg,var(--pink1),var(--pink2));color:#071023}
+.desc-ellipsis{
+  display:-webkit-box;
+  overflow:hidden;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  line-height:1.3;
 }
 
-.card-top{display:flex;gap:12px;align-items:center}
-.file-icon{width:52px;height:52px;border-radius:12px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:26px}
-.name{font-weight:700;font-size:15px}
-.sub{font-size:12px;color:var(--muted);margin-top:4px}
+.toast{
+  position:fixed;
+  left:50%;
+  bottom:max(22px,env(safe-area-inset-bottom));
+  z-index:2000;
+  max-width:calc(100% - 32px);
+  padding:10px 14px;
+  border-radius:10px;
+  background:#13213d;
+  border:1px solid var(--border);
+  color:white;
+  box-shadow:0 12px 35px rgba(0,0,0,.4);
+  font-size:12px;
+  opacity:0;
+  transform:translate(-50%,12px);
+  pointer-events:none;
+  transition:.2s ease;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
 
-.actions{margin-top:14px;display:flex;gap:10px}
-.btn-view{flex:1;padding:10px;border-radius:10px;border:0;font-weight:700;cursor:pointer;background:linear-gradient(90deg,#0ea5e9,#7c3aed);color:white}
-.btn-dl{flex:1;padding:10px;border-radius:10px;font-weight:700;text-decoration:none;background:linear-gradient(90deg,var(--pink1),var(--pink2));color:#071023;display:flex;align-items:center;justify-content:center}
+@media (max-width:640px){
+  .wrap{padding:14px}
+  .top{align-items:flex-start}
+  .avatar{width:56px;height:56px}
+  .controls{width:100%;margin-left:0}
+  .grid{grid-template-columns:1fr}
+  .recent-row .card{min-width:82vw}
+  .inapp-inner{align-items:flex-start;flex-wrap:wrap}
+  .inapp-copy{width:calc(100% - 40px)}
+  .inapp-actions{width:100%;padding-left:34px}
+  .open-browser-btn{flex:1}
+}
 
-/* small helper: ellipsis for long descriptions */
-.desc-ellipsis{display:block;max-height:2.6em;overflow:hidden;text-overflow:ellipsis}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
 
-  <div class="top">
-    <img src="avatar.png" class="avatar">
-    <div class="title">
-      <h1>CHỐN HỌC TẬP</h1>
-      <p>Xem & Tải tài liệu</p>
+<div id="inAppNotice" class="inapp-notice" role="status" aria-live="polite">
+  <div class="inapp-inner">
+    <div class="inapp-icon" aria-hidden="true">🌐</div>
+    <div class="inapp-copy">
+      <div id="inAppTitle" class="inapp-title">Bạn đang mở trang trong ứng dụng</div>
+      <div class="inapp-text">Để xem và tải tài liệu ổn định hơn, hãy mở trang bằng Google Chrome.</div>
     </div>
-    <div class="controls">
-      <input id="q" class="search" placeholder="Tìm mã đề...">
+    <div class="inapp-actions">
+      <button id="openExternalBrowser" class="open-browser-btn" type="button">Mở bằng Chrome</button>
+      <button id="closeNotice" class="notice-close" type="button" aria-label="Đóng thông báo">×</button>
     </div>
   </div>
-
-  <div class="filters">
-    <button class="active" onclick="setFilter('all',this)">Tất cả</button>
-    <button onclick="setFilter('recent',this)">🆕 Gần đây</button>
-    <button onclick="setFilter('10',this)">Lớp 10</button>
-    <button onclick="setFilter('11',this)">Lớp 11</button>
-    <button onclick="setFilter('12',this)">Lớp 12</button>
-  </div>
-
-  <!-- FILE GẦN ĐÂY (phần riêng, hiển thị khi không ở tab Gần đây) -->
-  <div class="section" id="recentSection">
-    <h3>File gần đây</h3>
-    <div id="recent" class="recent-row"></div>
-  </div>
-
-  <div class="section">
-    <h3 id="mainTitle">Tất cả</h3>
-    <div id="grid" class="grid"></div>
-  </div>
-
 </div>
 
+<div class="wrap">
+  <header class="top">
+    <img src="avatar.png" class="avatar" alt="Ảnh đại diện Chốn Học Tập">
+    <div class="title">
+      <h1>CHỐN HỌC TẬP</h1>
+      <p>Xem &amp; Tải tài liệu</p>
+    </div>
+    <div class="controls">
+      <label for="q" hidden>Tìm mã đề</label>
+      <input id="q" class="search" type="search" autocomplete="off" placeholder="Tìm mã đề...">
+    </div>
+  </header>
+
+  <nav class="filters" aria-label="Bộ lọc tài liệu">
+    <button class="active" type="button" data-filter="all">Tất cả</button>
+    <button type="button" data-filter="recent">🆕 Gần đây</button>
+    <button type="button" data-filter="10">Lớp 10</button>
+    <button type="button" data-filter="11">Lớp 11</button>
+    <button type="button" data-filter="12">Lớp 12</button>
+  </nav>
+
+  <section class="section" id="recentSection">
+    <h3>File gần đây</h3>
+    <div id="recent" class="recent-row" aria-live="polite"></div>
+  </section>
+
+  <main class="section">
+    <h3 id="mainTitle">Tất cả</h3>
+    <div id="grid" class="grid" aria-live="polite"></div>
+  </main>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
 <script>
-const owner="chonhoctap", repo="pages", folder="files";
-const api=`https://api.github.com/repos/${owner}/${repo}/contents/${folder}`;
+'use strict';
 
-const grid=document.getElementById("grid");
-const recent=document.getElementById("recent");
-const q=document.getElementById("q");
-let all=[],current="all";
+const CONFIG = Object.freeze({
+  owner: 'chonhoctap',
+  repo: 'pages',
+  folder: 'files'
+});
 
-// remove extension and preserve unicode
-const clean = n => n.replace(/\.(docx?|pdf|png|jpe?g)$/i,"");
-// choose icon by extension
-const icon = n => /\.pdf$/i.test(n)? '📕' : /\.doc/i.test(n)? '📘' : '📄';
+const api = `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.folder}`;
 
-/*
-  Parse filename format: (lớp)-(số)-(môn)-(mô tả).ext
-  - grade: p[0]
-  - num: p[1]
-  - subject: p[2]
-  - desc: p[3..].join('-') (optional)
-*/
-function parse(f){
-  const base = clean(f.name);
-  const p = base.split('-');
-  const grade = p[0] || '';
-  const num = p[1] || '';
-  const subject = p[2] || '';
-  const desc = p.slice(3).join('-') || '(không mô tả)';
-  return {...f, grade, num, subject, desc };
-}
-
-// sort theo (lớp)-(số)-(môn) giảm dần
-const sortDesc = (a,b)=>{
-  // lớp: 12 -> 11 -> 10
-  const g = Number(b.grade) - Number(a.grade);
-  if(g!==0) return g;
-  // số: lớn -> nhỏ
-  const n = Number(b.num) - Number(a.num);
-  if(n!==0) return n;
-  // môn: so sánh chữ (Z -> A)
-  return b.subject.localeCompare(a.subject,'vi',{sensitivity:'base'});
+const elements = {
+  grid: document.getElementById('grid'),
+  recent: document.getElementById('recent'),
+  recentSection: document.getElementById('recentSection'),
+  mainTitle: document.getElementById('mainTitle'),
+  search: document.getElementById('q'),
+  filters: document.querySelector('.filters'),
+  inAppNotice: document.getElementById('inAppNotice'),
+  inAppTitle: document.getElementById('inAppTitle'),
+  openExternalBrowser: document.getElementById('openExternalBrowser'),
+  closeNotice: document.getElementById('closeNotice'),
+  toast: document.getElementById('toast')
 };
 
-function card(f){
-  const topLine = `${f.grade}-${f.num}-${f.subject}`.replace(/^-|-$|--/g,'');
-  return `
-<div class="card">
-  <div class="top-badge">${f.grade}</div>
-  <div class="card-top">
-    <div class="file-icon">${icon(f.name)}</div>
-    <div>
-      <div class="name">${topLine}</div>
-      <div class="sub desc-ellipsis">${escapeHtml(f.desc)}</div>
-    </div>
-  </div>
-  <div class="actions">
-    <button class="btn-view" onclick="openView('${f.download_url}','${f.name}')">👁 Xem</button>
-    <a class="btn-dl" href="${f.download_url}" download>⬇ Tải</a>
-  </div>
-</div>`;
+let allFiles = [];
+let currentFilter = 'all';
+let toastTimer;
+
+const clean = name => String(name).replace(/\.(docx?|pdf|png|jpe?g)$/i, '');
+const icon = name => /\.pdf$/i.test(name) ? '📕' : /\.docx?$/i.test(name) ? '📘' : '📄';
+
+function parseFile(file){
+  const parts = clean(file.name).split('-');
+  return {
+    name: file.name || '',
+    downloadUrl: file.download_url || '',
+    grade: parts[0] || '',
+    num: parts[1] || '',
+    subject: parts[2] || '',
+    desc: parts.slice(3).join('-') || '(không mô tả)'
+  };
 }
 
-function render(list){grid.innerHTML=list.map(card).join('');}
+function sortDesc(a,b){
+  const gradeDifference = Number(b.grade) - Number(a.grade);
+  if(gradeDifference !== 0) return gradeDifference;
+
+  const numberDifference = Number(b.num) - Number(a.num);
+  if(numberDifference !== 0) return numberDifference;
+
+  return b.subject.localeCompare(a.subject, 'vi', {sensitivity:'base'});
+}
+
+function createElement(tag, className, text){
+  const element = document.createElement(tag);
+  if(className) element.className = className;
+  if(text !== undefined) element.textContent = text;
+  return element;
+}
+
+function createCard(file){
+  const card = createElement('article', 'card');
+  const topLine = [file.grade, file.num, file.subject].filter(Boolean).join('-');
+
+  const badge = createElement('div', 'top-badge', file.grade || '?');
+  const cardTop = createElement('div', 'card-top');
+  const fileIcon = createElement('div', 'file-icon', icon(file.name));
+  fileIcon.setAttribute('aria-hidden', 'true');
+
+  const fileInfo = createElement('div', 'file-info');
+  const name = createElement('div', 'name', topLine || clean(file.name));
+  const description = createElement('div', 'sub desc-ellipsis', file.desc);
+  description.title = file.desc;
+
+  const actions = createElement('div', 'actions');
+  const viewButton = createElement('button', 'btn-view', '👁 Xem');
+  viewButton.type = 'button';
+  viewButton.addEventListener('click', () => openView(file.downloadUrl, file.name));
+
+  const downloadLink = createElement('a', 'btn-dl', '⬇ Tải');
+  downloadLink.href = file.downloadUrl;
+  downloadLink.setAttribute('download', file.name);
+  downloadLink.rel = 'noopener';
+
+  fileInfo.append(name, description);
+  cardTop.append(fileIcon, fileInfo);
+  actions.append(viewButton, downloadLink);
+  card.append(badge, cardTop, actions);
+  return card;
+}
+
+function renderCards(container, list){
+  const fragment = document.createDocumentFragment();
+  list.forEach(file => fragment.appendChild(createCard(file)));
+  container.replaceChildren(fragment);
+}
+
+function showStatus(container, message, type = ''){
+  const status = createElement('div', `status show ${type}`.trim(), message);
+  container.replaceChildren(status);
+  return status;
+}
 
 function renderRecent(){
-  // Chỉ lấy 2 file mới nhất cho mỗi lớp → ghép thành 1 dòng ngang (File gần đây)
-  const pick = g => all.filter(f=>f.grade==g).sort(sortDesc).slice(0,2);
-  const recentList = [...pick('12'), ...pick('11'), ...pick('10')];
-  recent.innerHTML = `<div class="recent-row">${recentList.map(card).join('')}</div>`;
+  const pick = grade => allFiles
+    .filter(file => file.grade === grade)
+    .sort(sortDesc)
+    .slice(0,2);
+
+  const recentFiles = [...pick('12'), ...pick('11'), ...pick('10')];
+
+  if(recentFiles.length){
+    renderCards(elements.recent, recentFiles);
+  }else{
+    showStatus(elements.recent, 'Chưa có file gần đây.');
+  }
 }
 
-function setFilter(t,b){
-  document.querySelectorAll('.filters button').forEach(x=>x.classList.remove('active'));
-  b.classList.add('active');
-  current=t;
-  document.getElementById('mainTitle').innerText = b.innerText;
-
-  // Khi chọn tab GẦN ĐÂY → ẩn section "File gần đây" ở trên cùng
-  document.getElementById('recentSection').style.display = (t==='recent') ? 'none' : 'block';
-
-  apply();
+function setFilter(filter, button){
+  document.querySelectorAll('.filters button').forEach(item => item.classList.remove('active'));
+  button.classList.add('active');
+  currentFilter = filter;
+  elements.mainTitle.textContent = button.textContent.trim();
+  elements.recentSection.hidden = filter === 'recent';
+  applyFilters();
 }
 
-function apply(){
-  let list=[...all];
+function applyFilters(){
+  const keyword = elements.search.value.trim().toLocaleLowerCase('vi');
+  let list = [...allFiles];
 
-  // search filter applies to all tabs
-  const keyword = q.value.trim().toLowerCase();
   if(keyword){
-    list = list.filter(f => `${f.grade}-${f.num}-${f.subject}-${f.desc}`.toLowerCase().includes(keyword));
+    list = list.filter(file =>
+      `${file.grade}-${file.num}-${file.subject}-${file.desc}`
+        .toLocaleLowerCase('vi')
+        .includes(keyword)
+    );
   }
 
-  // TAB "TẤT CẢ": sort and render all
-  if(current==='all'){
-    render(list.sort(sortDesc));
+  if(currentFilter === 'all'){
+    const sorted = list.sort(sortDesc);
+    sorted.length ? renderCards(elements.grid, sorted) : showStatus(elements.grid, 'Không tìm thấy tài liệu phù hợp.');
     return;
   }
 
-  // TAB "GẦN ĐÂY": render 3 separate horizontal rows (10,11,12) each full-width
-  if(current==='recent'){
-    // hide top "File gần đây" section
-    document.getElementById('recentSection').style.display = 'none';
-    const grades = ['10','11','12']; // user requested 10,11,12 order
-    grid.innerHTML = grades.map(g=>{
-      const items = list.filter(f=>f.grade==g).sort(sortDesc);
-      if(!items.length) return '';
-      return `
-        <div class="section grade-block">
-          <h3 style="margin:0 0 8px;color:var(--muted)">Lớp ${g}</h3>
-          <div class="recent-row">
-            ${items.map(card).join('')}
-          </div>
-        </div>
-      `;
-    }).join('');
+  if(currentFilter === 'recent'){
+    const fragment = document.createDocumentFragment();
+    let total = 0;
+
+    ['10','11','12'].forEach(grade => {
+      const items = list.filter(file => file.grade === grade).sort(sortDesc);
+      if(!items.length) return;
+      total += items.length;
+
+      const block = createElement('section', 'section grade-block');
+      const heading = createElement('h3', '', `Lớp ${grade}`);
+      const row = createElement('div', 'recent-row');
+      renderCards(row, items);
+      block.append(heading, row);
+      fragment.appendChild(block);
+    });
+
+    if(total){
+      elements.grid.replaceChildren(fragment);
+    }else{
+      showStatus(elements.grid, 'Không tìm thấy tài liệu gần đây phù hợp.');
+    }
     return;
   }
 
-  // TAB THEO LỚP (10/11/12)
-  if(['10','11','12'].includes(current)){
-    // ensure top "File gần đây" shown when viewing a single class
-    document.getElementById('recentSection').style.display = 'block';
-    render(list.filter(f=>f.grade==current).sort(sortDesc));
-    return;
+  if(['10','11','12'].includes(currentFilter)){
+    const filtered = list.filter(file => file.grade === currentFilter).sort(sortDesc);
+    filtered.length ? renderCards(elements.grid, filtered) : showStatus(elements.grid, `Không tìm thấy tài liệu lớp ${currentFilter}.`);
   }
 }
 
-
-q.oninput = apply;
-
-function openView(u,n){ location.href = `view.html?file=${encodeURIComponent(u)}&name=${encodeURIComponent(n)}` }
-
-// simple html escape to avoid accidental html injection from filenames
-function escapeHtml(s){
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function openView(url, name){
+  if(!url) return showToast('Không tìm thấy đường dẫn của file.');
+  const params = new URLSearchParams({file:url, name:name});
+  window.location.assign(`view.html?${params.toString()}`);
 }
 
-fetch(api).then(r=>r.json()).then(d=>{
-  all = d.filter(x=>x.type==='file').map(parse);
-  renderRecent();
-  apply();
+async function loadFiles(){
+  showStatus(elements.grid, 'Đang tải danh sách tài liệu...');
+  showStatus(elements.recent, 'Đang tải file gần đây...');
+
+  try{
+    const response = await fetch(api, {
+      headers:{Accept:'application/vnd.github+json'},
+      cache:'no-store'
+    });
+
+    if(!response.ok){
+      throw new Error(`GitHub API trả về mã ${response.status}`);
+    }
+
+    const data = await response.json();
+    if(!Array.isArray(data)) throw new Error('Dữ liệu GitHub API không hợp lệ');
+
+    allFiles = data
+      .filter(item => item.type === 'file' && item.download_url)
+      .map(parseFile);
+
+    renderRecent();
+    applyFilters();
+  }catch(error){
+    console.error(error);
+    const status = showStatus(elements.grid, 'Không thể tải danh sách tài liệu. Vui lòng kiểm tra mạng rồi thử lại.', 'error');
+    const retry = createElement('button', 'retry-btn', 'Thử lại');
+    retry.type = 'button';
+    retry.addEventListener('click', loadFiles, {once:true});
+    status.appendChild(document.createElement('br'));
+    status.appendChild(retry);
+    showStatus(elements.recent, 'Không thể tải file gần đây.', 'error');
+  }
+}
+
+function detectInAppBrowser(){
+  const ua = navigator.userAgent || navigator.vendor || '';
+  const browsers = [
+    {name:'Messenger/Facebook', pattern:/FBAN|FBAV|FB_IAB|Messenger/i},
+    {name:'Zalo', pattern:/Zalo/i},
+    {name:'TikTok', pattern:/TikTok|BytedanceWebview|musical_ly/i},
+    {name:'Instagram', pattern:/Instagram/i},
+    {name:'LINE', pattern:/Line\//i},
+    {name:'WeChat', pattern:/MicroMessenger/i}
+  ];
+
+  const matched = browsers.find(browser => browser.pattern.test(ua));
+  if(matched) return matched.name;
+
+  const androidWebView = /;\s*wv\)|\bwv\b|Version\/[\d.]+\s+Chrome\/[\d.]+.*Mobile Safari/i.test(ua);
+  const iosWebView = /(iPhone|iPad|iPod).*AppleWebKit(?!.*Safari)/i.test(ua);
+  return androidWebView || iosWebView ? 'trình duyệt trong ứng dụng' : '';
+}
+
+function initInAppNotice(){
+  const browserName = detectInAppBrowser();
+  if(!browserName || sessionStorage.getItem('hideInAppNotice') === '1') return;
+
+  elements.inAppTitle.textContent = `Bạn đang mở bằng ${browserName}`;
+  elements.inAppNotice.classList.add('show');
+}
+
+function openInChrome(){
+  const currentUrl = window.location.href;
+  const ua = navigator.userAgent || '';
+
+  if(/Android/i.test(ua)){
+    const parsed = new URL(currentUrl);
+    const intentUrl = `intent://${parsed.host}${parsed.pathname}${parsed.search}${parsed.hash}` +
+      `#Intent;scheme=${parsed.protocol.replace(':','')};package=com.android.chrome;end`;
+    window.location.href = intentUrl;
+    return;
+  }
+
+  if(/iPhone|iPad|iPod/i.test(ua)){
+    const chromeScheme = currentUrl.startsWith('https://') ? 'googlechromes://' : 'googlechrome://';
+    window.location.href = chromeScheme + currentUrl.replace(/^https?:\/\//i, '');
+    window.setTimeout(() => {
+      if(document.visibilityState === 'visible'){
+        copyCurrentUrl('Chrome chưa mở. Đã sao chép liên kết để bạn dán vào Chrome.');
+      }
+    }, 1200);
+    return;
+  }
+
+  const opened = window.open(currentUrl, '_blank', 'noopener,noreferrer');
+  if(!opened) copyCurrentUrl('Đã sao chép liên kết. Hãy dán vào Chrome.');
+}
+
+async function copyCurrentUrl(successMessage){
+  try{
+    await navigator.clipboard.writeText(window.location.href);
+    showToast(successMessage);
+  }catch{
+    showToast('Hãy mở menu ⋮ của ứng dụng và chọn “Mở bằng trình duyệt”.');
+  }
+}
+
+function showToast(message){
+  window.clearTimeout(toastTimer);
+  elements.toast.textContent = message;
+  elements.toast.classList.add('show');
+  toastTimer = window.setTimeout(() => elements.toast.classList.remove('show'), 3200);
+}
+
+elements.filters.addEventListener('click', event => {
+  const button = event.target.closest('button[data-filter]');
+  if(button) setFilter(button.dataset.filter, button);
 });
+
+elements.search.addEventListener('input', applyFilters);
+elements.openExternalBrowser.addEventListener('click', openInChrome);
+elements.closeNotice.addEventListener('click', () => {
+  elements.inAppNotice.classList.remove('show');
+  sessionStorage.setItem('hideInAppNotice', '1');
+});
+
+initInAppNotice();
+loadFiles();
 </script>
 </body>
 </html>
-

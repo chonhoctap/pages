@@ -3,12 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#07111f">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#f4f8ff">
+<meta name="color-scheme" content="light dark">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Chốn Học Tập — KienDev_</title>
+<script id="themeBootstrap">
+try{
+  document.documentElement.dataset.theme = localStorage.getItem('chonhoctap-theme') || 'light';
+}catch{
+  document.documentElement.dataset.theme = 'light';
+}
+</script>
 <link rel="icon" href="avatar.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,6 +23,27 @@
 
 <style>
 :root{
+  --bg:#eef5ff;
+  --bg-soft:#f8fbff;
+  --surface:rgba(255,255,255,.94);
+  --surface-strong:#ffffff;
+  --surface-hover:#f8fbff;
+  --text:#14243d;
+  --muted:#667892;
+  --line:rgba(38,82,145,.11);
+  --line-strong:rgba(38,82,145,.19);
+  --violet:#2563eb;
+  --blue:#1597ee;
+  --cyan:#06b6d4;
+  --pink:#ec4899;
+  --orange:#f59e0b;
+  --green:#10b981;
+  --danger:#ef4444;
+  --shadow:0 18px 50px rgba(54,96,160,.12);
+  --notice-height:0px;
+}
+
+[data-theme="dark"]{
   --bg:#050a14;
   --bg-soft:#091321;
   --surface:rgba(14,27,47,.74);
@@ -33,7 +61,6 @@
   --green:#34d399;
   --danger:#fb7185;
   --shadow:0 24px 70px rgba(0,0,0,.38);
-  --notice-height:0px;
 }
 
 *{box-sizing:border-box}
@@ -45,12 +72,12 @@ body{
   min-height:100vh;
   overflow-x:hidden;
   background:
-    radial-gradient(circle at 8% 4%,rgba(56,189,248,.18),transparent 32rem),
-    radial-gradient(circle at 92% 18%,rgba(37,99,235,.12),transparent 30rem),
-    linear-gradient(180deg,#f7fbff 0%,#edf6ff 45%,#f5faff 100%);
+    radial-gradient(circle at 10% 3%,rgba(99,102,241,.08),transparent 30rem),
+    radial-gradient(circle at 90% 22%,rgba(34,211,238,.12),transparent 32rem),
+    linear-gradient(180deg,#f9fbff 0%,#eef5ff 40%,#edf9fb 100%);
   color:var(--text);
   font-family:Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;
-  transition:padding-top .25s ease, background .25s ease, color .25s ease;
+  transition:padding-top .25s ease,background .25s ease,color .25s ease;
 }
 [data-theme="dark"] body{
   background:
@@ -635,6 +662,223 @@ main.section,
 }
 .toast.show{opacity:1;transform:translate(-50%,0) scale(1)}
 
+
+/* ===== LIGHT MODE — WHITE / BLUE ===== */
+:root:not([data-theme="dark"]) .ambient::before{
+  background:#c7d2fe;
+  opacity:.26;
+}
+:root:not([data-theme="dark"]) .ambient::after{
+  background:#a5f3fc;
+  opacity:.28;
+}
+:root:not([data-theme="dark"]) .hero{
+  border-color:rgba(71,112,170,.10);
+  background:
+    radial-gradient(circle at 92% 4%,rgba(34,211,238,.10),transparent 18rem),
+    linear-gradient(135deg,rgba(255,255,255,.98),rgba(248,252,255,.96));
+  box-shadow:0 18px 48px rgba(71,112,170,.11),inset 0 1px 0 #fff;
+}
+:root:not([data-theme="dark"]) .hero::after{
+  border-color:rgba(14,165,233,.10);
+  box-shadow:0 0 0 35px rgba(37,99,235,.025),0 0 0 72px rgba(6,182,212,.025);
+}
+:root:not([data-theme="dark"]) .avatar{
+  border-color:rgba(37,99,235,.10);
+  box-shadow:0 12px 30px rgba(61,96,150,.16);
+}
+:root:not([data-theme="dark"]) .eyebrow{color:#2589c9}
+:root:not([data-theme="dark"]) .title h1{color:#14243d}
+:root:not([data-theme="dark"]) .theme-toggle{
+  background:#fff;
+  border-color:rgba(56,99,158,.12);
+  box-shadow:0 9px 24px rgba(57,99,155,.09);
+}
+:root:not([data-theme="dark"]) .theme-toggle:hover{
+  background:#f7fbff;
+  border-color:rgba(21,151,238,.28);
+}
+:root:not([data-theme="dark"]) .search{
+  color:#172a46;
+  background:#fff;
+  border-color:rgba(56,99,158,.12);
+  box-shadow:0 8px 24px rgba(68,105,158,.07),inset 0 1px 0 #fff;
+}
+:root:not([data-theme="dark"]) .search::placeholder{color:#8796ab}
+:root:not([data-theme="dark"]) .search:focus{
+  background:#fff;
+  border-color:rgba(21,151,238,.45);
+  box-shadow:0 0 0 4px rgba(21,151,238,.09),0 10px 28px rgba(68,105,158,.09);
+}
+:root:not([data-theme="dark"]) .stat-chip{
+  background:rgba(255,255,255,.85);
+  border-color:rgba(56,99,158,.10);
+  box-shadow:0 7px 20px rgba(67,104,158,.05);
+}
+:root:not([data-theme="dark"]) .filter-shell{
+  padding:8px;
+  border-color:rgba(56,99,158,.09);
+  background:rgba(246,250,255,.86);
+  box-shadow:0 10px 30px rgba(65,103,157,.08);
+}
+:root:not([data-theme="dark"]) .filters{gap:8px}
+:root:not([data-theme="dark"]) .filters button{
+  min-height:40px;
+  padding:0 16px;
+  border:1px solid rgba(56,99,158,.10);
+  border-radius:999px;
+  color:#33445d;
+  background:#fff;
+  box-shadow:0 6px 16px rgba(67,104,158,.06);
+}
+:root:not([data-theme="dark"]) .filters button:hover{
+  color:#0b6fc2;
+  border-color:rgba(21,151,238,.24);
+  background:#f7fbff;
+}
+:root:not([data-theme="dark"]) .filters button.active{
+  color:#fff;
+  border-color:transparent;
+  background:linear-gradient(105deg,#2d7ff0,#0bb8d8);
+  box-shadow:0 8px 22px rgba(14,150,220,.25),inset 0 1px 0 rgba(255,255,255,.3);
+}
+:root:not([data-theme="dark"]) .filters button.active::after{display:none}
+:root:not([data-theme="dark"]) .section-heading{color:#14243d}
+:root:not([data-theme="dark"]) .section-heading::before{
+  background:linear-gradient(#2d7ff0,#0bb8d8);
+}
+:root:not([data-theme="dark"]) .recent-row{
+  scrollbar-color:rgba(21,151,238,.35) transparent;
+}
+:root:not([data-theme="dark"]) .recent-row::-webkit-scrollbar-thumb{
+  background:linear-gradient(90deg,#2d7ff0,#0bb8d8);
+}
+:root:not([data-theme="dark"]) .card{
+  border-color:rgba(67,104,158,.10);
+  background:
+    radial-gradient(circle at 100% 0,rgba(34,211,238,.10),transparent 13rem),
+    linear-gradient(155deg,#fff 0%,#fbfdff 74%,#f2f8ff 100%);
+  box-shadow:0 14px 36px rgba(62,98,150,.10),inset 0 1px 0 #fff;
+}
+:root:not([data-theme="dark"]) .card::before{
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.80),transparent);
+}
+:root:not([data-theme="dark"]) .card:hover{
+  border-color:rgba(21,151,238,.22);
+  background:
+    radial-gradient(circle at 100% 0,rgba(34,211,238,.15),transparent 14rem),
+    linear-gradient(155deg,#fff 0%,#f8fcff 100%);
+  box-shadow:0 22px 48px rgba(58,96,151,.15),0 0 0 1px rgba(21,151,238,.04);
+}
+:root:not([data-theme="dark"]) .file-icon{
+  border-color:rgba(21,151,238,.11);
+  box-shadow:0 8px 20px rgba(44,120,184,.11),inset 0 1px 0 #fff;
+}
+:root:not([data-theme="dark"]) .file-icon.subject-math{
+  color:#fff;
+  background:linear-gradient(145deg,#2d7ff0,#08b7d6);
+}
+:root:not([data-theme="dark"]) .file-icon.subject-physics{
+  color:#fff;
+  background:linear-gradient(145deg,#6366f1,#2d7ff0);
+}
+:root:not([data-theme="dark"]) .file-icon.subject-chemistry{
+  color:#fff;
+  background:linear-gradient(145deg,#10b981,#06b6d4);
+}
+:root:not([data-theme="dark"]) .name{color:#14243d}
+:root:not([data-theme="dark"]) .meta-pill{
+  color:#52657e;
+  background:#f5f8fc;
+  border-color:rgba(67,104,158,.10);
+}
+:root:not([data-theme="dark"]) .meta-pill.grade{
+  color:#1d66d1;
+  background:#eef5ff;
+  border-color:rgba(45,127,240,.16);
+}
+:root:not([data-theme="dark"]) .btn-view{
+  background:linear-gradient(105deg,#2d7ff0,#0bb8d8);
+  box-shadow:0 8px 20px rgba(24,145,218,.18);
+}
+:root:not([data-theme="dark"]) .btn-dl{
+  color:#1a5f9f;
+  background:#eef7ff;
+  border-color:rgba(21,151,238,.16);
+}
+:root:not([data-theme="dark"]) .btn-dl:hover{background:#e5f3ff}
+:root:not([data-theme="dark"]) .status{
+  color:#667892;
+  background:rgba(255,255,255,.78);
+}
+:root:not([data-theme="dark"]) .toast{
+  color:#fff;
+  background:#183456;
+  border-color:rgba(255,255,255,.12);
+  box-shadow:0 16px 38px rgba(30,64,108,.25);
+}
+:root:not([data-theme="dark"]) .browser-notice-card,
+:root:not([data-theme="dark"]) .sheet{
+  color:#14243d;
+  background:rgba(255,255,255,.97);
+  box-shadow:0 18px 50px rgba(55,92,144,.17);
+}
+:root:not([data-theme="dark"]) .browser-secondary,
+:root:not([data-theme="dark"]) .sheet-actions button{
+  color:#29405f;
+  background:#f3f7fc;
+  border-color:rgba(56,99,158,.12);
+}
+:root:not([data-theme="dark"]) .sheet-steps li{color:#334b68}
+:root:not([data-theme="dark"]) .step-number{color:#1477bd;background:#e9f6ff}
+:root:not([data-theme="dark"]) .sheet-handle{background:rgba(45,78,120,.18)}
+
+/* Restore the existing dark appearance without changing its behavior */
+[data-theme="dark"] .hero{
+  background:
+    linear-gradient(135deg,rgba(139,92,246,.11),transparent 42%),
+    linear-gradient(315deg,rgba(34,211,238,.09),transparent 38%),
+    var(--surface);
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.055);
+}
+[data-theme="dark"] .search{
+  color:#fff;
+  background:rgba(3,11,22,.5);
+}
+[data-theme="dark"] .search:focus{background:rgba(4,13,27,.78)}
+[data-theme="dark"] .filter-shell{
+  background:rgba(6,14,27,.78);
+  box-shadow:0 10px 35px rgba(0,0,0,.22);
+}
+[data-theme="dark"] .filters button{
+  border-color:transparent;
+  color:#9fb0cd;
+  background:transparent;
+  box-shadow:none;
+}
+[data-theme="dark"] .filters button:hover{color:#fff;background:rgba(255,255,255,.055)}
+[data-theme="dark"] .filters button.active{
+  color:#fff;
+  background:linear-gradient(105deg,rgba(56,189,248,.2),rgba(139,92,246,.25));
+  box-shadow:inset 0 0 0 1px rgba(125,211,252,.18),0 8px 25px rgba(0,0,0,.16);
+}
+[data-theme="dark"] .filters button.active::after{display:block}
+[data-theme="dark"] .card{
+  background:
+    linear-gradient(145deg,rgba(255,255,255,.055),transparent 42%),
+    rgba(10,22,39,.73);
+  box-shadow:0 15px 42px rgba(0,0,0,.19),inset 0 1px 0 rgba(255,255,255,.04);
+}
+[data-theme="dark"] .card:hover{
+  background:var(--surface-hover);
+  box-shadow:0 23px 55px rgba(0,0,0,.27),0 0 0 1px rgba(139,92,246,.04);
+}
+[data-theme="dark"] .meta-pill{color:#aebdd5;background:rgba(255,255,255,.035)}
+[data-theme="dark"] .meta-pill.grade{color:#c4b5fd;background:rgba(139,92,246,.09);border-color:rgba(139,92,246,.2)}
+[data-theme="dark"] .browser-notice-card,
+[data-theme="dark"] .sheet{color:var(--text)}
+[data-theme="dark"] .sheet-steps li{color:#dce8fb}
+
 [hidden]{display:none!important}
 
 @media (max-width:760px){
@@ -655,7 +899,7 @@ main.section,
 
 @media (max-width:430px){
   .brand{align-items:flex-start}
-  .title h1{font-size:26px}
+  .title h1{font-size:22px}
   .hero-stats{gap:6px}
   .stat-chip{padding:8px 6px}
   .browser-notice{padding-left:8px;padding-right:8px}
@@ -998,6 +1242,8 @@ function getPreferredTheme(){
 function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
   const isDark = theme === 'dark';
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if(themeMeta) themeMeta.setAttribute('content',isDark ? '#07111f' : '#f4f8ff');
   if(elements.themeToggle){
     elements.themeToggle.setAttribute('aria-pressed', String(isDark));
     elements.themeToggle.setAttribute('aria-label', isDark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang chế độ tối');

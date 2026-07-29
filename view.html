@@ -1,102 +1,669 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-theme="light">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#eef6ff">
+<meta name="color-scheme" content="light dark">
 <title>Xem tài liệu — Chốn Học Tập</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <style>
-  body{
-    margin:0;
-    background:#040612;
-    color:white;
-    font-family:Poppins;
-    display:flex;
-    flex-direction:column;
-    height:100vh;
-  }
+:root{
+  --bg:#eaf3ff;
+  --surface:#ffffff;
+  --surface-soft:#f5f9ff;
+  --surface-glass:rgba(255,255,255,.86);
+  --text:#102a49;
+  --muted:#66809f;
+  --line:rgba(28,103,177,.16);
+  --line-strong:rgba(28,103,177,.28);
+  --blue:#1689ee;
+  --cyan:#10b9d7;
+  --blue-dark:#0865bd;
+  --success:#16b981;
+  --danger:#ef4444;
+  --shadow:0 18px 55px rgba(34,88,142,.16);
+  --viewer-shadow:0 24px 65px rgba(24,70,120,.20);
+}
 
-  .top{
-    padding:12px 18px;
-    display:flex;align-items:center;gap:14px;
-    background:rgba(255,255,255,0.03);
-    border-bottom:1px solid rgba(255,255,255,0.08);
-  }
-  .title{
-    font-size:16px;font-weight:700;
-  }
-  .spacer{flex:1}
+[data-theme="dark"]{
+  --bg:#06101f;
+  --surface:#0d1b2f;
+  --surface-soft:#10223a;
+  --surface-glass:rgba(12,27,48,.88);
+  --text:#f4f8ff;
+  --muted:#9eb1ce;
+  --line:rgba(177,207,247,.13);
+  --line-strong:rgba(177,207,247,.24);
+  --blue:#38a7ff;
+  --cyan:#22d3ee;
+  --blue-dark:#77c3ff;
+  --success:#34d399;
+  --danger:#fb7185;
+  --shadow:0 22px 70px rgba(0,0,0,.38);
+  --viewer-shadow:0 28px 75px rgba(0,0,0,.46);
+}
 
-  .btn{
-    padding:10px 14px;border-radius:10px;font-weight:700;border:0;
-    cursor:pointer;
-  }
-  .neon{background:linear-gradient(90deg,#7C3AED,#06B6D4);color:white;}
-  .ghost{background:rgba(255,255,255,0.07);color:white;}
+*{box-sizing:border-box}
+html,body{margin:0;min-width:280px;min-height:100%;background:var(--bg)}
+html{color-scheme:light;scroll-behavior:smooth}
+[data-theme="dark"]{color-scheme:dark}
+body{
+  min-height:100dvh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  color:var(--text);
+  font-family:Montserrat,system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:
+    radial-gradient(circle at 10% -10%,rgba(45,151,238,.17),transparent 30rem),
+    radial-gradient(circle at 95% 15%,rgba(16,185,215,.12),transparent 28rem),
+    var(--bg);
+  transition:background .25s ease,color .25s ease;
+}
+button,a{font:inherit;-webkit-tap-highlight-color:transparent}
+button:focus-visible,a:focus-visible{
+  outline:3px solid rgba(22,137,238,.35);
+  outline-offset:3px;
+}
 
-  .viewer{
-    flex:1;overflow:hidden;
-    padding:10px;
-  }
+/* ===== HEADER ===== */
+.topbar{
+  position:relative;
+  z-index:20;
+  flex:0 0 auto;
+  padding:max(10px,env(safe-area-inset-top)) 14px 10px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface-glass);
+  box-shadow:0 8px 30px rgba(34,88,142,.08);
+  -webkit-backdrop-filter:blur(18px);
+  backdrop-filter:blur(18px);
+}
+.topbar-inner{
+  width:min(1500px,100%);
+  min-height:54px;
+  margin:auto;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:14px;
+}
+.doc-heading{min-width:0;display:flex;align-items:center;gap:12px}
+.icon-btn,
+.action-btn,
+.mode-btn{
+  border:1px solid var(--line);
+  color:var(--text);
+  background:var(--surface);
+  cursor:pointer;
+  transition:transform .18s ease,border-color .18s ease,background .18s ease,box-shadow .18s ease;
+}
+.icon-btn:hover,.action-btn:hover,.mode-btn:hover{
+  transform:translateY(-1px);
+  border-color:var(--line-strong);
+  box-shadow:0 9px 22px rgba(34,88,142,.11);
+}
+.icon-btn{
+  width:43px;
+  height:43px;
+  flex:0 0 43px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  font-size:17px;
+}
+.doc-icon{
+  width:43px;
+  height:43px;
+  flex:0 0 43px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  color:#fff;
+  background:linear-gradient(135deg,var(--blue),var(--cyan));
+  box-shadow:0 10px 24px rgba(22,137,238,.22);
+  font-size:19px;
+}
+.doc-copy{min-width:0}
+.doc-kicker{
+  margin-bottom:3px;
+  color:var(--blue-dark);
+  font-size:9.5px;
+  font-weight:800;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+}
+.doc-title{
+  overflow:hidden;
+  color:var(--text);
+  font-size:14px;
+  font-weight:800;
+  line-height:1.35;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.doc-meta{margin-top:3px;color:var(--muted);font-size:10.5px;font-weight:500}
+.toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.action-btn{
+  min-height:43px;
+  padding:0 14px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  border-radius:14px;
+  font-size:11.5px;
+  font-weight:800;
+  text-decoration:none;
+  white-space:nowrap;
+}
+.action-btn.primary{
+  color:#fff;
+  border-color:transparent;
+  background:linear-gradient(105deg,var(--blue),var(--cyan));
+  box-shadow:0 10px 24px rgba(22,137,238,.20);
+}
+.action-btn .label{display:inline}
 
-  iframe{
+/* ===== CONTROL BAR ===== */
+.viewer-controls{
+  position:relative;
+  z-index:10;
+  flex:0 0 auto;
+  padding:10px 14px 0;
+}
+.viewer-controls-inner{
+  width:min(1500px,100%);
+  margin:auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.mode-switch{
+  display:inline-flex;
+  gap:5px;
+  padding:5px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:var(--surface-glass);
+  box-shadow:0 10px 25px rgba(34,88,142,.08);
+  -webkit-backdrop-filter:blur(15px);
+  backdrop-filter:blur(15px);
+}
+.mode-btn{
+  min-height:36px;
+  padding:0 12px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  border-color:transparent;
+  border-radius:11px;
+  color:var(--muted);
+  background:transparent;
+  font-size:10.5px;
+  font-weight:800;
+}
+.mode-btn.active{
+  color:#fff;
+  background:linear-gradient(105deg,var(--blue),var(--cyan));
+  box-shadow:0 7px 18px rgba(22,137,238,.20);
+}
+.mode-icon{font-size:14px}
+.viewer-status{color:var(--muted);font-size:10.5px;font-weight:600;text-align:right}
+
+/* ===== VIEWER ===== */
+.workspace{
+  min-height:0;
+  flex:1 1 auto;
+  padding:10px 14px max(14px,env(safe-area-inset-bottom));
+  overflow:auto;
+}
+.workspace-inner{
+  width:min(1500px,100%);
+  height:100%;
+  min-height:420px;
+  margin:auto;
+  display:flex;
+  justify-content:center;
+  align-items:stretch;
+}
+.device-stage{
+  width:100%;
+  min-width:0;
+  height:100%;
+  min-height:420px;
+  display:flex;
+  justify-content:center;
+  align-items:stretch;
+  transition:padding .28s ease;
+}
+.document-shell{
+  position:relative;
+  width:100%;
+  min-width:0;
+  height:100%;
+  overflow:hidden;
+  border:1px solid var(--line-strong);
+  border-radius:20px;
+  background:var(--surface);
+  box-shadow:var(--viewer-shadow);
+  transition:width .32s cubic-bezier(.2,.8,.2,1),height .32s cubic-bezier(.2,.8,.2,1),border-radius .32s ease,box-shadow .25s ease;
+}
+.document-shell::before{
+  content:"";
+  position:absolute;
+  inset:0 0 auto;
+  z-index:4;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);
+  pointer-events:none;
+}
+.viewer-content{
+  width:100%;
+  height:100%;
+  min-height:0;
+  overflow:auto;
+  background:#fff;
+}
+.viewer-content iframe{
+  display:block;
+  width:100%;
+  height:100%;
+  min-height:100%;
+  border:0;
+  background:#fff;
+}
+.image-viewer{
+  width:100%;
+  min-height:100%;
+  padding:22px;
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  background:
+    linear-gradient(45deg,#f3f5f8 25%,transparent 25%),
+    linear-gradient(-45deg,#f3f5f8 25%,transparent 25%),
+    linear-gradient(45deg,transparent 75%,#f3f5f8 75%),
+    linear-gradient(-45deg,transparent 75%,#f3f5f8 75%),
+    #fff;
+  background-position:0 0,0 8px,8px -8px,-8px 0;
+  background-size:16px 16px;
+}
+.image-viewer img{
+  display:block;
+  max-width:100%;
+  height:auto;
+  border-radius:12px;
+  box-shadow:0 12px 36px rgba(15,23,42,.16);
+}
+
+/* Desktop viewport */
+body[data-view-mode="desktop"] .document-shell{
+  width:100%;
+  height:100%;
+  border-radius:20px;
+}
+
+/* Mobile viewport simulation */
+body[data-view-mode="mobile"] .device-stage{
+  padding:6px 0 18px;
+  align-items:flex-start;
+}
+body[data-view-mode="mobile"] .document-shell{
+  width:min(390px,100%);
+  height:min(820px,100%);
+  min-height:560px;
+  border-width:7px;
+  border-color:#172033;
+  border-radius:34px;
+  box-shadow:0 28px 70px rgba(15,38,68,.30);
+}
+body[data-view-mode="mobile"] .document-shell::after{
+  content:"";
+  position:absolute;
+  z-index:6;
+  left:50%;
+  top:7px;
+  width:74px;
+  height:5px;
+  border-radius:99px;
+  background:#263148;
+  transform:translateX(-50%);
+  pointer-events:none;
+}
+body[data-view-mode="mobile"] .viewer-content{padding-top:12px}
+
+/* ===== STATES ===== */
+.state{
+  min-height:100%;
+  padding:28px;
+  display:grid;
+  place-items:center;
+  align-content:center;
+  gap:12px;
+  color:#48617f;
+  background:#fff;
+  text-align:center;
+}
+.state-icon{
+  width:54px;
+  height:54px;
+  display:grid;
+  place-items:center;
+  border-radius:18px;
+  color:#fff;
+  background:linear-gradient(135deg,var(--blue),var(--cyan));
+  box-shadow:0 12px 28px rgba(22,137,238,.23);
+  font-size:23px;
+}
+.state-title{font-size:14px;font-weight:800;color:#183654}
+.state-text{max-width:480px;font-size:11.5px;line-height:1.65}
+.spinner{
+  width:25px;
+  height:25px;
+  border:3px solid rgba(22,137,238,.15);
+  border-top-color:var(--blue);
+  border-radius:50%;
+  animation:spin .75s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== MOBILE LAYOUT ===== */
+@media(max-width:820px){
+  .topbar{padding-left:9px;padding-right:9px}
+  .topbar-inner{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .doc-heading{gap:8px}
+  .doc-icon{display:none}
+  .icon-btn{width:40px;height:40px;flex-basis:40px;border-radius:13px}
+  .doc-kicker{display:none}
+  .doc-title{font-size:12px}
+  .doc-meta{font-size:9.5px}
+  .toolbar{gap:6px}
+  .action-btn{width:40px;min-height:40px;padding:0;border-radius:13px}
+  .action-btn .label{display:none}
+  .viewer-controls{padding:8px 9px 0}
+  .viewer-controls-inner{align-items:center}
+  .viewer-status{display:none}
+  .mode-switch{width:100%;display:grid;grid-template-columns:1fr 1fr}
+  .mode-btn{min-height:38px}
+  .workspace{padding:8px 8px max(8px,env(safe-area-inset-bottom))}
+  .workspace-inner,.device-stage{min-height:360px}
+  .document-shell{border-radius:15px}
+  body[data-view-mode="desktop"] .workspace-inner{justify-content:flex-start}
+  body[data-view-mode="desktop"] .device-stage{width:1040px;min-width:1040px}
+  body[data-view-mode="desktop"] .document-shell{width:1040px}
+  body[data-view-mode="mobile"] .device-stage{padding:0}
+  body[data-view-mode="mobile"] .document-shell{
     width:100%;
     height:100%;
-    border:0;border-radius:10px;
-    background:white;
+    min-height:0;
+    border-width:1px;
+    border-color:var(--line-strong);
+    border-radius:15px;
+    box-shadow:var(--viewer-shadow);
   }
+  body[data-view-mode="mobile"] .document-shell::after{display:none}
+  body[data-view-mode="mobile"] .viewer-content{padding-top:0}
+}
 
-  @media(max-width:600px){
-    .title{font-size:14px}
-    .btn{padding:8px 10px}
-  }
+@media(max-width:430px){
+  .doc-meta{display:none}
+  .doc-heading{gap:6px}
+  .topbar-inner{gap:6px}
+  .mode-btn{padding:0 8px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}
 </style>
 </head>
-<body>
+<body data-view-mode="desktop">
 
-<div class="top">
-  <button class="btn ghost" onclick="history.back()">⬅</button>
-  <div class="title" id="docName">Đang tải...</div>
-  <div class="spacer"></div>
-  <button id="download" class="btn neon">⬇ Tải</button>
-</div>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="doc-heading">
+      <button id="backBtn" class="icon-btn" type="button" aria-label="Quay lại" title="Quay lại">←</button>
+      <div class="doc-icon" aria-hidden="true">▤</div>
+      <div class="doc-copy">
+        <div class="doc-kicker">Chốn Học Tập · Trình xem tài liệu</div>
+        <div class="doc-title" id="docName">Đang tải tài liệu...</div>
+        <div class="doc-meta" id="docMeta">Đang xác định định dạng</div>
+      </div>
+    </div>
 
-<div class="viewer" id="viewer">
-  <div style="padding:20px;color:#9bb0d0">Đang tải tài liệu…</div>
-</div>
+    <div class="toolbar">
+      <button id="themeToggle" class="action-btn" type="button" aria-label="Chuyển chế độ tối" title="Chuyển giao diện">
+        <span id="themeIcon" aria-hidden="true">🌙</span>
+        <span id="themeText" class="label">Dark mode</span>
+      </button>
+      <a id="download" class="action-btn primary" href="#" target="_blank" rel="noopener" aria-label="Tải tài liệu">
+        <span aria-hidden="true">↓</span>
+        <span class="label">Tải xuống</span>
+      </a>
+    </div>
+  </div>
+</header>
 
-<script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+<section class="viewer-controls" aria-label="Chế độ xem">
+  <div class="viewer-controls-inner">
+    <div class="mode-switch" role="group" aria-label="Chọn kích thước màn hình xem">
+      <button class="mode-btn active" type="button" data-mode="desktop" aria-pressed="true">
+        <span class="mode-icon" aria-hidden="true">▰</span>
+        <span>Máy tính</span>
+      </button>
+      <button class="mode-btn" type="button" data-mode="mobile" aria-pressed="false">
+        <span class="mode-icon" aria-hidden="true">▯</span>
+        <span>Điện thoại</span>
+      </button>
+    </div>
+    <div id="viewerStatus" class="viewer-status">Khung xem máy tính</div>
+  </div>
+</section>
+
+<main class="workspace">
+  <div class="workspace-inner">
+    <div class="device-stage">
+      <section class="document-shell" aria-label="Nội dung tài liệu">
+        <div class="viewer-content" id="viewer">
+          <div class="state">
+            <div class="spinner" aria-hidden="true"></div>
+            <div class="state-title">Đang tải tài liệu</div>
+            <div class="state-text">Vui lòng chờ trong giây lát...</div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
 
 <script>
-const p=new URLSearchParams(location.search);
-const raw=p.get("file");
-const name=p.get("name")||"Tài liệu";
-const v=document.getElementById("viewer");
+'use strict';
 
-document.getElementById("docName").innerText=decodeURIComponent(name);
-document.getElementById("download").onclick=()=>{window.open(raw,"_blank")};
+const THEME_KEY = 'chonhoctap-theme';
+const VIEW_MODE_KEY = 'chonhoctap-view-mode';
 
-if(!raw){
-  v.innerHTML="Không có file.";
-}else{
-  const ext=name.split(".").pop().toLowerCase();
+const params = new URLSearchParams(window.location.search);
+const rawFileUrl = params.get('file') || '';
+const rawName = params.get('name') || 'Tài liệu';
 
-  const officeURL=`https://view.officeapps.live.com/op/embed.aspx?src=${raw}`;
-  const isOffice = /(doc|docx|ppt|pptx|xls|xlsx)$/i.test(ext);
+const elements = {
+  viewer:document.getElementById('viewer'),
+  docName:document.getElementById('docName'),
+  docMeta:document.getElementById('docMeta'),
+  viewerStatus:document.getElementById('viewerStatus'),
+  download:document.getElementById('download'),
+  backBtn:document.getElementById('backBtn'),
+  themeToggle:document.getElementById('themeToggle'),
+  themeIcon:document.getElementById('themeIcon'),
+  themeText:document.getElementById('themeText'),
+  modeButtons:[...document.querySelectorAll('.mode-btn[data-mode]')]
+};
 
-  if(isOffice){
-    v.innerHTML=`<iframe src="${officeURL}"></iframe>`;
-  }else if(ext==="pdf"){
-    v.innerHTML=`<iframe src="${raw}"></iframe>`;
-  }else if(/png|jpe?g|gif|webp/.test(ext)){
-    v.innerHTML=`<img src="${raw}" style="width:100%;border-radius:10px">`;
-  }else{
-    v.innerHTML=`<iframe src="${raw}"></iframe>`;
+function safeDecode(value){
+  try{return decodeURIComponent(value)}catch{return value}
+}
+
+function getExtension(name){
+  const cleanName = String(name || '').split('?')[0].split('#')[0];
+  const pieces = cleanName.split('.');
+  return pieces.length > 1 ? pieces.pop().toLowerCase() : '';
+}
+
+function extensionLabel(extension){
+  const labels = {
+    pdf:'Tài liệu PDF',doc:'Tài liệu Word',docx:'Tài liệu Word',
+    ppt:'Bản trình chiếu',pptx:'Bản trình chiếu',
+    xls:'Bảng tính Excel',xlsx:'Bảng tính Excel',
+    png:'Hình ảnh PNG',jpg:'Hình ảnh JPG',jpeg:'Hình ảnh JPEG',
+    gif:'Ảnh động GIF',webp:'Hình ảnh WEBP'
+  };
+  return labels[extension] || (extension ? `Tệp ${extension.toUpperCase()}` : 'Tài liệu');
+}
+
+function isValidRemoteUrl(value){
+  try{
+    const parsed = new URL(value,window.location.href);
+    return ['http:','https:'].includes(parsed.protocol);
+  }catch{
+    return false;
   }
 }
-</script>
 
+function showState(title,text,icon='!'){
+  const state = document.createElement('div');
+  state.className = 'state';
+
+  const iconElement = document.createElement('div');
+  iconElement.className = 'state-icon';
+  iconElement.textContent = icon;
+
+  const titleElement = document.createElement('div');
+  titleElement.className = 'state-title';
+  titleElement.textContent = title;
+
+  const textElement = document.createElement('div');
+  textElement.className = 'state-text';
+  textElement.textContent = text;
+
+  state.append(iconElement,titleElement,textElement);
+  elements.viewer.replaceChildren(state);
+}
+
+function createIframe(src,title){
+  const frame = document.createElement('iframe');
+  frame.src = src;
+  frame.title = title;
+  frame.loading = 'eager';
+  frame.allowFullscreen = true;
+  frame.referrerPolicy = 'no-referrer-when-downgrade';
+  return frame;
+}
+
+function renderDocument(fileUrl,name){
+  if(!fileUrl || !isValidRemoteUrl(fileUrl)){
+    showState('Không có tài liệu','Đường dẫn tài liệu không tồn tại hoặc không hợp lệ.','×');
+    elements.download.setAttribute('aria-disabled','true');
+    elements.download.removeAttribute('href');
+    return;
+  }
+
+  const extension = getExtension(name) || getExtension(fileUrl);
+  elements.docName.textContent = safeDecode(name);
+  elements.docName.title = safeDecode(name);
+  elements.docMeta.textContent = extensionLabel(extension);
+  elements.download.href = fileUrl;
+
+  const officeExtensions = new Set(['doc','docx','ppt','pptx','xls','xlsx']);
+  const imageExtensions = new Set(['png','jpg','jpeg','gif','webp']);
+
+  if(officeExtensions.has(extension)){
+    const officeUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}`;
+    elements.viewer.replaceChildren(createIframe(officeUrl,`Xem ${name}`));
+    return;
+  }
+
+  if(imageExtensions.has(extension)){
+    const wrapper = document.createElement('div');
+    wrapper.className = 'image-viewer';
+    const image = document.createElement('img');
+    image.src = fileUrl;
+    image.alt = safeDecode(name);
+    image.addEventListener('error',() => showState('Không tải được hình ảnh','Bạn có thể sử dụng nút Tải xuống để mở trực tiếp tệp.','!'),{once:true});
+    wrapper.appendChild(image);
+    elements.viewer.replaceChildren(wrapper);
+    return;
+  }
+
+  elements.viewer.replaceChildren(createIframe(fileUrl,`Xem ${name}`));
+}
+
+function getStoredTheme(){
+  try{return localStorage.getItem(THEME_KEY) || 'light'}catch{return 'light'}
+}
+
+function applyTheme(theme){
+  const normalized = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme',normalized);
+  const isDark = normalized === 'dark';
+  elements.themeToggle.setAttribute('aria-pressed',String(isDark));
+  elements.themeToggle.setAttribute('aria-label',isDark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang chế độ tối');
+  elements.themeIcon.textContent = isDark ? '☀️' : '🌙';
+  elements.themeText.textContent = isDark ? 'Light mode' : 'Dark mode';
+  document.querySelector('meta[name="theme-color"]').setAttribute('content',isDark ? '#06101f' : '#eef6ff');
+}
+
+function toggleTheme(){
+  const nextTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  try{localStorage.setItem(THEME_KEY,nextTheme)}catch{}
+  applyTheme(nextTheme);
+}
+
+function getDefaultViewMode(){
+  try{
+    const saved = localStorage.getItem(VIEW_MODE_KEY);
+    if(saved === 'desktop' || saved === 'mobile') return saved;
+  }catch{}
+  return window.matchMedia('(max-width: 700px)').matches ? 'mobile' : 'desktop';
+}
+
+function applyViewMode(mode){
+  const normalized = mode === 'mobile' ? 'mobile' : 'desktop';
+  document.body.dataset.viewMode = normalized;
+  elements.viewerStatus.textContent = normalized === 'mobile' ? 'Khung xem điện thoại · 390 px' : 'Khung xem máy tính · Toàn chiều rộng';
+
+  elements.modeButtons.forEach(button => {
+    const active = button.dataset.mode === normalized;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-pressed',String(active));
+  });
+}
+
+function setViewMode(mode){
+  try{localStorage.setItem(VIEW_MODE_KEY,mode)}catch{}
+  applyViewMode(mode);
+}
+
+elements.backBtn.addEventListener('click',() => {
+  if(window.history.length > 1) window.history.back();
+  else window.location.href = 'index.html';
+});
+elements.themeToggle.addEventListener('click',toggleTheme);
+elements.modeButtons.forEach(button => button.addEventListener('click',() => setViewMode(button.dataset.mode)));
+
+elements.download.addEventListener('click',event => {
+  if(!rawFileUrl || !isValidRemoteUrl(rawFileUrl)) event.preventDefault();
+});
+
+applyTheme(getStoredTheme());
+applyViewMode(getDefaultViewMode());
+renderDocument(rawFileUrl,rawName);
+</script>
 </body>
 </html>

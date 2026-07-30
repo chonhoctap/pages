@@ -28,6 +28,16 @@ Migration này tạo:
 - RLS theo role và `account_status`;
 - bucket `forum-media` cho ảnh/video tối đa 25 MB.
 
+## Nâng cấp diễn đàn lần 2
+
+Sau khi đã chạy `forum_migration.sql`, chạy tiếp toàn bộ file
+`forum_v2_migration.sql`. Migration bổ sung:
+
+- ảnh tối đa 2 MB hoặc video tối đa 8 MB trong bình luận;
+- bucket riêng `forum-comment-media` để kiểm soát dung lượng;
+- RPC bảo mật để chỉ chủ bài, moderator hoặc admin được đánh dấu đã giải;
+- thu hồi quyền sửa trực tiếp cột `is_solved` từ trình duyệt.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -112,3 +122,5 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
 12. Thử like, bình luận, chia sẻ trong khu vực Giải trí.
 13. Tạm khóa tài khoản test và xác nhận tài khoản chỉ đọc, không thể tương tác.
 14. Cấm tài khoản test và xác nhận tài khoản không thể mở dữ liệu diễn đàn.
+15. Chạy `forum_v2_migration.sql`, thử bình luận kèm ảnh/video và kiểm tra giới hạn dung lượng.
+16. Đăng nhập tài khoản khác và xác nhận không thể đánh dấu bài của người khác là đã giải.

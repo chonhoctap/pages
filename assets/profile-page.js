@@ -23,6 +23,19 @@ const elements = {
   email: document.getElementById('profileEmail'),
   role: document.getElementById('profileRole'),
   heading: document.getElementById('profileHeading'),
+  pageTitle: document.getElementById('profilePageTitle'),
+  pageIntro: document.getElementById('profilePageIntro'),
+  avatarUploadLabel: document.getElementById('avatarUploadLabel'),
+  photoHint: document.getElementById('profilePhotoHint'),
+  publicInfo: document.getElementById('publicProfileInfo'),
+  publicUsername: document.getElementById('publicUsername'),
+  publicGrade: document.getElementById('publicGrade'),
+  publicBio: document.getElementById('publicBio'),
+  publicJoined: document.getElementById('publicJoined'),
+  ownSummaryActions: document.getElementById('ownSummaryActions'),
+  publicSummaryActions: document.getElementById('publicSummaryActions'),
+  profileFormPanel: document.getElementById('profileFormPanel'),
+  securityPanel: document.getElementById('securityPanel'),
   adminLink: document.getElementById('adminLink'),
   logoutButton: document.getElementById('logoutButton'),
   changePasswordForm: document.getElementById('changePasswordForm'),
@@ -31,6 +44,16 @@ const elements = {
 
 let session;
 let profile;
+let viewerProfile;
+let viewingOwnProfile = true;
+
+const GRADE_LABELS = {
+  10: 'Lớp 10',
+  11: 'Lớp 11',
+  12: 'Lớp 12',
+  graduate: 'Đã tốt nghiệp',
+  other: 'Khối khác'
+};
 
 function fillProfile() {
   const { user } = session;
@@ -44,6 +67,32 @@ function fillProfile() {
   elements.role.dataset.role = profile.role;
   elements.avatar.src = profile.avatar_url || user.user_metadata?.avatar_url || 'avatar.png';
   elements.adminLink.hidden = profile.role !== 'admin';
+}
+
+function fillPublicProfile() {
+  const name = profileName(profile);
+  document.title = `${name} · Chốn Học Tập`;
+  elements.pageTitle.textContent = 'Hồ sơ thành viên';
+  elements.pageIntro.textContent = 'Thông tin công khai của thành viên trong cộng đồng Chốn Học Tập.';
+  elements.heading.textContent = name;
+  elements.avatar.src = profile.avatar_url || 'avatar.png';
+  elements.role.textContent = roleLabel(profile.role);
+  elements.role.dataset.role = profile.role;
+  elements.photoHint.textContent = `@${profile.username}`;
+  elements.publicUsername.textContent = `@${profile.username}`;
+  elements.publicGrade.textContent = `Khối lớp: ${GRADE_LABELS[profile.grade] || 'Chưa cập nhật'}`;
+  elements.publicBio.textContent = profile.bio || 'Thành viên chưa viết phần giới thiệu.';
+  elements.publicJoined.textContent = `Tham gia ${new Intl.DateTimeFormat('vi-VN', {
+    dateStyle: 'medium'
+  }).format(new Date(profile.created_at))}`;
+  elements.publicInfo.hidden = false;
+  elements.avatarUploadLabel.hidden = true;
+  elements.ownSummaryActions.hidden = true;
+  elements.publicSummaryActions.hidden = false;
+  elements.profileFormPanel.hidden = true;
+  elements.securityPanel.hidden = true;
+  elements.content.classList.add('public-profile-view');
+  elements.adminLink.hidden = viewerProfile.role !== 'admin';
 }
 
 async function uploadAvatar(file) {
@@ -67,6 +116,7 @@ async function uploadAvatar(file) {
 }
 
 elements.avatarInput.addEventListener('change', () => {
+  if (!viewingOwnProfile) return;
   const file = elements.avatarInput.files?.[0];
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) {
@@ -81,6 +131,7 @@ elements.avatarInput.addEventListener('change', () => {
 
 elements.form.addEventListener('submit', async event => {
   event.preventDefault();
+  if (!viewingOwnProfile) return;
   const button = elements.form.querySelector('button[type="submit"]');
   const form = new FormData(elements.form);
   const username = String(form.get('username') || '').trim().toLowerCase();
@@ -141,6 +192,7 @@ elements.logoutButton.addEventListener('click', async () => {
 
 elements.changePasswordForm.addEventListener('submit', async event => {
   event.preventDefault();
+  if (!viewingOwnProfile) return;
   const button = elements.changePasswordForm.querySelector('button[type="submit"]');
   const form = new FormData(elements.changePasswordForm);
   const password = String(form.get('password') || '');
@@ -177,8 +229,22 @@ async function init() {
   try {
     session = await requireSession();
     if (!session) return;
-    profile = await getProfile(session.user.id);
-    fillProfile();
+    viewerProfile = await getProfile(session.user.id);
+    const requestedUsername = new URLSearchParams(window.location.search).get('user')?.trim().toLowerCase();
+    if (requestedUsername && requestedUsername !== viewerProfile.username) {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url, bio, grade, role, account_status, created_at')
+        .eq('username', requestedUsername)
+        .single();
+      if (error) throw error;
+      profile = data;
+      viewingOwnProfile = false;
+      fillPublicProfile();
+    } else {
+      profile = viewerProfile;
+      fillProfile();
+    }
     elements.loading.hidden = true;
     elements.content.hidden = false;
   } catch (error) {

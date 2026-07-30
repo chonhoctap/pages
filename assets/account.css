@@ -396,6 +396,21 @@ a{color:inherit}
 [data-theme="dark"] .role-badge[data-role="moderator"]{color:#fdba74}
 [data-theme="dark"] .role-badge[data-role="admin"]{color:#c4b5fd}
 .summary-actions{display:grid;gap:9px;margin-top:20px}
+.public-profile-info{
+  margin-top:17px;
+  padding-top:14px;
+  border-top:1px solid var(--line);
+  text-align:left;
+}
+.public-profile-info p{margin:0;color:var(--muted);font-size:10px;line-height:1.65;overflow-wrap:anywhere}
+.public-profile-info p+p{margin-top:7px}
+#publicUsername{color:var(--blue);font-weight:700}
+#publicBio{color:var(--text)}
+.profile-layout.public-profile-view{
+  grid-template-columns:minmax(280px,620px);
+  justify-content:center;
+}
+.public-profile-view .profile-summary{padding:30px}
 .profile-form-panel{padding:24px}
 .security-panel{grid-column:2}
 .security-heading{

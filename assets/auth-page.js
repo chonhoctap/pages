@@ -15,23 +15,51 @@ const elements = {
   loginForm: document.getElementById('loginForm'),
   signupForm: document.getElementById('signupForm'),
   resetForm: document.getElementById('resetForm'),
+  verifyResetForm: document.getElementById('verifyResetForm'),
   updatePasswordForm: document.getElementById('updatePasswordForm'),
   message: document.getElementById('authMessage'),
   googleButton: document.getElementById('googleButton'),
   forgotButton: document.getElementById('forgotButton'),
   backToLoginButton: document.getElementById('backToLoginButton'),
+  requestAnotherCodeButton: document.getElementById('requestAnotherCodeButton'),
   authTabs: document.getElementById('authTabs'),
   oauthDivider: document.getElementById('oauthDivider')
 };
 
 let recoveryMode = new URLSearchParams(window.location.search).get('mode') === 'reset';
 let redirecting = false;
+const recoveryEmailKey = 'chonhoctap-recovery-email';
+
+function rememberRecoveryEmail(email) {
+  try {
+    sessionStorage.setItem(recoveryEmailKey, email);
+  } catch {
+    // Luồng vẫn hoạt động trong trang hiện tại nếu sessionStorage bị chặn.
+  }
+}
+
+function getRememberedRecoveryEmail() {
+  try {
+    return sessionStorage.getItem(recoveryEmailKey) || '';
+  } catch {
+    return '';
+  }
+}
+
+function forgetRecoveryEmail() {
+  try {
+    sessionStorage.removeItem(recoveryEmailKey);
+  } catch {
+    // Không cần xử lý thêm.
+  }
+}
 
 function showView(view) {
   const views = {
     login: elements.loginForm,
     signup: elements.signupForm,
     reset: elements.resetForm,
+    verifyReset: elements.verifyResetForm,
     updatePassword: elements.updatePasswordForm
   };
 
@@ -172,6 +200,10 @@ elements.forgotButton.addEventListener('click', () => {
 });
 
 elements.backToLoginButton.addEventListener('click', () => showView('login'));
+elements.requestAnotherCodeButton.addEventListener('click', () => {
+  elements.resetForm.elements.email.value = elements.verifyResetForm.elements.email.value;
+  showView('reset');
+});
 
 elements.resetForm.addEventListener('submit', async event => {
   event.preventDefault();
@@ -183,8 +215,45 @@ elements.resetForm.addEventListener('submit', async event => {
       redirectTo: `${pageUrl('auth.html')}?mode=reset`
     });
     if (error) throw error;
-    showMessage(elements.message, 'Đã gửi liên kết đặt lại mật khẩu vào email của bạn.', 'success');
+    rememberRecoveryEmail(email);
+    elements.verifyResetForm.elements.email.value = email;
+    elements.verifyResetForm.elements.token.value = '';
+    showView('verifyReset');
+    showMessage(elements.message, 'Đã gửi mã xác nhận. Hãy kiểm tra hộp thư và cả thư rác.', 'success');
   } catch (error) {
+    showMessage(elements.message, humanizeAuthError(error), 'error');
+  } finally {
+    setBusy(button, false);
+  }
+});
+
+elements.verifyResetForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = elements.verifyResetForm.querySelector('button[type="submit"]');
+  const form = new FormData(elements.verifyResetForm);
+  const email = String(form.get('email') || '').trim();
+  const token = String(form.get('token') || '').replace(/\D/g, '');
+
+  if (!/^\d{6}$/.test(token)) {
+    showMessage(elements.message, 'Mã xác nhận phải gồm đúng 6 chữ số.', 'error');
+    return;
+  }
+
+  recoveryMode = true;
+  setBusy(button, true, 'Đang xác nhận...');
+  showMessage(elements.message, '');
+  try {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'recovery'
+    });
+    if (error) throw error;
+    forgetRecoveryEmail();
+    showView('updatePassword');
+    showMessage(elements.message, 'Mã hợp lệ. Hãy đặt mật khẩu mới.', 'success');
+  } catch (error) {
+    recoveryMode = false;
     showMessage(elements.message, humanizeAuthError(error), 'error');
   } finally {
     setBusy(button, false);
@@ -237,8 +306,25 @@ async function init() {
     showMessage(elements.message, decodeURIComponent(oauthError), 'error');
   }
 
+  if (params.get('forgot') === '1') {
+    elements.resetForm.elements.email.value = getRememberedRecoveryEmail();
+    showView('reset');
+    return;
+  }
+
   if (recoveryMode) {
-    showView('updatePassword');
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+      showView('updatePassword');
+    } else {
+      const email = getRememberedRecoveryEmail();
+      if (email) {
+        elements.verifyResetForm.elements.email.value = email;
+        showView('verifyReset');
+      } else {
+        showView('reset');
+      }
+    }
     return;
   }
 

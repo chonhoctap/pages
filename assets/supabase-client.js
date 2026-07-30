@@ -52,7 +52,7 @@ export async function requireSession() {
 export async function getProfile(userId) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, grade, role, created_at, updated_at')
+    .select('id, username, display_name, avatar_url, bio, grade, role, account_status, created_at, updated_at')
     .eq('id', userId)
     .single();
   if (error) throw error;
@@ -73,6 +73,14 @@ export function roleLabel(role) {
     moderator: 'Điều hành viên',
     admin: 'Quản trị viên'
   }[role] || 'Thành viên';
+}
+
+export function statusLabel(status) {
+  return {
+    active: 'Hoạt động',
+    suspended: 'Tạm khóa',
+    banned: 'Bị cấm'
+  }[status] || 'Không xác định';
 }
 
 export function showMessage(element, message, type = 'info') {
@@ -141,6 +149,15 @@ export function humanizeAuthError(error) {
   if (/token has expired|otp expired/i.test(message)) return 'Mã xác nhận đã hết hạn. Hãy yêu cầu mã mới.';
   if (/invalid token|token is invalid|otp.*invalid/i.test(message)) return 'Mã xác nhận chưa đúng.';
   if (/database error saving new user/i.test(message)) return 'Username đã tồn tại hoặc thông tin đăng ký chưa hợp lệ.';
+  if (/at least one active administrator|ít nhất một quản trị viên/i.test(message)) {
+    return 'Hệ thống phải còn ít nhất một quản trị viên đang hoạt động.';
+  }
+  if (/cannot demote|không thể tự hạ quyền|khóa tài khoản quản trị/i.test(message)) {
+    return 'Bạn không thể tự hạ quyền hoặc khóa tài khoản quản trị của chính mình.';
+  }
+  if (/only active administrators|quản trị viên đang hoạt động/i.test(message)) {
+    return 'Chỉ quản trị viên đang hoạt động mới được thay đổi quyền.';
+  }
   if (/rate limit/i.test(message)) return 'Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại.';
   if (/failed to fetch|network/i.test(message)) return 'Không thể kết nối máy chủ. Hãy kiểm tra Internet.';
   return message || 'Đã xảy ra lỗi. Vui lòng thử lại.';

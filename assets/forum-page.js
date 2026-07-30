@@ -104,6 +104,7 @@ const commentPreparedFiles = new Map();
 const commentPrepareSequences = new Map();
 const commentPreparePromises = new Map();
 const registeredViews = new Set();
+let openReactionAction = null;
 
 const REACTIONS = {
   like: { emoji: '👍', label: 'Thích' },
@@ -116,6 +117,24 @@ const REACTIONS = {
 
 function canInteract() {
   return currentProfile?.account_status === 'active';
+}
+
+function closeReactionPicker(action = openReactionAction) {
+  if (!action) return;
+  action.classList.remove('is-open');
+  action.querySelector('.reaction-main')?.setAttribute('aria-expanded', 'false');
+  if (openReactionAction === action) openReactionAction = null;
+}
+
+function toggleReactionPicker(action) {
+  const shouldOpen = !action.classList.contains('is-open');
+  if (openReactionAction && openReactionAction !== action) {
+    closeReactionPicker(openReactionAction);
+  }
+  action.classList.toggle('is-open', shouldOpen);
+  action.querySelector('.reaction-main')
+    ?.setAttribute('aria-expanded', String(shouldOpen));
+  openReactionAction = shouldOpen ? action : null;
 }
 
 function canModerate() {
@@ -973,14 +992,19 @@ function renderPost(post) {
   );
 
   updatePostStats(card, post);
+  const reactionAction = card.querySelector('.reaction-action');
   const reactionButton = card.querySelector('.reaction-main');
-  reactionButton.addEventListener('click', () => {
-    setReaction(post, post.myReaction || 'like', card, reactionButton);
+  reactionButton.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleReactionPicker(reactionAction);
   });
-  card.querySelectorAll('[data-reaction]').forEach(button => {
-    button.addEventListener('click', event => {
+  card.querySelectorAll('.reaction-picker [data-reaction]').forEach(button => {
+    button.addEventListener('click', async event => {
+      event.preventDefault();
       event.stopPropagation();
-      setReaction(post, button.dataset.reaction, card, button);
+      await setReaction(post, button.dataset.reaction, card, button);
+      closeReactionPicker(reactionAction);
     });
   });
   card.querySelector('[data-action="comment"]')
@@ -1711,6 +1735,14 @@ elements.reportDialog.addEventListener('click', event => {
 elements.reportDialog.addEventListener('cancel', event => {
   event.preventDefault();
   closeReportDialog();
+});
+document.addEventListener('click', event => {
+  if (openReactionAction && !openReactionAction.contains(event.target)) {
+    closeReactionPicker();
+  }
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeReactionPicker();
 });
 window.addEventListener('beforeunload', () => {
   releasePreparedItems(selectedPostMedia);

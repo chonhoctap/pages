@@ -39,6 +39,9 @@ const elements = {
   viewer: document.getElementById('viewerChip'),
   readonly: document.getElementById('readonlyBanner'),
   tabs: document.querySelectorAll('.forum-tab'),
+  composerDialog: document.getElementById('composerDialog'),
+  openComposer: document.getElementById('openComposerButton'),
+  closeComposer: document.getElementById('closeComposerButton'),
   composer: document.getElementById('composer'),
   composerAvatar: document.getElementById('composerAvatar'),
   composerName: document.getElementById('composerName'),
@@ -56,6 +59,8 @@ const elements = {
   publish: document.getElementById('publishButton'),
   feedTitle: document.getElementById('feedTitle'),
   feedCount: document.getElementById('feedCount'),
+  search: document.getElementById('forumSearch'),
+  sortButtons: document.querySelectorAll('[data-sort]'),
   gradeFilter: document.getElementById('gradeFilter'),
   statusFilter: document.getElementById('statusFilter'),
   feed: document.getElementById('postFeed'),
@@ -71,6 +76,8 @@ let posts = [];
 let previewUrl = '';
 let selectedMediaFile = null;
 let loadSequence = 0;
+let currentSort = 'latest';
+const commentPreviewUrls = new Map();
 
 function canInteract() {
   return currentProfile?.account_status === 'active';
@@ -82,6 +89,21 @@ function canModerate() {
 
 function authorOf(record) {
   return Array.isArray(record?.author) ? record.author[0] : record?.author;
+}
+
+function publicProfileUrl(profile) {
+  return profile?.username
+    ? `profile.html?user=${encodeURIComponent(profile.username)}`
+    : 'profile.html';
+}
+
+function normalizeSearch(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .replace(/^#+/u, '')
+    .toLocaleLowerCase('vi')
+    .trim();
 }
 
 function setInfo(message, type = 'info') {
@@ -115,6 +137,21 @@ function parseHashtags(raw) {
   return [...new Set(values)].slice(0, 8);
 }
 
+function mediaKind(file) {
+  if (file?.type?.startsWith('image/')) return 'image';
+  if (file?.type?.startsWith('video/')) return 'video';
+  return '';
+}
+
+function uniqueMediaPath(file, prefix = '') {
+  const extension = (file.name.split('.').pop() || (mediaKind(file) === 'video' ? 'mp4' : 'jpg'))
+    .toLocaleLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  const uniqueId = crypto.randomUUID?.()
+    || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${session.user.id}/${prefix}${Date.now()}-${uniqueId}.${extension}`;
+}
+
 function resetPreview() {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = '';
@@ -136,11 +173,7 @@ function showMediaPreview(file) {
     setInfo('Ảnh hoặc video phải nhỏ hơn 25 MB.', 'error');
     return;
   }
-  const type = file.type.startsWith('image/')
-    ? 'image'
-    : file.type.startsWith('video/')
-      ? 'video'
-      : '';
+  const type = mediaKind(file);
   if (!type) {
     elements.media.value = '';
     setInfo('Chỉ hỗ trợ ảnh JPG, PNG, WebP, GIF hoặc video MP4, WebM, MOV.', 'error');
@@ -160,6 +193,29 @@ function showMediaPreview(file) {
   remove.addEventListener('click', resetPreview);
   elements.mediaPreview.append(preview, remove);
   elements.mediaPreview.hidden = false;
+}
+
+function openComposer() {
+  if (!canInteract()) {
+    setInfo('Tài khoản đang bị hạn chế nên chưa thể đăng bài.', 'error');
+    return;
+  }
+  if (typeof elements.composerDialog.showModal === 'function') {
+    elements.composerDialog.showModal();
+  } else {
+    elements.composerDialog.setAttribute('open', '');
+  }
+  window.setTimeout(() => elements.title.focus(), 30);
+}
+
+function closeComposer() {
+  resetPreview();
+  elements.form.reset();
+  if (typeof elements.composerDialog.close === 'function') {
+    elements.composerDialog.close();
+  } else {
+    elements.composerDialog.removeAttribute('open');
+  }
 }
 
 function updateCategoryUi() {
@@ -182,7 +238,9 @@ function updateCategoryUi() {
   elements.composerPrompt.textContent = isQuestion
     ? 'Bạn đang cần giải bài nào?'
     : 'Chia sẻ điều thú vị với mọi người';
-  elements.feedTitle.textContent = isQuestion ? 'Bài hỏi đáp mới nhất' : 'Bảng tin giải trí';
+  elements.feedTitle.textContent = currentSort === 'trending'
+    ? (isQuestion ? 'Hỏi đáp xu hướng' : 'Giải trí xu hướng')
+    : (isQuestion ? 'Bài hỏi đáp mới nhất' : 'Bảng tin giải trí mới nhất');
   elements.sidebarTitle.textContent = isQuestion ? 'Hỏi đáp hiệu quả' : 'Không gian tích cực';
   elements.sidebarTips.replaceChildren();
   const tips = isQuestion
@@ -205,12 +263,7 @@ function updateCategoryUi() {
 
 async function uploadMedia(file) {
   if (!file) return null;
-  const extension = (file.name.split('.').pop() || (file.type.startsWith('video/') ? 'mp4' : 'jpg'))
-    .toLocaleLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-  const uniqueId = crypto.randomUUID?.()
-    || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const path = `${session.user.id}/${Date.now()}-${uniqueId}.${extension}`;
+  const path = uniqueMediaPath(file);
   const { error } = await supabase.storage
     .from('forum-media')
     .upload(path, file, { cacheControl: '3600', upsert: false });
@@ -219,7 +272,7 @@ async function uploadMedia(file) {
   return {
     path,
     url: data.publicUrl,
-    type: file.type.startsWith('video/') ? 'video' : 'image'
+    type: mediaKind(file)
   };
 }
 
@@ -264,6 +317,7 @@ async function publishPost(event) {
 
     elements.form.reset();
     resetPreview();
+    closeComposer();
     setInfo('Đã đăng bài thành công.', 'success');
     await loadPosts();
   } catch (error) {
@@ -281,6 +335,37 @@ function countByPost(rows) {
     map.set(row.post_id, (map.get(row.post_id) || 0) + 1);
     return map;
   }, new Map());
+}
+
+function trendScore(post) {
+  const engagement =
+    (post.likeCount || 0) * 3
+    + (post.commentCount || 0) * 2
+    + (post.shareCount || 0) * 4;
+  const ageHours = Math.max(0, (Date.now() - new Date(post.created_at).getTime()) / 3600000);
+  return (engagement + 1) / (1 + ageHours / 36);
+}
+
+function visiblePosts() {
+  const term = normalizeSearch(elements.search.value);
+  const filtered = term
+    ? posts.filter(post => {
+        const searchable = [
+          post.title,
+          post.body,
+          ...(post.hashtags || [])
+        ].map(normalizeSearch);
+        return searchable.some(value => value.includes(term));
+      })
+    : [...posts];
+
+  return filtered.sort((first, second) => {
+    if (currentSort === 'trending') {
+      const scoreDifference = trendScore(second) - trendScore(first);
+      if (scoreDifference) return scoreDifference;
+    }
+    return new Date(second.created_at) - new Date(first.created_at);
+  });
 }
 
 async function loadPosts() {
@@ -318,7 +403,7 @@ async function loadPosts() {
     `)
     .eq('category', currentCategory)
     .order('created_at', { ascending: false })
-    .limit(50);
+    .limit(100);
 
   if (currentCategory === 'question' && elements.gradeFilter.value !== 'all') {
     query = query.eq('grade', elements.gradeFilter.value);
@@ -395,10 +480,18 @@ function renderPost(post) {
   const card = fragment.querySelector('.post-card');
   card.dataset.postId = post.id;
   const author = authorOf(post) || {};
+  const authorUrl = publicProfileUrl(author);
   const avatar = card.querySelector('.post-avatar');
   avatar.src = author.avatar_url || 'avatar.png';
-  avatar.alt = '';
+  avatar.alt = `Hồ sơ của ${profileName(author)}`;
+  const avatarLink = card.querySelector('.post-avatar-link');
+  const authorLink = card.querySelector('.post-author-link');
+  avatarLink.href = authorUrl;
+  authorLink.href = authorUrl;
+  avatarLink.setAttribute('aria-label', `Xem hồ sơ của ${profileName(author)}`);
+  authorLink.setAttribute('aria-label', `Xem hồ sơ của ${profileName(author)}`);
   card.querySelector('.post-author strong').textContent = profileName(author);
+  card.querySelector('.post-role').textContent = roleLabel(author.role || 'member');
   card.querySelector('.post-username').textContent = `@${author.username || 'thanhvien'}`;
   const time = card.querySelector('time');
   time.dateTime = post.created_at;
@@ -428,16 +521,21 @@ function renderPost(post) {
       solve.addEventListener('click', () => markSolved(post, card, solve));
       meta.appendChild(solve);
     }
-  } else if (author.role && author.role !== 'member') {
-    meta.append(chip(roleLabel(author.role)));
   }
 
   card.querySelector('.post-title').textContent = post.title;
   card.querySelector('.post-body').textContent = post.body || '';
   const hashtags = card.querySelector('.post-hashtags');
   (post.hashtags || []).forEach(value => {
-    const tag = document.createElement('span');
+    const tag = document.createElement('button');
+    tag.type = 'button';
     tag.textContent = `#${value}`;
+    tag.addEventListener('click', () => {
+      elements.search.value = `#${value}`;
+      renderPosts();
+      elements.search.focus();
+      elements.search.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
     hashtags.appendChild(tag);
   });
 
@@ -475,24 +573,33 @@ function renderPost(post) {
   const commentForm = card.querySelector('.comment-form');
   commentForm.querySelector('img').src = currentProfile.avatar_url || 'avatar.png';
   commentForm.hidden = !canInteract();
+  const commentMediaInput = commentForm.querySelector('.comment-media-input');
+  commentMediaInput.addEventListener('change', () => {
+    showCommentMediaPreview(commentForm, commentMediaInput.files?.[0]);
+  });
   commentForm.addEventListener('submit', event => addComment(event, post, card));
   return fragment;
 }
 
 function renderPosts() {
+  const visible = visiblePosts();
+  commentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+  commentPreviewUrls.clear();
   elements.feed.replaceChildren();
-  elements.feedCount.textContent = `${posts.length} bài viết`;
-  if (!posts.length) {
+  elements.feedCount.textContent = `${visible.length} bài viết`;
+  if (!visible.length) {
     const empty = document.createElement('div');
     empty.className = 'panel feed-empty';
-    empty.textContent = currentCategory === 'question'
-      ? 'Chưa có câu hỏi phù hợp. Hãy là người đăng bài đầu tiên.'
-      : 'Bảng tin chưa có bài viết. Hãy chia sẻ điều thú vị đầu tiên.';
+    empty.textContent = elements.search.value.trim()
+      ? 'Không tìm thấy bài viết hoặc hashtag phù hợp.'
+      : currentCategory === 'question'
+        ? 'Chưa có câu hỏi phù hợp. Hãy là người đăng bài đầu tiên.'
+        : 'Bảng tin chưa có bài viết. Hãy chia sẻ điều thú vị đầu tiên.';
     elements.feed.appendChild(empty);
     return;
   }
   const fragment = document.createDocumentFragment();
-  posts.forEach(post => fragment.appendChild(renderPost(post)));
+  visible.forEach(post => fragment.appendChild(renderPost(post)));
   elements.feed.appendChild(fragment);
 
   const targetId = new URLSearchParams(window.location.search).get('post');
@@ -505,14 +612,19 @@ function renderPosts() {
 }
 
 async function markSolved(post, card, button) {
-  if (!canInteract()) return;
+  const maySolve = canInteract()
+    && (post.author_id === session.user.id || canModerate());
+  if (!maySolve) {
+    setInfo('Chỉ chủ bài viết hoặc quản trị viên mới được đánh dấu đã giải.', 'error');
+    return;
+  }
   setBusy(button, true, 'Đang lưu...');
   try {
-    const { error } = await supabase
-      .from('forum_posts')
-      .update({ is_solved: true })
-      .eq('id', post.id);
+    const { data, error } = await supabase.rpc('mark_forum_post_solved', {
+      target_post_id: post.id
+    });
     if (error) throw error;
+    if (!data) throw new Error('Bạn không có quyền thay đổi trạng thái bài viết này.');
     post.is_solved = true;
     setInfo('Đã đánh dấu câu hỏi là đã giải.', 'success');
     await loadPosts();
@@ -558,6 +670,75 @@ async function toggleComments(post, card) {
   }
 }
 
+function commentMediaError(file) {
+  const type = mediaKind(file);
+  if (!type) return 'Chỉ hỗ trợ ảnh JPG, PNG, WebP, GIF hoặc video MP4, WebM, MOV.';
+  const limit = type === 'image' ? 2 * 1024 * 1024 : 8 * 1024 * 1024;
+  if (file.size > limit) {
+    return type === 'image'
+      ? 'Ảnh bình luận phải nhỏ hơn 2 MB.'
+      : 'Video bình luận phải nhỏ hơn 8 MB.';
+  }
+  return '';
+}
+
+function resetCommentMedia(form) {
+  const currentUrl = commentPreviewUrls.get(form);
+  if (currentUrl) URL.revokeObjectURL(currentUrl);
+  commentPreviewUrls.delete(form);
+  const input = form.querySelector('.comment-media-input');
+  const preview = form.querySelector('.comment-media-preview');
+  input.value = '';
+  preview.replaceChildren();
+  preview.hidden = true;
+}
+
+function showCommentMediaPreview(form, file) {
+  resetCommentMedia(form);
+  if (!file) return;
+  const invalid = commentMediaError(file);
+  if (invalid) {
+    setInfo(invalid, 'error');
+    return;
+  }
+
+  const previewUrl = URL.createObjectURL(file);
+  commentPreviewUrls.set(form, previewUrl);
+  const preview = form.querySelector('.comment-media-preview');
+  const content = document.createElement(mediaKind(file) === 'video' ? 'video' : 'img');
+  content.src = previewUrl;
+  if (mediaKind(file) === 'video') content.controls = true;
+  else content.alt = 'Ảnh đính kèm bình luận';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.textContent = '×';
+  remove.setAttribute('aria-label', 'Bỏ ảnh hoặc video khỏi bình luận');
+  remove.addEventListener('click', () => resetCommentMedia(form));
+  preview.append(content, remove);
+  preview.hidden = false;
+}
+
+async function uploadCommentMedia(file, postId) {
+  if (!file) return null;
+  const invalid = commentMediaError(file);
+  if (invalid) throw new Error(invalid);
+  const path = uniqueMediaPath(file, `${postId}/`);
+  const { error } = await supabase.storage
+    .from('forum-comment-media')
+    .upload(path, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type
+    });
+  if (error) throw error;
+  const { data } = supabase.storage.from('forum-comment-media').getPublicUrl(path);
+  return {
+    path,
+    url: data.publicUrl,
+    type: mediaKind(file)
+  };
+}
+
 async function loadComments(post, card) {
   const list = card.querySelector('.comment-list');
   list.replaceChildren();
@@ -573,6 +754,9 @@ async function loadComments(post, card) {
         post_id,
         author_id,
         body,
+        media_url,
+        media_path,
+        media_type,
         created_at,
         author:profiles!forum_comments_author_id_fkey(
           username,
@@ -608,18 +792,46 @@ function renderComments(comments, post, card) {
     item.className = 'comment-item';
     const avatar = document.createElement('img');
     avatar.src = author.avatar_url || 'avatar.png';
-    avatar.alt = '';
+    avatar.alt = `Hồ sơ của ${profileName(author)}`;
+    const avatarLink = document.createElement('a');
+    avatarLink.className = 'comment-profile-link';
+    avatarLink.href = publicProfileUrl(author);
+    avatarLink.appendChild(avatar);
     const bubble = document.createElement('div');
     bubble.className = 'comment-bubble';
+    const authorLine = document.createElement('div');
+    authorLine.className = 'comment-author-line';
     const name = document.createElement('strong');
     name.textContent = profileName(author);
+    const nameLink = document.createElement('a');
+    nameLink.className = 'comment-profile-link';
+    nameLink.href = publicProfileUrl(author);
+    nameLink.appendChild(name);
+    const role = document.createElement('span');
+    role.className = 'comment-role';
+    role.textContent = roleLabel(author.role || 'member');
+    authorLine.append(nameLink, role);
     const body = document.createElement('p');
-    body.textContent = comment.body;
+    body.textContent = comment.body || '';
     const time = document.createElement('time');
     time.dateTime = comment.created_at;
     time.textContent = relativeTime(comment.created_at);
-    bubble.append(name, body, time);
-    item.append(avatar, bubble);
+    bubble.append(authorLine, body);
+    if (comment.media_url) {
+      const media = document.createElement(comment.media_type === 'video' ? 'video' : 'img');
+      media.className = 'comment-media';
+      media.src = comment.media_url;
+      if (comment.media_type === 'video') {
+        media.controls = true;
+        media.preload = 'metadata';
+      } else {
+        media.alt = `Ảnh trong bình luận của ${profileName(author)}`;
+        media.loading = 'lazy';
+      }
+      bubble.appendChild(media);
+    }
+    bubble.appendChild(time);
+    item.append(avatarLink, bubble);
 
     if (canInteract() && (comment.author_id === session.user.id || canModerate())) {
       const remove = document.createElement('button');
@@ -636,6 +848,9 @@ function renderComments(comments, post, card) {
           setInfo(`Không thể xóa bình luận: ${humanizeAuthError(error)}`, 'error');
           return;
         }
+        if (comment.media_path) {
+          await supabase.storage.from('forum-comment-media').remove([comment.media_path]);
+        }
         post.commentCount = Math.max(0, post.commentCount - 1);
         updatePostStats(card, post);
         await loadComments(post, card);
@@ -650,23 +865,39 @@ async function addComment(event, post, card) {
   event.preventDefault();
   if (!canInteract()) return;
   const form = event.currentTarget;
-  const input = form.querySelector('input');
-  const button = form.querySelector('button');
+  const input = form.querySelector('.comment-input');
+  const mediaInput = form.querySelector('.comment-media-input');
+  const button = form.querySelector('.comment-submit');
   const body = input.value.trim();
-  if (!body) return;
+  const file = mediaInput.files?.[0];
+  if (!body && !file) return;
+  const invalid = file ? commentMediaError(file) : '';
+  if (invalid) {
+    setInfo(invalid, 'error');
+    return;
+  }
+  let uploaded;
   setBusy(button, true, '...');
   try {
+    uploaded = await uploadCommentMedia(file, post.id);
     const { error } = await supabase.from('forum_comments').insert({
       post_id: post.id,
       author_id: session.user.id,
-      body
+      body: body || null,
+      media_url: uploaded?.url || null,
+      media_path: uploaded?.path || null,
+      media_type: uploaded?.type || null
     });
     if (error) throw error;
     input.value = '';
+    resetCommentMedia(form);
     post.commentCount += 1;
     updatePostStats(card, post);
     await loadComments(post, card);
   } catch (error) {
+    if (uploaded?.path) {
+      await supabase.storage.from('forum-comment-media').remove([uploaded.path]);
+    }
     setInfo(`Không thể gửi bình luận: ${humanizeAuthError(error)}`, 'error');
   } finally {
     setBusy(button, false);
@@ -713,6 +944,19 @@ async function deletePost(post, card, button) {
   if (!window.confirm('Bạn chắc chắn muốn xóa bài viết này?')) return;
   setBusy(button, true, '...');
   try {
+    const { data: commentMedia, error: commentMediaError } = await supabase
+      .from('forum_comments')
+      .select('media_path')
+      .eq('post_id', post.id)
+      .not('media_path', 'is', null);
+    if (commentMediaError) throw commentMediaError;
+    const commentPaths = (commentMedia || []).map(item => item.media_path).filter(Boolean);
+    if (commentPaths.length) {
+      const { error } = await supabase.storage
+        .from('forum-comment-media')
+        .remove(commentPaths);
+      if (error) throw error;
+    }
     const { error } = await supabase.from('forum_posts').delete().eq('id', post.id);
     if (error) throw error;
     if (post.media_path) {
@@ -720,8 +964,7 @@ async function deletePost(post, card, button) {
     }
     posts = posts.filter(item => item.id !== post.id);
     card.remove();
-    elements.feedCount.textContent = `${posts.length} bài viết`;
-    if (!posts.length) renderPosts();
+    renderPosts();
     setInfo('Đã xóa bài viết.', 'success');
   } catch (error) {
     setBusy(button, false);
@@ -737,7 +980,7 @@ function configureAccount() {
   elements.composerAvatar.src =
     currentProfile.avatar_url || session.user.user_metadata?.avatar_url || 'avatar.png';
   elements.readonly.hidden = canInteract();
-  elements.composer.hidden = !canInteract();
+  elements.openComposer.hidden = !canInteract();
 }
 
 async function init() {
@@ -770,10 +1013,25 @@ elements.tabs.forEach(tab => {
 });
 elements.form.addEventListener('submit', publishPost);
 elements.media.addEventListener('change', () => showMediaPreview(elements.media.files[0]));
+elements.openComposer.addEventListener('click', openComposer);
+elements.closeComposer.addEventListener('click', closeComposer);
+elements.composerDialog.addEventListener('click', event => {
+  if (event.target === elements.composerDialog) closeComposer();
+});
+elements.search.addEventListener('input', renderPosts);
+elements.sortButtons.forEach(button => {
+  button.addEventListener('click', () => {
+    currentSort = button.dataset.sort;
+    elements.sortButtons.forEach(item => item.classList.toggle('active', item === button));
+    updateCategoryUi();
+    renderPosts();
+  });
+});
 elements.gradeFilter.addEventListener('change', loadPosts);
 elements.statusFilter.addEventListener('change', loadPosts);
 window.addEventListener('beforeunload', () => {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
+  commentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
 });
 
 init();

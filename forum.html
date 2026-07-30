@@ -14,8 +14,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260730-5">
-  <link rel="stylesheet" href="assets/forum.css?v=20260730-1">
+  <link rel="stylesheet" href="assets/account.css?v=20260730-6">
+  <link rel="stylesheet" href="assets/forum.css?v=20260730-2">
 </head>
 <body>
   <header class="account-topbar">
@@ -76,79 +76,19 @@
 
       <div class="forum-layout">
         <div class="forum-primary">
-          <section id="composer" class="panel composer">
-            <div class="composer-profile">
-              <img id="composerAvatar" src="avatar.png" alt="">
-              <div>
-                <strong id="composerName">Thành viên</strong>
-                <span id="composerPrompt">Bạn đang cần giải bài nào?</span>
-              </div>
-            </div>
-
-            <form id="postForm" class="composer-form">
-              <div class="composer-grid">
-                <div id="questionFields" class="question-fields">
-                  <label class="field">
-                    <span>Môn học</span>
-                    <select id="postSubject" class="select">
-                      <option value="toan">Toán</option>
-                      <option value="vat-ly">Vật lý</option>
-                      <option value="hoa-hoc">Hóa học</option>
-                      <option value="sinh-hoc">Sinh học</option>
-                      <option value="ngu-van">Ngữ văn</option>
-                      <option value="tieng-anh">Tiếng Anh</option>
-                      <option value="tin-hoc">Tin học</option>
-                      <option value="khac">Môn khác</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Khối</span>
-                    <select id="postGrade" class="select">
-                      <option value="10">Lớp 10</option>
-                      <option value="11">Lớp 11</option>
-                      <option value="12">Lớp 12</option>
-                      <option value="other">Khác</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label class="field">
-                  <span id="postTitleLabel">Câu hỏi chính</span>
-                  <input id="postTitle" class="input" type="text" maxlength="180" required
-                    placeholder="Ví dụ: Giúp mình giải câu hình học này với">
-                </label>
-
-                <label class="field">
-                  <span>Nội dung chi tiết</span>
-                  <textarea id="postBody" class="textarea" maxlength="5000"
-                    placeholder="Mô tả đề bài, phần bạn chưa hiểu hoặc điều bạn muốn chia sẻ..."></textarea>
-                </label>
-
-                <label class="field">
-                  <span>Hashtag</span>
-                  <input id="postHashtags" class="input" type="text" maxlength="160"
-                    placeholder="#hinhhoc #baitapkhó — tối đa 8 hashtag">
-                </label>
-              </div>
-
-              <div id="mediaPreview" class="media-preview" hidden></div>
-              <div class="composer-actions">
-                <label class="media-button">
-                  <input id="postMedia" type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime">
-                  <span aria-hidden="true">🖼️</span>
-                  <span>Ảnh hoặc video</span>
-                </label>
-                <span class="composer-note">Tối đa 25 MB</span>
-                <button id="publishButton" class="button" type="submit">Đăng bài</button>
-              </div>
-            </form>
-          </section>
-
           <section class="feed-toolbar panel">
-            <div>
+            <div class="feed-summary">
               <strong id="feedTitle">Bài hỏi đáp mới nhất</strong>
               <span id="feedCount">Đang tải...</span>
+            </div>
+            <label class="forum-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="forumSearch" type="search" maxlength="80"
+                placeholder="Tìm bài viết hoặc #hashtag" aria-label="Tìm bài viết hoặc hashtag">
+            </label>
+            <div class="sort-switch" role="group" aria-label="Sắp xếp bài viết">
+              <button class="active" type="button" data-sort="latest">Mới nhất</button>
+              <button type="button" data-sort="trending">Xu hướng</button>
             </div>
             <div class="feed-filters">
               <select id="gradeFilter" class="select" aria-label="Lọc theo khối">
@@ -164,6 +104,10 @@
                 <option value="solved">Đã giải</option>
               </select>
             </div>
+            <button id="openComposerButton" class="create-post-button" type="button">
+              <span aria-hidden="true">＋</span>
+              <span>Đăng bài</span>
+            </button>
           </section>
 
           <div id="postFeed" class="post-feed" aria-live="polite">
@@ -188,15 +132,96 @@
           </section>
         </aside>
       </div>
+
+      <dialog id="composerDialog" class="composer-dialog">
+        <section id="composer" class="panel composer">
+          <header class="composer-heading">
+            <div class="composer-profile">
+              <img id="composerAvatar" src="avatar.png" alt="">
+              <div>
+                <strong id="composerName">Thành viên</strong>
+                <span id="composerPrompt">Bạn đang cần giải bài nào?</span>
+              </div>
+            </div>
+            <button id="closeComposerButton" class="dialog-close" type="button"
+              aria-label="Đóng hộp đăng bài">×</button>
+          </header>
+
+          <form id="postForm" class="composer-form">
+            <div class="composer-grid">
+              <div id="questionFields" class="question-fields">
+                <label class="field">
+                  <span>Môn học</span>
+                  <select id="postSubject" class="select">
+                    <option value="toan">Toán</option>
+                    <option value="vat-ly">Vật lý</option>
+                    <option value="hoa-hoc">Hóa học</option>
+                    <option value="sinh-hoc">Sinh học</option>
+                    <option value="ngu-van">Ngữ văn</option>
+                    <option value="tieng-anh">Tiếng Anh</option>
+                    <option value="tin-hoc">Tin học</option>
+                    <option value="khac">Môn khác</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Khối</span>
+                  <select id="postGrade" class="select">
+                    <option value="10">Lớp 10</option>
+                    <option value="11">Lớp 11</option>
+                    <option value="12">Lớp 12</option>
+                    <option value="other">Khác</option>
+                  </select>
+                </label>
+              </div>
+
+              <label class="field">
+                <span id="postTitleLabel">Câu hỏi chính</span>
+                <input id="postTitle" class="input" type="text" maxlength="180" required
+                  placeholder="Ví dụ: Giúp mình giải câu hình học này với">
+              </label>
+
+              <label class="field">
+                <span>Nội dung chi tiết</span>
+                <textarea id="postBody" class="textarea" maxlength="5000"
+                  placeholder="Mô tả đề bài, phần bạn chưa hiểu hoặc điều bạn muốn chia sẻ..."></textarea>
+              </label>
+
+              <label class="field">
+                <span>Hashtag</span>
+                <input id="postHashtags" class="input" type="text" maxlength="160"
+                  placeholder="#hinhhoc #baitapkhó — tối đa 8 hashtag">
+              </label>
+            </div>
+
+            <div id="mediaPreview" class="media-preview" hidden></div>
+            <div class="composer-actions">
+              <label class="media-button">
+                <input id="postMedia" type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime">
+                <span aria-hidden="true">🖼️</span>
+                <span>Ảnh hoặc video</span>
+              </label>
+              <span class="composer-note">Tối đa 25 MB</span>
+              <button id="publishButton" class="button" type="submit">Đăng bài</button>
+            </div>
+          </form>
+        </section>
+      </dialog>
     </div>
   </main>
 
   <template id="postTemplate">
     <article class="panel post-card">
       <header class="post-header">
-        <img class="post-avatar" src="avatar.png" alt="">
+        <a class="post-avatar-link" href="profile.html" aria-label="Xem hồ sơ thành viên">
+          <img class="post-avatar" src="avatar.png" alt="">
+        </a>
         <div class="post-author">
-          <strong></strong>
+          <div class="post-author-line">
+            <a class="post-author-link" href="profile.html"
+              aria-label="Xem hồ sơ thành viên"><strong></strong></a>
+            <span class="post-role"></span>
+          </div>
           <div>
             <span class="post-username"></span>
             <span aria-hidden="true">·</span>
@@ -219,14 +244,24 @@
       <div class="comment-panel" hidden>
         <form class="comment-form">
           <img src="avatar.png" alt="">
-          <input type="text" maxlength="1200" placeholder="Viết bình luận..." required>
-          <button type="submit">Gửi</button>
+          <div class="comment-compose">
+            <input class="comment-input" type="text" maxlength="1200" placeholder="Viết bình luận...">
+            <div class="comment-media-preview" hidden></div>
+          </div>
+          <label class="comment-attach" title="Gắn ảnh hoặc video">
+            <input class="comment-media-input" type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime">
+            <span aria-hidden="true">🖼️</span>
+            <span class="sr-only">Gắn ảnh hoặc video</span>
+          </label>
+          <button class="comment-submit" type="submit">Gửi</button>
         </form>
+        <p class="comment-media-note">Ảnh tối đa 2 MB · video tối đa 8 MB</p>
         <div class="comment-list"></div>
       </div>
     </article>
   </template>
 
-  <script type="module" src="assets/forum-page.js?v=20260730-1"></script>
+  <script type="module" src="assets/forum-page.js?v=20260730-2"></script>
 </body>
 </html>

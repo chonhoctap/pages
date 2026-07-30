@@ -10,7 +10,7 @@ import {
   setBusy,
   initThemeToggle,
   humanizeAuthError
-} from './supabase-client.js?v=20260730-4';
+} from './supabase-client.js?v=20260730-6';
 
 initThemeToggle();
 
@@ -37,7 +37,8 @@ function renderCounts() {
   }, {});
   elements.counts.textContent =
     `${profiles.length} tài khoản · ${counts.admin || 0} quản trị · `
-    + `${counts.moderator || 0} điều hành · ${counts.suspended || 0} tạm khóa · `
+    + `${counts.moderator || 0} điều hành · ${counts.vip || 0} VIP · `
+    + `${counts.suspended || 0} tạm khóa · `
     + `${counts.banned || 0} bị cấm`;
 }
 
@@ -84,6 +85,7 @@ function createMemberCard(member) {
   controls.className = 'access-controls';
   const roleSelect = createSelect([
     ['member', 'Thành viên'],
+    ['vip', 'Thành viên VIP'],
     ['moderator', 'Điều hành viên'],
     ['admin', 'Quản trị viên']
   ], member.role, `Quyền của ${member.username}`);

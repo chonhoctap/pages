@@ -26,7 +26,9 @@ const elements = {
   oauthDivider: document.getElementById('oauthDivider')
 };
 
-let recoveryMode = new URLSearchParams(window.location.search).get('mode') === 'reset';
+const initialParams = new URLSearchParams(window.location.search);
+let recoveryMode = initialParams.get('mode') === 'reset';
+let passwordResetFlow = recoveryMode || initialParams.get('forgot') === '1';
 let redirecting = false;
 const recoveryEmailKey = 'chonhoctap-recovery-email';
 
@@ -68,6 +70,7 @@ function showView(view) {
   });
 
   const regularAuth = view === 'login' || view === 'signup';
+  passwordResetFlow = !regularAuth;
   elements.authTabs.hidden = !regularAuth;
   elements.googleButton.hidden = !regularAuth;
   elements.oauthDivider.hidden = !regularAuth;
@@ -80,7 +83,7 @@ function showView(view) {
 }
 
 function goAfterAuth() {
-  if (redirecting || recoveryMode) return;
+  if (redirecting || recoveryMode || passwordResetFlow) return;
   redirecting = true;
   window.location.replace(safeNext());
 }
@@ -281,6 +284,7 @@ elements.updatePasswordForm.addEventListener('submit', async event => {
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
     recoveryMode = false;
+    passwordResetFlow = false;
     showMessage(elements.message, 'Đã đổi mật khẩu. Đang mở hồ sơ...', 'success');
     window.setTimeout(goAfterAuth, 500);
   } catch (error) {
@@ -293,14 +297,15 @@ elements.updatePasswordForm.addEventListener('submit', async event => {
 supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'PASSWORD_RECOVERY') {
     recoveryMode = true;
+    passwordResetFlow = true;
     window.setTimeout(() => showView('updatePassword'), 0);
-  } else if (event === 'SIGNED_IN' && session && !recoveryMode) {
+  } else if (event === 'SIGNED_IN' && session && !recoveryMode && !passwordResetFlow) {
     window.setTimeout(goAfterAuth, 0);
   }
 });
 
 async function init() {
-  const params = new URLSearchParams(window.location.search);
+  const params = initialParams;
   const oauthError = params.get('error_description');
   if (oauthError) {
     showMessage(elements.message, decodeURIComponent(oauthError), 'error');

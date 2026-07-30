@@ -1,0 +1,51 @@
+name: Dọn bài diễn đàn hết hạn
+
+on:
+  schedule:
+    # 02:17 mỗi ngày theo giờ Việt Nam (19:17 UTC).
+    - cron: '17 19 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Chỉ thống kê, không xóa dữ liệu
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cleanup-forum
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Lấy mã nguồn
+        uses: actions/checkout@v4
+
+      - name: Cài Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: scripts/forum-cleanup/package-lock.json
+
+      - name: Cài thư viện
+        run: npm ci
+        working-directory: scripts/forum-cleanup
+
+      - name: Kiểm tra tác vụ
+        run: npm test
+        working-directory: scripts/forum-cleanup
+
+      - name: Dọn bài và media hết hạn
+        run: node cleanup.mjs
+        working-directory: scripts/forum-cleanup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}

@@ -44,11 +44,16 @@ Sau hai migration diễn đàn ở trên, chạy tiếp toàn bộ
 `forum_v3_migration.sql`. Migration này chuẩn bị:
 
 - role `vip` và hạn mức media theo role;
-- tối đa 2 ảnh + 1 video cho thành viên, 6 ảnh + 2 video cho VIP/staff;
+- thành viên: tối đa 2 ảnh 1,5 MB + 1 video 25 MB, khung 720p;
+- VIP/staff: tối đa 6 ảnh 3 MB + 2 video 50 MB, khung 1080p;
 - cảm xúc, lượt xem, báo cáo, điểm xu hướng và hàng đợi kiểm duyệt;
 - chống spam ở database: mỗi tài khoản thường chỉ đăng một bài sau 15 phút;
 - Hỏi đáp chưa giải hết hạn sau 5 ngày, đã giải sau 7 ngày;
 - bài Giải trí hết hạn sau 15 ngày; bài ghim không tự hết hạn.
+
+Supabase Free giới hạn mỗi file tối đa 50 MB. Website dùng TUS resumable upload
+cho tệp lớn hơn 6 MB để đường truyền không ổn định có thể tải đáng tin cậy hơn.
+Khi chuyển sang R2 có thể nâng giới hạn VIP nếu backend R2 cũng được cập nhật.
 
 Bộ lọc database chỉ tự nhận diện được một phần từ ngữ đáng ngờ. Ảnh/video nhạy
 cảm và hành vi nói xấu vẫn phải dùng báo cáo cộng đồng hoặc dịch vụ kiểm duyệt

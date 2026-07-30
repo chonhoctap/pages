@@ -1,0 +1,12 @@
+{
+  "name": "chonhoctap-forum-cleanup",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check cleanup.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.111.0"
+  }
+}

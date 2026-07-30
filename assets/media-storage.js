@@ -1,8 +1,28 @@
 import { MEDIA_API_URL } from './media-config.js?v=20260730-1';
+import { Upload } from 'https://cdn.jsdelivr.net/npm/tus-js-client@4/+esm';
 
 const MB = 1024 * 1024;
-export const IMAGE_OUTPUT_LIMIT = 2 * MB;
+const SUPABASE_TUS_URL =
+  'https://qartstnodgujgqkczzml.storage.supabase.co/storage/v1/upload/resumable';
+export const IMAGE_OUTPUT_LIMIT = 1.5 * MB;
 export const VIDEO_OUTPUT_LIMIT = 25 * MB;
+export const VIP_IMAGE_OUTPUT_LIMIT = 3 * MB;
+export const VIP_VIDEO_OUTPUT_LIMIT = 50 * MB;
+export const MEDIA_DURATION_LIMIT = 180;
+
+export function mediaLimitsForRole(role) {
+  const elevated = ['vip', 'moderator', 'admin'].includes(role);
+  return {
+    elevated,
+    maxImages: elevated ? 6 : 2,
+    maxVideos: elevated ? 2 : 1,
+    imageBytes: elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
+    videoBytes: elevated ? VIP_VIDEO_OUTPUT_LIMIT : VIDEO_OUTPUT_LIMIT,
+    maxWidth: elevated ? 1920 : 1280,
+    maxHeight: elevated ? 1080 : 720,
+    qualityLabel: elevated ? '1080p' : '720p'
+  };
+}
 
 export function r2Enabled() {
   return /^https:\/\/[a-z0-9.-]+(?:\/.*)?$/i.test(MEDIA_API_URL);
@@ -24,11 +44,11 @@ function canvasBlob(canvas, type, quality) {
   });
 }
 
-function targetDimensions(width, height, scale = 1) {
+function targetDimensions(width, height, maxWidth, maxHeight, scale = 1) {
   const landscape = width >= height;
-  const maxWidth = (landscape ? 1280 : 720) * scale;
-  const maxHeight = (landscape ? 720 : 1280) * scale;
-  const ratio = Math.min(1, maxWidth / width, maxHeight / height);
+  const frameWidth = (landscape ? maxWidth : maxHeight) * scale;
+  const frameHeight = (landscape ? maxHeight : maxWidth) * scale;
+  const ratio = Math.min(1, frameWidth / width, frameHeight / height);
   return {
     width: Math.max(1, Math.round(width * ratio)),
     height: Math.max(1, Math.round(height * ratio))
@@ -50,11 +70,14 @@ async function decodeImage(file) {
   }
 }
 
-export async function optimizeImage(file) {
+export async function optimizeImage(file, role = 'member') {
   if (!file?.type?.startsWith('image/')) return file;
+  const limits = mediaLimitsForRole(role);
   if (file.type === 'image/gif') {
-    if (file.size > IMAGE_OUTPUT_LIMIT) {
-      throw new Error('GIF động phải nhỏ hơn 2 MB.');
+    if (file.size > limits.imageBytes) {
+      throw new Error(
+        `GIF động phải nhỏ hơn ${(limits.imageBytes / MB).toFixed(1)} MB.`
+      );
     }
     return file;
   }
@@ -70,20 +93,29 @@ export async function optimizeImage(file) {
   let quality = 0.84;
   let blob;
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    const dimensions = targetDimensions(sourceWidth, sourceHeight, scale);
+    const dimensions = targetDimensions(
+      sourceWidth,
+      sourceHeight,
+      limits.maxWidth,
+      limits.maxHeight,
+      scale
+    );
     canvas.width = dimensions.width;
     canvas.height = dimensions.height;
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, canvas.width, canvas.height);
     context.drawImage(source, 0, 0, canvas.width, canvas.height);
     blob = await canvasBlob(canvas, 'image/webp', quality);
-    if (blob.size <= IMAGE_OUTPUT_LIMIT) break;
+    if (blob.size <= limits.imageBytes) break;
     if (quality > 0.58) quality -= 0.08;
     else scale *= 0.82;
   }
   source.close?.();
-  if (!blob || blob.size > IMAGE_OUTPUT_LIMIT) {
-    throw new Error('Không thể nén ảnh xuống dưới 2 MB. Hãy chọn ảnh nhỏ hơn.');
+  if (!blob || blob.size > limits.imageBytes) {
+    throw new Error(
+      `Không thể nén ảnh xuống dưới ${(limits.imageBytes / MB).toFixed(1)} MB. `
+      + 'Hãy chọn ảnh nhỏ hơn.'
+    );
   }
 
   const baseName = (file.name || 'image').replace(/\.[^.]+$/u, '');
@@ -93,17 +125,91 @@ export async function optimizeImage(file) {
   });
 }
 
-export async function prepareMedia(file) {
+function videoMetadata(file) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    const url = URL.createObjectURL(file);
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      video.removeAttribute('src');
+      video.load();
+    };
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Không đọc được thông tin video. Hãy dùng video MP4 hoặc WebM.'));
+    }, 12000);
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      window.clearTimeout(timeout);
+      const result = {
+        width: video.videoWidth || null,
+        height: video.videoHeight || null,
+        durationSeconds: Number.isFinite(video.duration)
+          ? Math.max(1, Math.ceil(video.duration))
+          : null
+      };
+      cleanup();
+      resolve(result);
+    };
+    video.onerror = () => {
+      window.clearTimeout(timeout);
+      cleanup();
+      reject(new Error('Trình duyệt không đọc được video này. Hãy đổi sang MP4 hoặc WebM.'));
+    };
+    video.src = url;
+  });
+}
+
+export async function mediaMetadata(file) {
+  if (file?.type?.startsWith('image/')) {
+    const source = await decodeImage(file);
+    const result = {
+      width: source.width || source.naturalWidth || null,
+      height: source.height || source.naturalHeight || null,
+      durationSeconds: null
+    };
+    source.close?.();
+    return result;
+  }
+  if (file?.type?.startsWith('video/')) return videoMetadata(file);
+  return { width: null, height: null, durationSeconds: null };
+}
+
+function fitsFrame(metadata, limits) {
+  if (!metadata.width || !metadata.height) return false;
+  const landscape = metadata.width >= metadata.height;
+  return landscape
+    ? metadata.width <= limits.maxWidth && metadata.height <= limits.maxHeight
+    : metadata.width <= limits.maxHeight && metadata.height <= limits.maxWidth;
+}
+
+export async function prepareMedia(file, role = 'member') {
   const kind = mediaType(file);
   if (!kind) {
     throw new Error('Chỉ hỗ trợ ảnh hoặc video.');
   }
-  if (kind === 'image') return optimizeImage(file);
-  if (file.size > VIDEO_OUTPUT_LIMIT) {
-    throw new Error('Video phải nhỏ hơn 25 MB.');
+  const limits = mediaLimitsForRole(role);
+  if (kind === 'image') return optimizeImage(file, role);
+  if (file.size > limits.videoBytes) {
+    throw new Error(
+      `Video phải nhỏ hơn ${Math.round(limits.videoBytes / MB)} MB.`
+    );
   }
   if (!['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type)) {
     throw new Error('Chỉ hỗ trợ video MP4, WebM hoặc MOV.');
+  }
+  const metadata = await mediaMetadata(file);
+  if (!fitsFrame(metadata, limits)) {
+    throw new Error(
+      `Video phải có sẵn chất lượng tối đa ${limits.qualityLabel}. `
+      + 'Trình duyệt chưa thể tự nén video; hãy giảm độ phân giải trước khi tải lên.'
+    );
+  }
+  if (
+    metadata.durationSeconds
+    && metadata.durationSeconds > MEDIA_DURATION_LIMIT
+  ) {
+    throw new Error('Video tối đa 3 phút.');
   }
   return file;
 }
@@ -149,4 +255,29 @@ export async function deleteFromR2(session, key) {
   if (!response.ok && response.status !== 404) {
     throw new Error(await apiError(response));
   }
+}
+
+export function uploadToSupabaseResumable(session, bucket, path, file) {
+  return new Promise((resolve, reject) => {
+    const upload = new Upload(file, {
+      endpoint: SUPABASE_TUS_URL,
+      retryDelays: [0, 3000, 5000, 10000, 20000],
+      headers: {
+        authorization: `Bearer ${session.access_token}`,
+        'x-upsert': 'false'
+      },
+      uploadDataDuringCreation: true,
+      removeFingerprintOnSuccess: true,
+      chunkSize: 6 * MB,
+      metadata: {
+        bucketName: bucket,
+        objectName: path,
+        contentType: file.type,
+        cacheControl: '3600'
+      },
+      onError: reject,
+      onSuccess: () => resolve({ path })
+    });
+    upload.start();
+  });
 }

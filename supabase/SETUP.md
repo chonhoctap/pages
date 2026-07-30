@@ -38,6 +38,43 @@ Sau khi đã chạy `forum_migration.sql`, chạy tiếp toàn bộ file
 - RPC bảo mật để chỉ chủ bài, moderator hoặc admin được đánh dấu đã giải;
 - thu hồi quyền sửa trực tiếp cột `is_solved` từ trình duyệt.
 
+## Nâng cấp diễn đàn V3
+
+Sau hai migration diễn đàn ở trên, chạy tiếp toàn bộ
+`forum_v3_migration.sql`. Migration này chuẩn bị:
+
+- role `vip` và hạn mức media theo role;
+- thành viên: tối đa 2 ảnh 1,5 MB + 1 video 25 MB, khung 720p;
+- VIP/staff: tối đa 6 ảnh 3 MB + 2 video 50 MB, khung 1080p;
+- cảm xúc, lượt xem, báo cáo, điểm xu hướng và hàng đợi kiểm duyệt;
+- chống spam ở database: mỗi tài khoản thường chỉ đăng một bài sau 15 phút;
+- Hỏi đáp chưa giải hết hạn sau 5 ngày, đã giải sau 7 ngày;
+- bài Giải trí hết hạn sau 15 ngày; bài ghim không tự hết hạn.
+
+Supabase Free giới hạn mỗi file tối đa 50 MB. Website dùng TUS resumable upload
+cho tệp lớn hơn 6 MB để đường truyền không ổn định có thể tải đáng tin cậy hơn.
+Khi chuyển sang R2 có thể nâng giới hạn VIP nếu backend R2 cũng được cập nhật.
+
+Bộ lọc database chỉ tự nhận diện được một phần từ ngữ đáng ngờ. Ảnh/video nhạy
+cảm và hành vi nói xấu vẫn phải dùng báo cáo cộng đồng hoặc dịch vụ kiểm duyệt
+media ở backend; không nên coi bộ lọc từ khóa là chính xác tuyệt đối.
+
+### Tự dọn bài và Supabase Storage
+
+Workflow `.github/workflows/cleanup-forum.yml` chạy lúc 02:17 mỗi ngày theo giờ
+Việt Nam. Nó xóa ảnh/video trong `forum-comment-media` và `forum-media` trước,
+sau đó mới xóa bài cùng dữ liệu liên quan.
+
+Vào GitHub repository > **Settings > Secrets and variables > Actions** và tạo:
+
+1. `SUPABASE_URL`: URL project Supabase.
+2. `SUPABASE_SECRET_KEY`: secret key chỉ dùng cho tác vụ backend, tạo trong
+   Supabase Dashboard > Settings > API Keys.
+
+Không dùng publishable key cho tác vụ dọn dẹp và không dán secret key vào mã
+nguồn, ảnh chụp hay cuộc trò chuyện. Lần chạy thủ công đầu tiên phải để
+`dry_run = true`; kiểm tra log đúng số bài rồi mới chạy với `dry_run = false`.
+
 ## Lưu media diễn đàn bằng Cloudflare R2
 
 Mã nguồn mới giữ tương thích với các ảnh/video cũ trong Supabase Storage nhưng
@@ -64,9 +101,10 @@ Trong Supabase Dashboard:
 3. Dán toàn bộ nội dung `schema.sql`.
 4. Chọn **Run**.
 
-File tạo bảng `profiles`, ba quyền `member` / `moderator` / `admin`, ba trạng
-thái tài khoản, RLS, hàm cấp quyền dành riêng cho quản trị viên, nhật ký thay
-đổi quyền và bucket `avatars`.
+File gốc tạo bảng `profiles` và các quyền cơ bản. Sau khi chạy
+`forum_v3_migration.sql`, hệ thống có bốn quyền `member` / `vip` /
+`moderator` / `admin`, ba trạng thái tài khoản, RLS, hàm cấp quyền dành riêng
+cho quản trị viên, nhật ký thay đổi quyền và bucket `avatars`.
 
 ## 2. Cấu hình URL đăng nhập
 
@@ -144,3 +182,9 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
 17. Deploy R2 Worker, điền `MEDIA_API_URL`, đăng một bài kèm ảnh và xác nhận URL
     media có dạng `/media/post/...`.
 18. Xóa bài và xác nhận object tương ứng cũng biến mất khỏi bucket R2.
+19. Chạy `forum_v3_migration.sql`, thử đăng hai bài liên tiếp và xác nhận lần
+    thứ hai bị chặn trong 15 phút.
+20. Dùng tài khoản thường thử liên kết quá 2 ảnh hoặc 1 video; xác nhận
+    database từ chối. Lặp lại với VIP ở giới hạn 6 ảnh và 2 video.
+21. Chạy workflow dọn dẹp thủ công với `dry_run = true`, đối chiếu số bài hết
+    hạn rồi mới cho phép lần chạy thật.

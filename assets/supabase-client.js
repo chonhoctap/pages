@@ -70,6 +70,7 @@ export function profileName(profile, user) {
 export function roleLabel(role) {
   return {
     member: 'Thành viên',
+    vip: 'Thành viên VIP',
     moderator: 'Điều hành viên',
     admin: 'Quản trị viên'
   }[role] || 'Thành viên';
@@ -159,6 +160,12 @@ export function humanizeAuthError(error) {
     return 'Chỉ quản trị viên đang hoạt động mới được thay đổi quyền.';
   }
   if (/rate limit/i.test(message)) return 'Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại.';
+  if (/một bài sau mỗi 15 phút|one post.*15 minutes/i.test(message)) {
+    return 'Bạn chỉ có thể đăng một bài sau mỗi 15 phút.';
+  }
+  if (/media.*vượt quá giới hạn|số lượng ảnh hoặc video/i.test(message)) {
+    return 'Ảnh hoặc video vượt quá giới hạn của tài khoản.';
+  }
   if (/failed to fetch|network/i.test(message)) return 'Không thể kết nối máy chủ. Hãy kiểm tra Internet.';
   return message || 'Đã xảy ra lỗi. Vui lòng thử lại.';
 }

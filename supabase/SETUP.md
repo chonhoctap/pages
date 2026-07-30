@@ -38,6 +38,23 @@ Sau khi đã chạy `forum_migration.sql`, chạy tiếp toàn bộ file
 - RPC bảo mật để chỉ chủ bài, moderator hoặc admin được đánh dấu đã giải;
 - thu hồi quyền sửa trực tiếp cột `is_solved` từ trình duyệt.
 
+## Lưu media diễn đàn bằng Cloudflare R2
+
+Mã nguồn mới giữ tương thích với các ảnh/video cũ trong Supabase Storage nhưng
+chuyển tệp mới sang Cloudflare R2 sau khi cấu hình Worker.
+
+1. Tạo bucket R2 tên `chonhoctap-media`, Storage Class `Standard`.
+2. Làm theo `cloudflare/media-worker/README.md` để deploy Worker.
+3. Chép URL `workers.dev` vào `assets/media-config.js`.
+4. Không bật Public Development URL cho bucket và không đưa Access Key hoặc
+   Secret Key R2 vào repository.
+5. Ảnh được trình duyệt đổi sang WebP, thu về khung 720p và giới hạn 2 MB trước
+   khi tải lên. Video hiện được kiểm tra định dạng và giới hạn 25 MB; R2 là nơi
+   lưu trữ chứ không tự mã hóa lại video.
+
+Nếu `MEDIA_API_URL` còn trống, website tạm thời dùng hai bucket Supabase cũ để
+không làm gián đoạn phiên bản đang chạy.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -124,3 +141,6 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
 14. Cấm tài khoản test và xác nhận tài khoản không thể mở dữ liệu diễn đàn.
 15. Chạy `forum_v2_migration.sql`, thử bình luận kèm ảnh/video và kiểm tra giới hạn dung lượng.
 16. Đăng nhập tài khoản khác và xác nhận không thể đánh dấu bài của người khác là đã giải.
+17. Deploy R2 Worker, điền `MEDIA_API_URL`, đăng một bài kèm ảnh và xác nhận URL
+    media có dạng `/media/post/...`.
+18. Xóa bài và xác nhận object tương ứng cũng biến mất khỏi bucket R2.

@@ -11,6 +11,14 @@ import {
   initThemeToggle,
   humanizeAuthError
 } from './supabase-client.js?v=20260730-5';
+import {
+  r2Enabled,
+  prepareMedia,
+  uploadToR2,
+  deleteFromR2,
+  IMAGE_OUTPUT_LIMIT,
+  VIDEO_OUTPUT_LIMIT
+} from './media-storage.js?v=20260730-1';
 
 initThemeToggle();
 
@@ -75,9 +83,14 @@ let currentCategory = 'question';
 let posts = [];
 let previewUrl = '';
 let selectedMediaFile = null;
+let previewPrepareSequence = 0;
+let previewPreparePromise = Promise.resolve();
 let loadSequence = 0;
 let currentSort = 'latest';
 const commentPreviewUrls = new Map();
+const commentPreparedFiles = new Map();
+const commentPrepareSequences = new Map();
+const commentPreparePromises = new Map();
 
 function canInteract() {
   return currentProfile?.account_status === 'active';
@@ -153,6 +166,7 @@ function uniqueMediaPath(file, prefix = '') {
 }
 
 function resetPreview() {
+  previewPrepareSequence += 1;
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = '';
   selectedMediaFile = null;
@@ -161,18 +175,14 @@ function resetPreview() {
   elements.mediaPreview.hidden = true;
 }
 
-function showMediaPreview(file) {
+async function showMediaPreview(file) {
+  const sequence = ++previewPrepareSequence;
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = '';
   selectedMediaFile = null;
   elements.mediaPreview.replaceChildren();
   elements.mediaPreview.hidden = true;
   if (!file) return;
-  if (file.size > 25 * 1024 * 1024) {
-    elements.media.value = '';
-    setInfo('Ảnh hoặc video phải nhỏ hơn 25 MB.', 'error');
-    return;
-  }
   const type = mediaKind(file);
   if (!type) {
     elements.media.value = '';
@@ -180,8 +190,26 @@ function showMediaPreview(file) {
     return;
   }
 
-  selectedMediaFile = file;
-  previewUrl = URL.createObjectURL(file);
+  try {
+    if (type === 'image') setInfo('Đang tối ưu ảnh về chất lượng 720p...', 'info');
+    const prepared = await prepareMedia(file);
+    if (sequence !== previewPrepareSequence) return;
+    selectedMediaFile = prepared;
+    previewUrl = URL.createObjectURL(prepared);
+    if (type === 'image') {
+      const saved = Math.max(0, file.size - prepared.size);
+      const savedText = saved > 0
+        ? `, giảm ${(saved / 1024 / 1024).toFixed(1)} MB`
+        : '';
+      setInfo(`Ảnh đã được tối ưu còn ${(prepared.size / 1024 / 1024).toFixed(2)} MB${savedText}.`, 'success');
+    }
+  } catch (error) {
+    if (sequence !== previewPrepareSequence) return;
+    elements.media.value = '';
+    setInfo(error.message, 'error');
+    return;
+  }
+
   const preview = document.createElement(type === 'image' ? 'img' : 'video');
   preview.src = previewUrl;
   preview.alt = type === 'image' ? 'Ảnh xem trước' : '';
@@ -263,6 +291,9 @@ function updateCategoryUi() {
 
 async function uploadMedia(file) {
   if (!file) return null;
+  if (r2Enabled()) {
+    return uploadToR2(session, file, { scope: 'post' });
+  }
   const path = uniqueMediaPath(file);
   const { error } = await supabase.storage
     .from('forum-media')
@@ -282,6 +313,7 @@ async function publishPost(event) {
     setInfo('Tài khoản đang bị hạn chế nên chưa thể đăng bài.', 'error');
     return;
   }
+  await previewPreparePromise;
 
   const title = elements.title.value.trim();
   if (title.length < 3) {
@@ -290,8 +322,14 @@ async function publishPost(event) {
     return;
   }
   const file = selectedMediaFile;
-  if (file && file.size > 25 * 1024 * 1024) {
-    setInfo('Ảnh hoặc video phải nhỏ hơn 25 MB.', 'error');
+  const fileLimit = mediaKind(file) === 'image' ? IMAGE_OUTPUT_LIMIT : VIDEO_OUTPUT_LIMIT;
+  if (file && file.size > fileLimit) {
+    setInfo(
+      mediaKind(file) === 'image'
+        ? 'Ảnh sau khi tối ưu phải nhỏ hơn 2 MB.'
+        : 'Video phải nhỏ hơn 25 MB.',
+      'error'
+    );
     return;
   }
 
@@ -322,7 +360,7 @@ async function publishPost(event) {
     await loadPosts();
   } catch (error) {
     if (uploaded?.path) {
-      await supabase.storage.from('forum-media').remove([uploaded.path]);
+      await removeStoredMedia(uploaded.path, 'forum-media');
     }
     setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
   } finally {
@@ -575,7 +613,8 @@ function renderPost(post) {
   commentForm.hidden = !canInteract();
   const commentMediaInput = commentForm.querySelector('.comment-media-input');
   commentMediaInput.addEventListener('change', () => {
-    showCommentMediaPreview(commentForm, commentMediaInput.files?.[0]);
+    const task = showCommentMediaPreview(commentForm, commentMediaInput.files?.[0]);
+    commentPreparePromises.set(commentForm, task);
   });
   commentForm.addEventListener('submit', event => addComment(event, post, card));
   return fragment;
@@ -673,19 +712,26 @@ async function toggleComments(post, card) {
 function commentMediaError(file) {
   const type = mediaKind(file);
   if (!type) return 'Chỉ hỗ trợ ảnh JPG, PNG, WebP, GIF hoặc video MP4, WebM, MOV.';
-  const limit = type === 'image' ? 2 * 1024 * 1024 : 8 * 1024 * 1024;
+  const limit = type === 'image'
+    ? IMAGE_OUTPUT_LIMIT
+    : r2Enabled()
+      ? VIDEO_OUTPUT_LIMIT
+      : 8 * 1024 * 1024;
   if (file.size > limit) {
     return type === 'image'
       ? 'Ảnh bình luận phải nhỏ hơn 2 MB.'
-      : 'Video bình luận phải nhỏ hơn 8 MB.';
+      : `Video bình luận phải nhỏ hơn ${r2Enabled() ? 25 : 8} MB.`;
   }
   return '';
 }
 
 function resetCommentMedia(form) {
+  commentPrepareSequences.set(form, (commentPrepareSequences.get(form) || 0) + 1);
   const currentUrl = commentPreviewUrls.get(form);
   if (currentUrl) URL.revokeObjectURL(currentUrl);
   commentPreviewUrls.delete(form);
+  commentPreparedFiles.delete(form);
+  commentPreparePromises.delete(form);
   const input = form.querySelector('.comment-media-input');
   const preview = form.querySelector('.comment-media-preview');
   input.value = '';
@@ -693,21 +739,30 @@ function resetCommentMedia(form) {
   preview.hidden = true;
 }
 
-function showCommentMediaPreview(form, file) {
+async function showCommentMediaPreview(form, file) {
   resetCommentMedia(form);
   if (!file) return;
-  const invalid = commentMediaError(file);
-  if (invalid) {
-    setInfo(invalid, 'error');
+  const sequence = commentPrepareSequences.get(form);
+  let prepared;
+  try {
+    if (mediaKind(file) === 'image') setInfo('Đang tối ưu ảnh bình luận...', 'info');
+    prepared = await prepareMedia(file);
+    if (sequence !== commentPrepareSequences.get(form)) return;
+  } catch (error) {
+    if (sequence !== commentPrepareSequences.get(form)) return;
+    setInfo(error.message, 'error');
     return;
   }
+  const invalid = commentMediaError(prepared);
+  if (invalid) return setInfo(invalid, 'error');
 
-  const previewUrl = URL.createObjectURL(file);
+  commentPreparedFiles.set(form, prepared);
+  const previewUrl = URL.createObjectURL(prepared);
   commentPreviewUrls.set(form, previewUrl);
   const preview = form.querySelector('.comment-media-preview');
-  const content = document.createElement(mediaKind(file) === 'video' ? 'video' : 'img');
+  const content = document.createElement(mediaKind(prepared) === 'video' ? 'video' : 'img');
   content.src = previewUrl;
-  if (mediaKind(file) === 'video') content.controls = true;
+  if (mediaKind(prepared) === 'video') content.controls = true;
   else content.alt = 'Ảnh đính kèm bình luận';
   const remove = document.createElement('button');
   remove.type = 'button';
@@ -722,6 +777,9 @@ async function uploadCommentMedia(file, postId) {
   if (!file) return null;
   const invalid = commentMediaError(file);
   if (invalid) throw new Error(invalid);
+  if (r2Enabled()) {
+    return uploadToR2(session, file, { scope: 'comment', postId });
+  }
   const path = uniqueMediaPath(file, `${postId}/`);
   const { error } = await supabase.storage
     .from('forum-comment-media')
@@ -849,7 +907,7 @@ function renderComments(comments, post, card) {
           return;
         }
         if (comment.media_path) {
-          await supabase.storage.from('forum-comment-media').remove([comment.media_path]);
+          await removeStoredMedia(comment.media_path, 'forum-comment-media');
         }
         post.commentCount = Math.max(0, post.commentCount - 1);
         updatePostStats(card, post);
@@ -865,11 +923,12 @@ async function addComment(event, post, card) {
   event.preventDefault();
   if (!canInteract()) return;
   const form = event.currentTarget;
+  await commentPreparePromises.get(form);
   const input = form.querySelector('.comment-input');
   const mediaInput = form.querySelector('.comment-media-input');
   const button = form.querySelector('.comment-submit');
   const body = input.value.trim();
-  const file = mediaInput.files?.[0];
+  const file = commentPreparedFiles.get(form) || mediaInput.files?.[0];
   if (!body && !file) return;
   const invalid = file ? commentMediaError(file) : '';
   if (invalid) {
@@ -896,7 +955,7 @@ async function addComment(event, post, card) {
     await loadComments(post, card);
   } catch (error) {
     if (uploaded?.path) {
-      await supabase.storage.from('forum-comment-media').remove([uploaded.path]);
+      await removeStoredMedia(uploaded.path, 'forum-comment-media');
     }
     setInfo(`Không thể gửi bình luận: ${humanizeAuthError(error)}`, 'error');
   } finally {
@@ -952,15 +1011,14 @@ async function deletePost(post, card, button) {
     if (commentMediaError) throw commentMediaError;
     const commentPaths = (commentMedia || []).map(item => item.media_path).filter(Boolean);
     if (commentPaths.length) {
-      const { error } = await supabase.storage
-        .from('forum-comment-media')
-        .remove(commentPaths);
-      if (error) throw error;
+      await Promise.all(
+        commentPaths.map(path => removeStoredMedia(path, 'forum-comment-media'))
+      );
     }
     const { error } = await supabase.from('forum_posts').delete().eq('id', post.id);
     if (error) throw error;
     if (post.media_path) {
-      await supabase.storage.from('forum-media').remove([post.media_path]);
+      await removeStoredMedia(post.media_path, 'forum-media');
     }
     posts = posts.filter(item => item.id !== post.id);
     card.remove();
@@ -970,6 +1028,17 @@ async function deletePost(post, card, button) {
     setBusy(button, false);
     setInfo(`Không thể xóa bài viết: ${humanizeAuthError(error)}`, 'error');
   }
+}
+
+async function removeStoredMedia(path, legacyBucket) {
+  if (!path) return;
+  const r2Path = /^(post|comment)\//u.test(path);
+  if (r2Path && r2Enabled()) {
+    await deleteFromR2(session, path);
+    return;
+  }
+  const { error } = await supabase.storage.from(legacyBucket).remove([path]);
+  if (error) throw error;
 }
 
 function configureAccount() {
@@ -1012,7 +1081,9 @@ elements.tabs.forEach(tab => {
   });
 });
 elements.form.addEventListener('submit', publishPost);
-elements.media.addEventListener('change', () => showMediaPreview(elements.media.files[0]));
+elements.media.addEventListener('change', () => {
+  previewPreparePromise = showMediaPreview(elements.media.files[0]);
+});
 elements.openComposer.addEventListener('click', openComposer);
 elements.closeComposer.addEventListener('click', closeComposer);
 elements.composerDialog.addEventListener('click', event => {

@@ -137,6 +137,9 @@ export function humanizeAuthError(error) {
   if (/email not confirmed/i.test(message)) return 'Bạn cần xác nhận email trước khi đăng nhập.';
   if (/user already registered/i.test(message)) return 'Email này đã được đăng ký.';
   if (/password should be at least/i.test(message)) return 'Mật khẩu chưa đủ độ dài yêu cầu.';
+  if (/same password|different from the old password/i.test(message)) return 'Mật khẩu mới cần khác mật khẩu hiện tại.';
+  if (/token has expired|otp expired/i.test(message)) return 'Mã xác nhận đã hết hạn. Hãy yêu cầu mã mới.';
+  if (/invalid token|token is invalid|otp.*invalid/i.test(message)) return 'Mã xác nhận chưa đúng.';
   if (/database error saving new user/i.test(message)) return 'Username đã tồn tại hoặc thông tin đăng ký chưa hợp lệ.';
   if (/rate limit/i.test(message)) return 'Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại.';
   if (/failed to fetch|network/i.test(message)) return 'Không thể kết nối máy chủ. Hãy kiểm tra Internet.';

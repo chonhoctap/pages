@@ -24,7 +24,9 @@ const elements = {
   role: document.getElementById('profileRole'),
   heading: document.getElementById('profileHeading'),
   adminLink: document.getElementById('adminLink'),
-  logoutButton: document.getElementById('logoutButton')
+  logoutButton: document.getElementById('logoutButton'),
+  changePasswordForm: document.getElementById('changePasswordForm'),
+  passwordMessage: document.getElementById('passwordMessage')
 };
 
 let session;
@@ -135,6 +137,40 @@ elements.logoutButton.addEventListener('click', async () => {
   setBusy(elements.logoutButton, true, 'Đang đăng xuất...');
   await supabase.auth.signOut();
   window.location.replace(pageUrl());
+});
+
+elements.changePasswordForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  const button = elements.changePasswordForm.querySelector('button[type="submit"]');
+  const form = new FormData(elements.changePasswordForm);
+  const password = String(form.get('password') || '');
+  const confirmPassword = String(form.get('confirm_password') || '');
+
+  if (password.length < 8) {
+    showMessage(elements.passwordMessage, 'Mật khẩu cần ít nhất 8 ký tự.', 'error');
+    return;
+  }
+  if (password !== confirmPassword) {
+    showMessage(elements.passwordMessage, 'Hai mật khẩu chưa trùng nhau.', 'error');
+    return;
+  }
+
+  setBusy(button, true, 'Đang cập nhật...');
+  showMessage(elements.passwordMessage, '');
+  try {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+    elements.changePasswordForm.reset();
+    showMessage(
+      elements.passwordMessage,
+      'Đã cập nhật mật khẩu. Bạn có thể đăng nhập bằng Google hoặc email và mật khẩu.',
+      'success'
+    );
+  } catch (error) {
+    showMessage(elements.passwordMessage, humanizeAuthError(error), 'error');
+  } finally {
+    setBusy(button, false);
+  }
 });
 
 async function init() {

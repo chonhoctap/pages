@@ -32,7 +32,23 @@ Sau đó mở **Supabase → Authentication → Sign In / Providers → Google**
 bật Google và nhập Client ID cùng Client Secret. Client Secret chỉ nhập trong
 Supabase Dashboard, không đưa vào GitHub hoặc mã frontend.
 
-## 4. Cấp quyền quản trị đầu tiên
+## 4. Cấu hình email quên mật khẩu bằng mã 6 số
+
+Mở **Authentication → Emails → Templates → Reset password**:
+
+1. Đặt tiêu đề email, ví dụ: `Mã khôi phục mật khẩu Chốn Học Tập`.
+2. Dán nội dung file `RESET_PASSWORD_EMAIL_TEMPLATE.html` vào phần nội dung.
+3. Chọn **Save changes**.
+
+Biến `{{ .Token }}` trong mẫu email sẽ được Supabase thay bằng mã OTP 6 số.
+Trang `auth.html` dùng email và mã này để xác minh, sau đó mới cho phép đặt
+mật khẩu mới.
+
+Email mặc định của Supabase chỉ phù hợp để thử nghiệm và có giới hạn gửi thấp.
+Khi website có người dùng thật, nên cấu hình **Authentication → SMTP Settings**
+với nhà cung cấp email riêng.
+
+## 5. Cấp quyền quản trị đầu tiên
 
 Đăng ký tài khoản chủ website trước. Sau đó chạy câu lệnh dưới đây trong
 SQL Editor và thay email mẫu bằng email của tài khoản chủ:
@@ -50,7 +66,7 @@ where id = (
 Từ thời điểm đó, tài khoản chủ có thể mở `admin.html` để cấp quyền cho các
 thành viên khác. Người dùng thông thường không thể tự thay đổi cột `role`.
 
-## 5. Kiểm tra
+## 6. Kiểm tra
 
 1. Đăng ký bằng email, username và mật khẩu.
 2. Xác nhận email nếu Supabase yêu cầu.
@@ -58,3 +74,5 @@ thành viên khác. Người dùng thông thường không thể tự thay đổ
 4. Tải ảnh đại diện nhỏ hơn 2 MB.
 5. Đăng nhập tài khoản admin và thử thay đổi quyền trong `admin.html`.
 6. Bật Google provider rồi thử nút **Tiếp tục bằng Google**.
+7. Mở **Quên mật khẩu**, nhập email, nhận mã 6 số và đặt mật khẩu mới.
+8. Mở hồ sơ và thử đổi mật khẩu trong phần **Bảo mật tài khoản**.

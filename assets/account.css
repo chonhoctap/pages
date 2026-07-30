@@ -243,6 +243,13 @@ a{color:inherit}
   box-shadow:0 0 0 4px rgba(37,99,235,.08);
 }
 .input[readonly]{color:var(--muted);cursor:not-allowed}
+.otp-input{
+  text-align:center;
+  font-size:22px;
+  font-weight:800;
+  letter-spacing:.35em;
+  font-variant-numeric:tabular-nums;
+}
 .button{
   min-height:47px;
   padding:0 16px;
@@ -390,6 +397,17 @@ a{color:inherit}
 [data-theme="dark"] .role-badge[data-role="admin"]{color:#c4b5fd}
 .summary-actions{display:grid;gap:9px;margin-top:20px}
 .profile-form-panel{padding:24px}
+.security-panel{grid-column:2}
+.security-heading{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:18px;
+  margin-bottom:20px;
+}
+.security-heading h2{margin:0;font-size:18px;letter-spacing:-.02em}
+.security-heading p{margin:6px 0 0;color:var(--muted);font-size:10.5px;line-height:1.55}
+.security-heading .link-button{flex:0 0 auto;margin-top:3px;text-decoration:none}
 .form-columns{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .field-full{grid-column:1/-1}
 .form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:5px}
@@ -450,6 +468,7 @@ a{color:inherit}
   .auth-intro h1{font-size:clamp(31px,8vw,48px)}
   .auth-panel{width:min(520px,100%);margin:auto}
   .profile-layout{grid-template-columns:1fr}
+  .security-panel{grid-column:auto}
   .profile-summary{display:grid;grid-template-columns:auto 1fr;align-items:center;text-align:left;column-gap:18px}
   .avatar-shell{grid-row:1/5;margin:0}
   .summary-actions{grid-column:1/-1;grid-template-columns:repeat(2,1fr)}
@@ -467,6 +486,7 @@ a{color:inherit}
   .field-full{grid-column:auto}
   .page-heading{align-items:flex-start;flex-direction:column}
   .profile-summary{display:block;text-align:center}
+  .security-heading{align-items:flex-start;flex-direction:column;gap:8px}
   .avatar-shell{margin:0 auto 17px}
   .summary-actions{grid-template-columns:1fr}
   .admin-toolbar{align-items:stretch;flex-direction:column}

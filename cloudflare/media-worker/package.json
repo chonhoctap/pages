@@ -1,0 +1,15 @@
+{
+  "name": "chonhoctap-media-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run --outdir .wrangler-dist",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "wrangler": "^4.26.0"
+  }
+}

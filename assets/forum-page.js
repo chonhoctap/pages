@@ -10,7 +10,7 @@ import {
   setBusy,
   initThemeToggle,
   humanizeAuthError
-} from './supabase-client.js?v=20260730-5';
+} from './supabase-client.js?v=20260730-6';
 import {
   r2Enabled,
   prepareMedia,

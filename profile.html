@@ -101,6 +101,31 @@
           </div>
         </form>
       </section>
+
+      <section class="panel profile-form-panel security-panel" aria-labelledby="securityTitle">
+        <div class="security-heading">
+          <div>
+            <h2 id="securityTitle">Bảo mật tài khoản</h2>
+            <p>Đổi mật khẩu hiện tại hoặc đặt mật khẩu lần đầu nếu bạn đăng nhập bằng Google.</p>
+          </div>
+          <a class="link-button" href="auth.html?forgot=1">Quên mật khẩu?</a>
+        </div>
+        <form id="changePasswordForm" class="form-columns">
+          <div class="field">
+            <label for="profileNewPassword">Mật khẩu mới</label>
+            <input id="profileNewPassword" class="input" name="password" type="password" minlength="8" autocomplete="new-password" required>
+            <span class="field-hint">Tối thiểu 8 ký tự.</span>
+          </div>
+          <div class="field">
+            <label for="profileConfirmPassword">Nhập lại mật khẩu</label>
+            <input id="profileConfirmPassword" class="input" name="confirm_password" type="password" minlength="8" autocomplete="new-password" required>
+          </div>
+          <div class="form-actions field-full">
+            <button class="button" type="submit">Đổi mật khẩu</button>
+          </div>
+        </form>
+        <div id="passwordMessage" class="message" role="status" aria-live="polite" hidden></div>
+      </section>
     </div>
   </main>
 

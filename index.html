@@ -364,7 +364,37 @@ button:focus-visible,a:focus-visible,input:focus-visible{
 }
 .title p{margin:8px 0 0;color:var(--muted);font-size:13px;line-height:1.6}
 .hero-side{position:relative;z-index:1}
-.hero-tools{display:flex;justify-content:flex-end;margin-bottom:12px}
+.hero-tools{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;margin-bottom:12px}
+.auth-controls{min-width:0;min-height:42px;display:flex;align-items:center}
+.account-actions{min-width:0;display:flex;align-items:center;gap:7px}
+.account-login,
+.account-pill,
+.admin-shortcut{
+  min-height:42px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:rgba(255,255,255,.8);
+  color:var(--text);
+  text-decoration:none;
+  font-size:11px;
+  font-weight:700;
+  box-shadow:0 10px 24px rgba(14,116,214,.08);
+  transition:transform .2s ease,background .2s ease,border-color .2s ease;
+}
+.account-login{padding:0 13px;gap:7px}
+.account-pill{min-width:0;max-width:190px;padding:4px 10px 4px 5px;gap:8px}
+.account-pill img{width:32px;height:32px;flex:0 0 32px;border-radius:10px;object-fit:cover}
+.account-pill span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-shortcut{min-height:34px;padding:0 10px;color:var(--violet);background:rgba(124,58,237,.08);font-size:9.5px}
+.account-login:hover,
+.account-pill:hover,
+.admin-shortcut:hover{transform:translateY(-1px);background:rgba(255,255,255,.96);border-color:var(--line-strong)}
+[data-theme="dark"] .account-login,
+[data-theme="dark"] .account-pill{background:rgba(255,255,255,.06);box-shadow:none}
+[data-theme="dark"] .admin-shortcut{color:#c4b5fd;background:rgba(167,139,250,.09);box-shadow:none}
 .theme-toggle{
   min-height:42px;
   padding:0 14px;
@@ -977,7 +1007,8 @@ main.section,
   .wrap{padding:14px 13px 42px}
   .hero{grid-template-columns:1fr;gap:20px;min-height:0;padding:19px;border-radius:22px}
   .avatar{width:62px;height:62px;border-radius:18px}
-  .hero-tools{margin-bottom:10px}
+  .hero-tools{justify-content:space-between;margin-bottom:10px}
+  .account-pill{max-width:180px}
   .hero-stats{margin-top:10px}
   .filter-shell{margin-top:13px;border-radius:15px}
   .section{margin-top:22px}
@@ -991,6 +1022,8 @@ main.section,
 
 @media (max-width:430px){
   .brand{align-items:flex-start}
+  .account-pill{max-width:125px}
+  .admin-shortcut{display:none}
   .title h1{font-size:22px}
   .hero-stats{gap:6px}
   .stat-chip{padding:8px 6px}
@@ -1065,6 +1098,9 @@ main.section,
 
     <div class="hero-side">
       <div class="hero-tools">
+        <div id="authControls" class="auth-controls" aria-live="polite">
+          <a class="account-login" href="auth.html"><span aria-hidden="true">◉</span><span>Đăng nhập</span></a>
+        </div>
         <button id="themeToggle" class="theme-toggle" type="button" aria-pressed="false" aria-label="Chuyển chế độ tối">
           <span id="themeToggleIcon" class="theme-toggle-icon" aria-hidden="true">🌙</span>
           <span id="themeToggleText">Dark mode</span>
@@ -1617,5 +1653,6 @@ window.addEventListener('pageshow',() => {
 });
 loadFiles();
 </script>
+<script type="module" src="assets/home-auth.js"></script>
 </body>
 </html>

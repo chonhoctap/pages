@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f8ff">
+  <meta name="color-scheme" content="light dark">
+  <title>Hồ sơ cá nhân · Chốn Học Tập</title>
+  <script>
+  try{document.documentElement.dataset.theme=localStorage.getItem('chonhoctap-theme')||'light'}
+  catch{document.documentElement.dataset.theme='light'}
+  </script>
+  <link rel="icon" href="avatar.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/account.css">
+</head>
+<body>
+  <header class="account-topbar">
+    <div class="account-topbar-inner">
+      <a class="brand-link" href="./">
+        <img src="avatar.png" alt="">
+        <span class="brand-copy"><strong>CHỐN HỌC TẬP</strong><span>Hồ sơ thành viên</span></span>
+      </a>
+      <div class="topbar-actions">
+        <a class="topbar-link" href="./">← Trang chủ</a>
+        <button class="theme-button" type="button" data-theme-toggle aria-pressed="false">
+          <span data-theme-icon aria-hidden="true">🌙</span>
+          <span data-theme-label>Giao diện tối</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="account-main">
+    <div class="page-heading">
+      <div>
+        <div class="eyebrow">Tài khoản</div>
+        <h1>Thông tin cá nhân</h1>
+        <p>Thông tin này sẽ hiển thị khi bạn tham gia cộng đồng Chốn Học Tập.</p>
+      </div>
+      <a id="adminLink" class="button button-secondary" href="admin.html" hidden>Quản lý thành viên</a>
+    </div>
+
+    <div id="profileLoading" class="loading-card">Đang tải hồ sơ...</div>
+    <div id="profileMessage" class="message" role="status" aria-live="polite" hidden></div>
+
+    <div id="profileContent" class="profile-layout" hidden>
+      <aside class="panel profile-summary">
+        <div class="avatar-shell">
+          <img id="profileAvatar" class="profile-avatar" src="avatar.png" alt="Ảnh đại diện">
+          <label class="avatar-upload" title="Chọn ảnh đại diện">
+            <span aria-hidden="true">✎</span>
+            <input id="avatarInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
+          </label>
+        </div>
+        <h2 id="profileHeading">Thành viên</h2>
+        <p class="profile-email">Ảnh tối đa 2 MB</p>
+        <span id="profileRole" class="role-badge" data-role="member">Thành viên</span>
+        <div class="summary-actions">
+          <a class="button button-secondary" href="./">Kho tài liệu</a>
+          <button id="logoutButton" class="button button-danger" type="button">Đăng xuất</button>
+        </div>
+      </aside>
+
+      <section class="panel profile-form-panel">
+        <form id="profileForm" class="form-columns">
+          <div class="field">
+            <label for="profileUsername">Username</label>
+            <input id="profileUsername" class="input" name="username" type="text" minlength="3" maxlength="24" pattern="[a-z0-9_]+" autocomplete="username" required>
+            <span class="field-hint">Chỉ chữ thường, số và dấu gạch dưới.</span>
+          </div>
+          <div class="field">
+            <label for="profileDisplayName">Tên hiển thị</label>
+            <input id="profileDisplayName" class="input" name="display_name" type="text" minlength="2" maxlength="60" autocomplete="name" required>
+          </div>
+          <div class="field">
+            <label for="profileEmail">Email</label>
+            <input id="profileEmail" class="input" type="email" readonly>
+            <span class="field-hint">Email được quản lý bởi hệ thống đăng nhập.</span>
+          </div>
+          <div class="field">
+            <label for="profileGrade">Khối lớp</label>
+            <select id="profileGrade" class="select" name="grade">
+              <option value="">Chưa chọn</option>
+              <option value="10">Lớp 10</option>
+              <option value="11">Lớp 11</option>
+              <option value="12">Lớp 12</option>
+              <option value="graduate">Đã tốt nghiệp</option>
+              <option value="other">Khác</option>
+            </select>
+          </div>
+          <div class="field field-full">
+            <label for="profileBio">Giới thiệu</label>
+            <textarea id="profileBio" class="textarea" name="bio" maxlength="280" placeholder="Chia sẻ đôi chút về bạn..."></textarea>
+            <span class="field-hint">Tối đa 280 ký tự.</span>
+          </div>
+          <div class="form-actions field-full">
+            <button class="button" type="submit">Lưu thay đổi</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="assets/profile-page.js"></script>
+</body>
+</html>

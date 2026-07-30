@@ -14,6 +14,20 @@ Hãy chạy migration này trước khi cập nhật mã website. Migration bổ
 - bảo vệ quản trị viên cuối cùng;
 - bảng `access_audit_log` ghi lại mọi thay đổi quyền.
 
+## Project hiện tại: thêm diễn đàn
+
+Sau khi hoàn tất phân quyền, mở **SQL Editor**, dán toàn bộ file
+`forum_migration.sql` và chọn **Run**. Chỉ cập nhật mã website sau khi Supabase
+báo `Success. No rows returned`.
+
+Migration này tạo:
+
+- bảng bài viết, bình luận, lượt thích và lượt chia sẻ;
+- hai khu vực `question` (Hỏi đáp) và `entertainment` (Giải trí);
+- môn học, khối và trạng thái đã giải cho bài Hỏi đáp;
+- RLS theo role và `account_status`;
+- bucket `forum-media` cho ảnh/video tối đa 25 MB.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -94,3 +108,7 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
 8. Bật Google provider rồi thử nút **Tiếp tục bằng Google**.
 9. Mở **Quên mật khẩu**, nhập email, nhận mã 6 số và đặt mật khẩu mới.
 10. Mở hồ sơ và thử đổi mật khẩu trong phần **Bảo mật tài khoản**.
+11. Chạy `forum_migration.sql`, đăng một bài Hỏi đáp kèm ảnh và đánh dấu đã giải.
+12. Thử like, bình luận, chia sẻ trong khu vực Giải trí.
+13. Tạm khóa tài khoản test và xác nhận tài khoản chỉ đọc, không thể tương tác.
+14. Cấm tài khoản test và xác nhận tài khoản không thể mở dữ liệu diễn đàn.

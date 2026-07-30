@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f8ff">
+  <meta name="color-scheme" content="light dark">
+  <title>Diễn đàn · Chốn Học Tập</title>
+  <script>
+  try{document.documentElement.dataset.theme=localStorage.getItem('chonhoctap-theme')||'light'}
+  catch{document.documentElement.dataset.theme='light'}
+  </script>
+  <link rel="icon" href="avatar.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/account.css?v=20260730-5">
+  <link rel="stylesheet" href="assets/forum.css?v=20260730-1">
+</head>
+<body>
+  <header class="account-topbar">
+    <div class="account-topbar-inner">
+      <a class="brand-link" href="./">
+        <img src="avatar.png" alt="">
+        <span class="brand-copy"><strong>CHỐN HỌC TẬP</strong><span>Diễn đàn học sinh</span></span>
+      </a>
+      <div class="topbar-actions">
+        <a class="topbar-link" href="./">Tài liệu</a>
+        <a class="topbar-link" href="profile.html">Hồ sơ</a>
+        <button class="theme-button" type="button" data-theme-toggle aria-pressed="false">
+          <span data-theme-icon aria-hidden="true">🌙</span>
+          <span data-theme-label>Giao diện tối</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="forum-main">
+    <section class="forum-hero">
+      <div>
+        <div class="eyebrow">Cộng đồng Chốn Học Tập</div>
+        <h1>Cùng hỏi, cùng chia sẻ</h1>
+        <p>Đăng bài nhờ giải bài tập hoặc chia sẻ những khoảnh khắc thú vị với cộng đồng.</p>
+      </div>
+      <div id="viewerChip" class="viewer-chip" aria-live="polite">
+        <span class="viewer-dot"></span>
+        <span>Đang tải tài khoản...</span>
+      </div>
+    </section>
+
+    <div id="forumMessage" class="message forum-message" role="status" aria-live="polite" hidden></div>
+
+    <section id="forumDenied" class="panel forum-denied" hidden>
+      <span aria-hidden="true">🚫</span>
+      <h2>Tài khoản đã bị chặn khỏi diễn đàn</h2>
+      <p>Hãy liên hệ quản trị viên Chốn Học Tập nếu bạn cho rằng đây là nhầm lẫn.</p>
+      <a class="button" href="./">Về trang chủ</a>
+    </section>
+
+    <div id="forumApp" hidden>
+      <nav class="forum-tabs panel" aria-label="Khu vực diễn đàn">
+        <button class="forum-tab active" type="button" data-category="question">
+          <span aria-hidden="true">❓</span>
+          <span><strong>Hỏi đáp</strong><small>Nhờ cộng đồng giải bài</small></span>
+        </button>
+        <button class="forum-tab" type="button" data-category="entertainment">
+          <span aria-hidden="true">✨</span>
+          <span><strong>Giải trí</strong><small>Chia sẻ như mạng xã hội</small></span>
+        </button>
+      </nav>
+
+      <div id="readonlyBanner" class="readonly-banner" hidden>
+        <span aria-hidden="true">🔒</span>
+        <span>Tài khoản đang tạm khóa. Bạn có thể đọc bài nhưng chưa thể đăng hoặc tương tác.</span>
+      </div>
+
+      <div class="forum-layout">
+        <div class="forum-primary">
+          <section id="composer" class="panel composer">
+            <div class="composer-profile">
+              <img id="composerAvatar" src="avatar.png" alt="">
+              <div>
+                <strong id="composerName">Thành viên</strong>
+                <span id="composerPrompt">Bạn đang cần giải bài nào?</span>
+              </div>
+            </div>
+
+            <form id="postForm" class="composer-form">
+              <div class="composer-grid">
+                <div id="questionFields" class="question-fields">
+                  <label class="field">
+                    <span>Môn học</span>
+                    <select id="postSubject" class="select">
+                      <option value="toan">Toán</option>
+                      <option value="vat-ly">Vật lý</option>
+                      <option value="hoa-hoc">Hóa học</option>
+                      <option value="sinh-hoc">Sinh học</option>
+                      <option value="ngu-van">Ngữ văn</option>
+                      <option value="tieng-anh">Tiếng Anh</option>
+                      <option value="tin-hoc">Tin học</option>
+                      <option value="khac">Môn khác</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Khối</span>
+                    <select id="postGrade" class="select">
+                      <option value="10">Lớp 10</option>
+                      <option value="11">Lớp 11</option>
+                      <option value="12">Lớp 12</option>
+                      <option value="other">Khác</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span id="postTitleLabel">Câu hỏi chính</span>
+                  <input id="postTitle" class="input" type="text" maxlength="180" required
+                    placeholder="Ví dụ: Giúp mình giải câu hình học này với">
+                </label>
+
+                <label class="field">
+                  <span>Nội dung chi tiết</span>
+                  <textarea id="postBody" class="textarea" maxlength="5000"
+                    placeholder="Mô tả đề bài, phần bạn chưa hiểu hoặc điều bạn muốn chia sẻ..."></textarea>
+                </label>
+
+                <label class="field">
+                  <span>Hashtag</span>
+                  <input id="postHashtags" class="input" type="text" maxlength="160"
+                    placeholder="#hinhhoc #baitapkhó — tối đa 8 hashtag">
+                </label>
+              </div>
+
+              <div id="mediaPreview" class="media-preview" hidden></div>
+              <div class="composer-actions">
+                <label class="media-button">
+                  <input id="postMedia" type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime">
+                  <span aria-hidden="true">🖼️</span>
+                  <span>Ảnh hoặc video</span>
+                </label>
+                <span class="composer-note">Tối đa 25 MB</span>
+                <button id="publishButton" class="button" type="submit">Đăng bài</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="feed-toolbar panel">
+            <div>
+              <strong id="feedTitle">Bài hỏi đáp mới nhất</strong>
+              <span id="feedCount">Đang tải...</span>
+            </div>
+            <div class="feed-filters">
+              <select id="gradeFilter" class="select" aria-label="Lọc theo khối">
+                <option value="all">Tất cả khối</option>
+                <option value="10">Lớp 10</option>
+                <option value="11">Lớp 11</option>
+                <option value="12">Lớp 12</option>
+                <option value="other">Khác</option>
+              </select>
+              <select id="statusFilter" class="select" aria-label="Lọc trạng thái câu hỏi">
+                <option value="all">Tất cả trạng thái</option>
+                <option value="unsolved">Chưa giải</option>
+                <option value="solved">Đã giải</option>
+              </select>
+            </div>
+          </section>
+
+          <div id="postFeed" class="post-feed" aria-live="polite">
+            <div class="panel feed-loading">Đang tải bài viết...</div>
+          </div>
+        </div>
+
+        <aside class="forum-sidebar">
+          <section class="panel sidebar-card">
+            <span class="sidebar-icon" aria-hidden="true">🧠</span>
+            <h2 id="sidebarTitle">Hỏi đáp hiệu quả</h2>
+            <ul id="sidebarTips">
+              <li>Chụp rõ đề bài và ghi đúng môn, khối.</li>
+              <li>Nói rõ phần bạn đã làm và chỗ đang vướng.</li>
+              <li>Bấm “Đã giải” khi nhận được lời giải phù hợp.</li>
+            </ul>
+          </section>
+          <section class="panel sidebar-card community-rules">
+            <span class="sidebar-icon" aria-hidden="true">🤝</span>
+            <h2>Quy tắc cộng đồng</h2>
+            <p>Tôn trọng nhau, không spam, không đăng nội dung gây hại và không chia sẻ thông tin riêng tư.</p>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </main>
+
+  <template id="postTemplate">
+    <article class="panel post-card">
+      <header class="post-header">
+        <img class="post-avatar" src="avatar.png" alt="">
+        <div class="post-author">
+          <strong></strong>
+          <div>
+            <span class="post-username"></span>
+            <span aria-hidden="true">·</span>
+            <time></time>
+          </div>
+        </div>
+        <button class="post-menu-button" type="button" aria-label="Tùy chọn bài viết">•••</button>
+      </header>
+      <div class="post-meta"></div>
+      <h2 class="post-title">Bài viết</h2>
+      <p class="post-body"></p>
+      <div class="post-hashtags"></div>
+      <div class="post-media"></div>
+      <div class="post-stats"></div>
+      <div class="post-actions">
+        <button type="button" data-action="like"><span aria-hidden="true">♡</span><span>Thích</span></button>
+        <button type="button" data-action="comment"><span aria-hidden="true">💬</span><span>Bình luận</span></button>
+        <button type="button" data-action="share"><span aria-hidden="true">↗</span><span>Chia sẻ</span></button>
+      </div>
+      <div class="comment-panel" hidden>
+        <form class="comment-form">
+          <img src="avatar.png" alt="">
+          <input type="text" maxlength="1200" placeholder="Viết bình luận..." required>
+          <button type="submit">Gửi</button>
+        </form>
+        <div class="comment-list"></div>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="assets/forum-page.js?v=20260730-1"></script>
+</body>
+</html>

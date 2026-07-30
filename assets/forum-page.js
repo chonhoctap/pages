@@ -14,11 +14,12 @@ import {
 import {
   r2Enabled,
   prepareMedia,
+  mediaMetadata,
+  mediaLimitsForRole,
   uploadToR2,
-  deleteFromR2,
-  IMAGE_OUTPUT_LIMIT,
-  VIDEO_OUTPUT_LIMIT
-} from './media-storage.js?v=20260730-1';
+  uploadToSupabaseResumable,
+  deleteFromR2
+} from './media-storage.js?v=20260730-2';
 
 initThemeToggle();
 
@@ -64,6 +65,7 @@ const elements = {
   hashtags: document.getElementById('postHashtags'),
   media: document.getElementById('postMedia'),
   mediaPreview: document.getElementById('mediaPreview'),
+  mediaLimitNote: document.getElementById('mediaLimitNote'),
   publish: document.getElementById('publishButton'),
   feedTitle: document.getElementById('feedTitle'),
   feedCount: document.getElementById('feedCount'),
@@ -71,26 +73,46 @@ const elements = {
   sortButtons: document.querySelectorAll('[data-sort]'),
   gradeFilter: document.getElementById('gradeFilter'),
   statusFilter: document.getElementById('statusFilter'),
+  moderationFilter: document.getElementById('moderationFilter'),
   feed: document.getElementById('postFeed'),
   template: document.getElementById('postTemplate'),
   sidebarTitle: document.getElementById('sidebarTitle'),
-  sidebarTips: document.getElementById('sidebarTips')
+  sidebarTips: document.getElementById('sidebarTips'),
+  mediaLightbox: document.getElementById('mediaLightbox'),
+  mediaLightboxContent: document.getElementById('mediaLightboxContent'),
+  closeMediaLightbox: document.getElementById('closeMediaLightbox'),
+  reportDialog: document.getElementById('reportDialog'),
+  reportForm: document.getElementById('reportForm'),
+  reportReason: document.getElementById('reportReason'),
+  reportDetails: document.getElementById('reportDetails'),
+  closeReportDialog: document.getElementById('closeReportDialog'),
+  submitReport: document.getElementById('submitReport')
 };
 
 let session;
 let currentProfile;
 let currentCategory = 'question';
 let posts = [];
-let previewUrl = '';
-let selectedMediaFile = null;
 let previewPrepareSequence = 0;
 let previewPreparePromise = Promise.resolve();
 let loadSequence = 0;
 let currentSort = 'latest';
+let selectedPostMedia = [];
+let reportingPost = null;
 const commentPreviewUrls = new Map();
 const commentPreparedFiles = new Map();
 const commentPrepareSequences = new Map();
 const commentPreparePromises = new Map();
+const registeredViews = new Set();
+
+const REACTIONS = {
+  like: { emoji: '👍', label: 'Thích' },
+  love: { emoji: '❤️', label: 'Yêu thích' },
+  haha: { emoji: '😆', label: 'Haha' },
+  wow: { emoji: '😮', label: 'Wow' },
+  sad: { emoji: '😢', label: 'Buồn' },
+  angry: { emoji: '😡', label: 'Phẫn nộ' }
+};
 
 function canInteract() {
   return currentProfile?.account_status === 'active';
@@ -165,62 +187,150 @@ function uniqueMediaPath(file, prefix = '') {
   return `${session.user.id}/${prefix}${Date.now()}-${uniqueId}.${extension}`;
 }
 
+function currentMediaLimits() {
+  return mediaLimitsForRole(currentProfile?.role || 'member');
+}
+
+function releasePreparedItems(items) {
+  (items || []).forEach(item => {
+    if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+  });
+}
+
 function resetPreview() {
   previewPrepareSequence += 1;
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  previewUrl = '';
-  selectedMediaFile = null;
+  releasePreparedItems(selectedPostMedia);
+  selectedPostMedia = [];
   elements.media.value = '';
   elements.mediaPreview.replaceChildren();
   elements.mediaPreview.hidden = true;
 }
 
-async function showMediaPreview(file) {
+function selectionCountError(files) {
+  const limits = currentMediaLimits();
+  const imageCount = files.filter(file => mediaKind(file) === 'image').length;
+  const videoCount = files.filter(file => mediaKind(file) === 'video').length;
+  if (imageCount > limits.maxImages || videoCount > limits.maxVideos) {
+    return `Tài khoản ${roleLabel(currentProfile?.role)} được chọn tối đa `
+      + `${limits.maxImages} ảnh và ${limits.maxVideos} video.`;
+  }
+  return '';
+}
+
+function renderPreparedPreview(container, items, onRemove) {
+  container.replaceChildren();
+  [...container.classList]
+    .filter(className => className.startsWith('count-'))
+    .forEach(className => container.classList.remove(className));
+  container.classList.add('selection-grid', `count-${Math.min(items.length, 6)}`);
+  items.forEach((item, index) => {
+    const tile = document.createElement('div');
+    tile.className = 'selection-tile';
+    const content = document.createElement(item.type === 'video' ? 'video' : 'img');
+    content.src = item.previewUrl;
+    if (item.type === 'video') {
+      content.muted = true;
+      content.preload = 'metadata';
+    } else {
+      content.alt = `Ảnh xem trước ${index + 1}`;
+    }
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Bỏ media số ${index + 1}`);
+    remove.textContent = '×';
+    remove.addEventListener('click', () => onRemove(index));
+    tile.append(content, remove);
+    container.appendChild(tile);
+  });
+  container.hidden = !items.length;
+}
+
+function renderPostSelectionPreview() {
+  renderPreparedPreview(elements.mediaPreview, selectedPostMedia, index => {
+    const [removed] = selectedPostMedia.splice(index, 1);
+    releasePreparedItems([removed]);
+    renderPostSelectionPreview();
+    if (!selectedPostMedia.length) elements.media.value = '';
+  });
+}
+
+async function prepareSelectedFiles(fileList, sequenceCheck) {
+  const sourceFiles = [...(fileList || [])];
+  const unsupported = sourceFiles.find(file => !mediaKind(file));
+  if (unsupported) {
+    throw new Error('Chỉ hỗ trợ ảnh JPG, PNG, WebP, GIF hoặc video MP4, WebM, MOV.');
+  }
+  const countError = selectionCountError(sourceFiles);
+  if (countError) throw new Error(countError);
+
+  const preparedItems = [];
+  try {
+    for (const source of sourceFiles) {
+      const prepared = await prepareMedia(source, currentProfile?.role || 'member');
+      if (!sequenceCheck()) {
+        releasePreparedItems(preparedItems);
+        return [];
+      }
+      const metadata = await mediaMetadata(prepared);
+      const limits = currentMediaLimits();
+      const landscape = (metadata.width || 0) >= (metadata.height || 0);
+      const fitsFrame = metadata.width && metadata.height && (
+        landscape
+          ? metadata.width <= limits.maxWidth && metadata.height <= limits.maxHeight
+          : metadata.width <= limits.maxHeight && metadata.height <= limits.maxWidth
+      );
+      if (!fitsFrame) {
+        throw new Error(
+          `Media phải nằm trong khung ${limits.qualityLabel}. `
+          + 'GIF động không thể tự giảm độ phân giải.'
+        );
+      }
+      if (!sequenceCheck()) {
+        releasePreparedItems(preparedItems);
+        return [];
+      }
+      preparedItems.push({
+        file: prepared,
+        type: mediaKind(prepared),
+        metadata,
+        previewUrl: URL.createObjectURL(prepared)
+      });
+    }
+    return preparedItems;
+  } catch (error) {
+    releasePreparedItems(preparedItems);
+    throw error;
+  }
+}
+
+async function showMediaPreview(fileList) {
   const sequence = ++previewPrepareSequence;
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  previewUrl = '';
-  selectedMediaFile = null;
+  releasePreparedItems(selectedPostMedia);
+  selectedPostMedia = [];
   elements.mediaPreview.replaceChildren();
   elements.mediaPreview.hidden = true;
-  if (!file) return;
-  const type = mediaKind(file);
-  if (!type) {
-    elements.media.value = '';
-    setInfo('Chỉ hỗ trợ ảnh JPG, PNG, WebP, GIF hoặc video MP4, WebM, MOV.', 'error');
-    return;
-  }
+  if (!fileList?.length) return;
 
   try {
-    if (type === 'image') setInfo('Đang tối ưu ảnh về chất lượng 720p...', 'info');
-    const prepared = await prepareMedia(file);
+    const limits = currentMediaLimits();
+    setInfo(`Đang xử lý media theo giới hạn ${limits.qualityLabel}...`, 'info');
+    const preparedItems = await prepareSelectedFiles(
+      fileList,
+      () => sequence === previewPrepareSequence
+    );
     if (sequence !== previewPrepareSequence) return;
-    selectedMediaFile = prepared;
-    previewUrl = URL.createObjectURL(prepared);
-    if (type === 'image') {
-      const saved = Math.max(0, file.size - prepared.size);
-      const savedText = saved > 0
-        ? `, giảm ${(saved / 1024 / 1024).toFixed(1)} MB`
-        : '';
-      setInfo(`Ảnh đã được tối ưu còn ${(prepared.size / 1024 / 1024).toFixed(2)} MB${savedText}.`, 'success');
-    }
+    selectedPostMedia = preparedItems;
+    renderPostSelectionPreview();
+    const totalSize = selectedPostMedia.reduce((sum, item) => sum + item.file.size, 0);
+    setInfo(
+      `Đã chuẩn bị ${selectedPostMedia.length} tệp (${(totalSize / 1024 / 1024).toFixed(1)} MB).`,
+      'success'
+    );
   } catch (error) {
     if (sequence !== previewPrepareSequence) return;
     elements.media.value = '';
     setInfo(error.message, 'error');
-    return;
   }
-
-  const preview = document.createElement(type === 'image' ? 'img' : 'video');
-  preview.src = previewUrl;
-  preview.alt = type === 'image' ? 'Ảnh xem trước' : '';
-  if (type === 'video') preview.controls = true;
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.setAttribute('aria-label', 'Bỏ ảnh hoặc video');
-  remove.textContent = '×';
-  remove.addEventListener('click', resetPreview);
-  elements.mediaPreview.append(preview, remove);
-  elements.mediaPreview.hidden = false;
 }
 
 function openComposer() {
@@ -289,22 +399,61 @@ function updateCategoryUi() {
   });
 }
 
-async function uploadMedia(file) {
-  if (!file) return null;
+async function uploadPreparedMedia(item, { scope = 'post', postId = '' } = {}) {
+  if (!item?.file) return null;
+  const file = item.file;
   if (r2Enabled()) {
-    return uploadToR2(session, file, { scope: 'post' });
+    const uploaded = await uploadToR2(session, file, { scope, postId });
+    return {
+      ...uploaded,
+      size_bytes: file.size,
+      width: item.metadata.width,
+      height: item.metadata.height,
+      duration_seconds: item.metadata.durationSeconds
+    };
   }
-  const path = uniqueMediaPath(file);
-  const { error } = await supabase.storage
-    .from('forum-media')
-    .upload(path, file, { cacheControl: '3600', upsert: false });
-  if (error) throw error;
-  const { data } = supabase.storage.from('forum-media').getPublicUrl(path);
+  const bucket = scope === 'comment' ? 'forum-comment-media' : 'forum-media';
+  const path = uniqueMediaPath(file, postId ? `${postId}/` : '');
+  if (file.size > 6 * 1024 * 1024) {
+    await uploadToSupabaseResumable(session, bucket, path, file);
+  } else {
+    const { error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type
+      });
+    if (error) throw error;
+  }
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return {
     path,
     url: data.publicUrl,
-    type: mediaKind(file)
+    type: mediaKind(file),
+    size_bytes: file.size,
+    width: item.metadata.width,
+    height: item.metadata.height,
+    duration_seconds: item.metadata.durationSeconds
   };
+}
+
+async function uploadPreparedMediaList(items, options) {
+  const uploaded = [];
+  try {
+    for (const item of items) {
+      uploaded.push(await uploadPreparedMedia(item, options));
+    }
+    return uploaded;
+  } catch (error) {
+    await Promise.allSettled(
+      uploaded.map(item => removeStoredMedia(
+        item.path,
+        options.scope === 'comment' ? 'forum-comment-media' : 'forum-media'
+      ))
+    );
+    throw error;
+  }
 }
 
 async function publishPost(event) {
@@ -321,22 +470,13 @@ async function publishPost(event) {
     elements.title.focus();
     return;
   }
-  const file = selectedMediaFile;
-  const fileLimit = mediaKind(file) === 'image' ? IMAGE_OUTPUT_LIMIT : VIDEO_OUTPUT_LIMIT;
-  if (file && file.size > fileLimit) {
-    setInfo(
-      mediaKind(file) === 'image'
-        ? 'Ảnh sau khi tối ưu phải nhỏ hơn 2 MB.'
-        : 'Video phải nhỏ hơn 25 MB.',
-      'error'
-    );
-    return;
-  }
-
-  let uploaded;
+  const mediaItems = [...selectedPostMedia];
+  let uploaded = [];
+  let createdPostId = '';
   setBusy(elements.publish, true, 'Đang đăng...');
   try {
-    uploaded = await uploadMedia(file);
+    uploaded = await uploadPreparedMediaList(mediaItems, { scope: 'post' });
+    const firstMedia = uploaded[0];
     const payload = {
       author_id: session.user.id,
       category: currentCategory,
@@ -345,23 +485,53 @@ async function publishPost(event) {
       hashtags: parseHashtags(elements.hashtags.value),
       subject: currentCategory === 'question' ? elements.subject.value : null,
       grade: currentCategory === 'question' ? elements.grade.value : null,
-      is_solved: false,
-      media_url: uploaded?.url || null,
-      media_path: uploaded?.path || null,
-      media_type: uploaded?.type || null
+      media_url: firstMedia?.url || null,
+      media_path: firstMedia?.path || null,
+      media_type: firstMedia?.type || null
     };
-    const { error } = await supabase.from('forum_posts').insert(payload);
+    const { data: createdPost, error } = await supabase
+      .from('forum_posts')
+      .insert(payload)
+      .select('id, moderation_status')
+      .single();
     if (error) throw error;
+    createdPostId = createdPost.id;
+
+    if (uploaded.length) {
+      const { error: mediaError } = await supabase
+        .from('forum_post_media')
+        .insert(uploaded.map((item, index) => ({
+          post_id: createdPostId,
+          uploader_id: session.user.id,
+          media_url: item.url,
+          media_path: item.path,
+          media_type: item.type,
+          sort_order: index,
+          size_bytes: item.size_bytes,
+          width: item.width,
+          height: item.height,
+          duration_seconds: item.duration_seconds
+        })));
+      if (mediaError) throw mediaError;
+    }
 
     elements.form.reset();
     resetPreview();
     closeComposer();
-    setInfo('Đã đăng bài thành công.', 'success');
+    setInfo(
+      createdPost.moderation_status === 'pending_review'
+        ? 'Bài đã được gửi vào hàng chờ để quản trị viên xem xét.'
+        : 'Đã đăng bài thành công.',
+      createdPost.moderation_status === 'pending_review' ? 'info' : 'success'
+    );
     await loadPosts();
   } catch (error) {
-    if (uploaded?.path) {
-      await removeStoredMedia(uploaded.path, 'forum-media');
+    if (createdPostId) {
+      await supabase.from('forum_posts').delete().eq('id', createdPostId);
     }
+    await Promise.allSettled(
+      uploaded.map(item => removeStoredMedia(item.path, 'forum-media'))
+    );
     setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
   } finally {
     setBusy(elements.publish, false);
@@ -375,13 +545,22 @@ function countByPost(rows) {
   }, new Map());
 }
 
+function groupByPost(rows) {
+  return (rows || []).reduce((map, row) => {
+    const values = map.get(row.post_id) || [];
+    values.push(row);
+    map.set(row.post_id, values);
+    return map;
+  }, new Map());
+}
+
 function trendScore(post) {
-  const engagement =
-    (post.likeCount || 0) * 3
-    + (post.commentCount || 0) * 2
-    + (post.shareCount || 0) * 4;
-  const ageHours = Math.max(0, (Date.now() - new Date(post.created_at).getTime()) / 3600000);
-  return (engagement + 1) / (1 + ageHours / 36);
+  const gradeBoost = post.category === 'question'
+    && currentProfile?.grade
+    && post.grade === currentProfile.grade
+    ? 1.18
+    : 1;
+  return (post.trendingScore || 0) * gradeBoost;
 }
 
 function visiblePosts() {
@@ -430,6 +609,10 @@ async function loadPosts() {
       media_url,
       media_path,
       media_type,
+      moderation_status,
+      moderation_reason,
+      is_pinned,
+      expires_at,
       created_at,
       updated_at,
       author:profiles!forum_posts_author_id_fkey(
@@ -449,6 +632,9 @@ async function loadPosts() {
   if (currentCategory === 'question' && elements.statusFilter.value !== 'all') {
     query = query.eq('is_solved', elements.statusFilter.value === 'solved');
   }
+  if (canModerate() && elements.moderationFilter?.value !== 'all') {
+    query = query.eq('moderation_status', elements.moderationFilter.value);
+  }
 
   try {
     const { data, error } = await query;
@@ -458,29 +644,79 @@ async function loadPosts() {
 
     if (posts.length) {
       const ids = posts.map(post => post.id);
-      const [likesResult, commentsResult, sharesResult] = await Promise.all([
-        supabase.from('forum_likes').select('post_id, user_id').in('post_id', ids),
+      const [
+        reactionsResult,
+        commentsResult,
+        sharesResult,
+        mediaResult,
+        metricsResult
+      ] = await Promise.all([
+        supabase
+          .from('forum_reactions')
+          .select('post_id, user_id, reaction_type')
+          .in('post_id', ids),
         supabase.from('forum_comments').select('post_id').in('post_id', ids),
-        supabase.from('forum_shares').select('post_id').in('post_id', ids)
+        supabase.from('forum_shares').select('post_id').in('post_id', ids),
+        supabase
+          .from('forum_post_media')
+          .select(`
+            id,
+            post_id,
+            media_url,
+            media_path,
+            media_type,
+            sort_order,
+            size_bytes,
+            width,
+            height,
+            duration_seconds
+          `)
+          .in('post_id', ids)
+          .order('sort_order', { ascending: true }),
+        supabase
+          .from('forum_post_metrics')
+          .select('post_id, view_count, reaction_count, comment_count, share_count, trending_score')
+          .in('post_id', ids)
       ]);
-      if (likesResult.error) throw likesResult.error;
+      if (reactionsResult.error) throw reactionsResult.error;
       if (commentsResult.error) throw commentsResult.error;
       if (sharesResult.error) throw sharesResult.error;
+      if (mediaResult.error) throw mediaResult.error;
+      if (metricsResult.error) throw metricsResult.error;
       if (sequence !== loadSequence) return;
 
-      const likeCounts = countByPost(likesResult.data);
       const commentCounts = countByPost(commentsResult.data);
       const shareCounts = countByPost(sharesResult.data);
-      const liked = new Set(
-        (likesResult.data || [])
-          .filter(row => row.user_id === session.user.id)
-          .map(row => row.post_id)
+      const reactionsByPost = groupByPost(reactionsResult.data);
+      const mediaByPost = groupByPost(mediaResult.data);
+      const metricsByPost = new Map(
+        (metricsResult.data || []).map(metric => [metric.post_id, metric])
       );
       posts.forEach(post => {
-        post.likeCount = likeCounts.get(post.id) || 0;
-        post.commentCount = commentCounts.get(post.id) || 0;
-        post.shareCount = shareCounts.get(post.id) || 0;
-        post.liked = liked.has(post.id);
+        const postReactions = reactionsByPost.get(post.id) || [];
+        const metric = metricsByPost.get(post.id) || {};
+        post.reactionCounts = postReactions.reduce((counts, reaction) => {
+          counts[reaction.reaction_type] = (counts[reaction.reaction_type] || 0) + 1;
+          return counts;
+        }, {});
+        post.myReaction = postReactions.find(
+          reaction => reaction.user_id === session.user.id
+        )?.reaction_type || '';
+        post.reactionCount = Number(metric.reaction_count ?? postReactions.length);
+        post.commentCount = Number(metric.comment_count ?? commentCounts.get(post.id) ?? 0);
+        post.shareCount = Number(metric.share_count ?? shareCounts.get(post.id) ?? 0);
+        post.viewCount = Number(metric.view_count || 0);
+        post.trendingScore = Number(metric.trending_score || 0);
+        post.mediaItems = mediaByPost.get(post.id) || (
+          post.media_url
+            ? [{
+                media_url: post.media_url,
+                media_path: post.media_path,
+                media_type: post.media_type,
+                sort_order: 0
+              }]
+            : []
+        );
       });
     }
 
@@ -499,11 +735,26 @@ async function loadPosts() {
 function updatePostStats(card, post) {
   const stats = card.querySelector('.post-stats');
   const left = document.createElement('span');
-  left.textContent = `${post.likeCount || 0} lượt thích`;
+  const popularReactions = Object.entries(post.reactionCounts || {})
+    .filter(([, count]) => count > 0)
+    .sort((first, second) => second[1] - first[1])
+    .slice(0, 3)
+    .map(([type]) => REACTIONS[type]?.emoji)
+    .join('');
+  left.textContent = `${popularReactions ? `${popularReactions} ` : ''}`
+    + `${post.reactionCount || 0} cảm xúc · ${post.viewCount || 0} lượt xem`;
   const right = document.createElement('span');
   right.textContent = `${post.commentCount || 0} bình luận · ${post.shareCount || 0} lượt chia sẻ`;
   stats.replaceChildren(left, right);
-  card.querySelector('[data-action="like"]').classList.toggle('liked', Boolean(post.liked));
+
+  const reactionButton = card.querySelector('.reaction-main');
+  const reaction = REACTIONS[post.myReaction] || REACTIONS.like;
+  reactionButton.querySelector('[data-reaction-icon]').textContent =
+    post.myReaction ? reaction.emoji : '♡';
+  reactionButton.querySelector('[data-reaction-label]').textContent =
+    post.myReaction ? reaction.label : 'Cảm xúc';
+  reactionButton.classList.toggle('reacted', Boolean(post.myReaction));
+  reactionButton.dataset.reaction = post.myReaction || '';
 }
 
 function chip(text, className = '') {
@@ -511,6 +762,106 @@ function chip(text, className = '') {
   item.className = `post-chip ${className}`.trim();
   item.textContent = text;
   return item;
+}
+
+function mediaUrl(item) {
+  return item?.media_url || item?.url || '';
+}
+
+function openMediaLightbox(items, startIndex = 0) {
+  const item = items[startIndex];
+  if (!item) return;
+  elements.mediaLightboxContent.replaceChildren();
+  const content = document.createElement(item.media_type === 'video' ? 'video' : 'img');
+  content.src = mediaUrl(item);
+  if (item.media_type === 'video') {
+    content.controls = true;
+    content.autoplay = true;
+  } else {
+    content.alt = `Ảnh ${startIndex + 1} trên ${items.length}`;
+  }
+  elements.mediaLightboxContent.appendChild(content);
+
+  if (items.length > 1) {
+    const navigation = document.createElement('div');
+    navigation.className = 'lightbox-navigation';
+    const previous = document.createElement('button');
+    previous.type = 'button';
+    previous.textContent = '‹';
+    previous.setAttribute('aria-label', 'Media trước');
+    previous.addEventListener('click', () => {
+      openMediaLightbox(items, (startIndex - 1 + items.length) % items.length);
+    });
+    const position = document.createElement('span');
+    position.textContent = `${startIndex + 1} / ${items.length}`;
+    const next = document.createElement('button');
+    next.type = 'button';
+    next.textContent = '›';
+    next.setAttribute('aria-label', 'Media sau');
+    next.addEventListener('click', () => {
+      openMediaLightbox(items, (startIndex + 1) % items.length);
+    });
+    navigation.append(previous, position, next);
+    elements.mediaLightboxContent.appendChild(navigation);
+  }
+
+  if (!elements.mediaLightbox.open) {
+    if (typeof elements.mediaLightbox.showModal === 'function') {
+      elements.mediaLightbox.showModal();
+    } else {
+      elements.mediaLightbox.setAttribute('open', '');
+    }
+  }
+}
+
+function closeMediaLightbox() {
+  elements.mediaLightboxContent.querySelectorAll('video').forEach(video => video.pause());
+  elements.mediaLightboxContent.replaceChildren();
+  if (typeof elements.mediaLightbox.close === 'function') {
+    elements.mediaLightbox.close();
+  } else {
+    elements.mediaLightbox.removeAttribute('open');
+  }
+}
+
+function renderMediaGallery(container, items, label, compact = false) {
+  container.replaceChildren();
+  if (!items?.length) return;
+  const visibleItems = items.slice(0, 5);
+  [...container.classList]
+    .filter(className => className.startsWith('count-'))
+    .forEach(className => container.classList.remove(className));
+  container.classList.add('media-gallery', `count-${Math.min(visibleItems.length, 5)}`);
+  container.classList.toggle('compact', compact);
+  visibleItems.forEach((item, index) => {
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'media-tile';
+    tile.setAttribute('aria-label', `Mở media ${index + 1} của ${label}`);
+    const content = document.createElement(item.media_type === 'video' ? 'video' : 'img');
+    content.src = mediaUrl(item);
+    if (item.media_type === 'video') {
+      content.muted = true;
+      content.preload = 'metadata';
+      content.playsInline = true;
+      const play = document.createElement('span');
+      play.className = 'media-play';
+      play.textContent = '▶';
+      tile.append(content, play);
+    } else {
+      content.alt = `Ảnh ${index + 1} của ${label}`;
+      content.loading = 'lazy';
+      tile.appendChild(content);
+    }
+    if (index === 4 && items.length > 5) {
+      const more = document.createElement('span');
+      more.className = 'media-more';
+      more.textContent = `+${items.length - 5}`;
+      tile.appendChild(more);
+    }
+    tile.addEventListener('click', () => openMediaLightbox(items, index));
+    container.appendChild(tile);
+  });
 }
 
 function renderPost(post) {
@@ -541,6 +892,12 @@ function renderPost(post) {
 
   const meta = card.querySelector('.post-meta');
   meta.append(chip(post.category === 'question' ? 'Hỏi đáp' : 'Giải trí'));
+  if (post.is_pinned) meta.append(chip('📌 Đã ghim', 'pinned'));
+  if (post.moderation_status === 'pending_review') {
+    meta.append(chip('Đang chờ duyệt', 'pending'));
+  } else if (post.moderation_status === 'rejected') {
+    meta.append(chip('Không được duyệt', 'rejected'));
+  }
   if (post.category === 'question') {
     meta.append(
       chip(SUBJECT_LABELS[post.subject] || 'Môn khác'),
@@ -560,6 +917,38 @@ function renderPost(post) {
       meta.appendChild(solve);
     }
   }
+  if (post.expires_at && !post.is_pinned) {
+    const expiry = chip(`Tự xóa ${relativeTime(post.expires_at)}`, 'expiry');
+    expiry.title = new Intl.DateTimeFormat('vi-VN', {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    }).format(new Date(post.expires_at));
+    meta.append(expiry);
+  }
+
+  if (post.moderation_status === 'pending_review') {
+    const moderationNote = document.createElement('div');
+    moderationNote.className = 'moderation-note';
+    moderationNote.textContent = post.moderation_reason
+      || 'Bài viết đang chờ quản trị viên xem xét.';
+    card.querySelector('.post-header').after(moderationNote);
+    if (canModerate()) {
+      const controls = document.createElement('div');
+      controls.className = 'moderation-actions';
+      const approve = document.createElement('button');
+      approve.type = 'button';
+      approve.className = 'button button-small';
+      approve.textContent = 'Duyệt bài';
+      approve.addEventListener('click', () => reviewPost(post, 'approve', approve));
+      const reject = document.createElement('button');
+      reject.type = 'button';
+      reject.className = 'button button-small button-danger';
+      reject.textContent = 'Từ chối';
+      reject.addEventListener('click', () => reviewPost(post, 'reject', reject));
+      controls.append(approve, reject);
+      moderationNote.after(controls);
+    }
+  }
 
   card.querySelector('.post-title').textContent = post.title;
   card.querySelector('.post-body').textContent = post.body || '';
@@ -577,27 +966,30 @@ function renderPost(post) {
     hashtags.appendChild(tag);
   });
 
-  const media = card.querySelector('.post-media');
-  if (post.media_url) {
-    const content = document.createElement(post.media_type === 'video' ? 'video' : 'img');
-    content.src = post.media_url;
-    if (post.media_type === 'video') {
-      content.controls = true;
-      content.preload = 'metadata';
-    } else {
-      content.alt = `Ảnh trong bài của ${profileName(author)}`;
-      content.loading = 'lazy';
-    }
-    media.appendChild(content);
-  }
+  renderMediaGallery(
+    card.querySelector('.post-media'),
+    post.mediaItems,
+    profileName(author)
+  );
 
   updatePostStats(card, post);
-  const likeButton = card.querySelector('[data-action="like"]');
-  likeButton.addEventListener('click', () => toggleLike(post, card, likeButton));
+  const reactionButton = card.querySelector('.reaction-main');
+  reactionButton.addEventListener('click', () => {
+    setReaction(post, post.myReaction || 'like', card, reactionButton);
+  });
+  card.querySelectorAll('[data-reaction]').forEach(button => {
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      setReaction(post, button.dataset.reaction, card, button);
+    });
+  });
   card.querySelector('[data-action="comment"]')
     .addEventListener('click', () => toggleComments(post, card));
   card.querySelector('[data-action="share"]')
     .addEventListener('click', () => sharePost(post, card));
+  const reportButton = card.querySelector('[data-action="report"]');
+  reportButton.hidden = !canInteract() || post.author_id === session.user.id;
+  reportButton.addEventListener('click', () => openReportDialog(post));
 
   const menu = card.querySelector('.post-menu-button');
   const mayDelete = canInteract() && (post.author_id === session.user.id || canModerate());
@@ -613,17 +1005,25 @@ function renderPost(post) {
   commentForm.hidden = !canInteract();
   const commentMediaInput = commentForm.querySelector('.comment-media-input');
   commentMediaInput.addEventListener('change', () => {
-    const task = showCommentMediaPreview(commentForm, commentMediaInput.files?.[0]);
+    const task = showCommentMediaPreview(commentForm, commentMediaInput.files);
     commentPreparePromises.set(commentForm, task);
   });
+  const limits = currentMediaLimits();
+  card.querySelector('.comment-media-note').textContent =
+    `${limits.maxImages} ảnh · ${limits.maxVideos} video · ${limits.qualityLabel} · video tối đa 3 phút`;
   commentForm.addEventListener('submit', event => addComment(event, post, card));
+  observePostView(card, post);
   return fragment;
 }
 
 function renderPosts() {
   const visible = visiblePosts();
-  commentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+  commentPreparedFiles.forEach(items => releasePreparedItems(items));
   commentPreviewUrls.clear();
+  commentPreparedFiles.clear();
+  commentPreparePromises.clear();
+  commentPrepareSequences.clear();
+  postViewObserver?.disconnect();
   elements.feed.replaceChildren();
   elements.feedCount.textContent = `${visible.length} bài viết`;
   if (!visible.length) {
@@ -673,32 +1073,120 @@ async function markSolved(post, card, button) {
   }
 }
 
-async function toggleLike(post, card, button) {
-  if (!canInteract()) {
-    setInfo('Tài khoản đang tạm khóa nên chưa thể thích bài viết.', 'error');
+async function reviewPost(post, action, button) {
+  if (!canModerate()) {
+    setInfo('Chỉ điều hành viên hoặc quản trị viên được duyệt bài.', 'error');
     return;
   }
+  const note = action === 'reject'
+    ? window.prompt('Lý do từ chối bài viết:', post.moderation_reason || '')
+    : '';
+  if (action === 'reject' && note === null) return;
+  setBusy(button, true, action === 'approve' ? 'Đang duyệt...' : 'Đang từ chối...');
+  try {
+    const { data, error } = await supabase.rpc('review_forum_post', {
+      target_post_id: post.id,
+      review_action: action,
+      review_note: note || null
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Không tìm thấy bài viết cần duyệt.');
+    setInfo(
+      action === 'approve' ? 'Đã duyệt bài viết.' : 'Đã từ chối bài viết.',
+      'success'
+    );
+    await loadPosts();
+  } catch (error) {
+    setInfo(`Không thể duyệt bài: ${humanizeAuthError(error)}`, 'error');
+    setBusy(button, false);
+  }
+}
+
+async function setReaction(post, type, card, button) {
+  if (!canInteract()) {
+    setInfo('Tài khoản đang tạm khóa nên chưa thể bày tỏ cảm xúc.', 'error');
+    return;
+  }
+  if (!REACTIONS[type]) return;
+  const previous = post.myReaction;
+  const shouldRemove = previous === type;
   button.disabled = true;
   try {
-    const query = post.liked
+    const query = shouldRemove
       ? supabase
-          .from('forum_likes')
+          .from('forum_reactions')
           .delete()
           .eq('post_id', post.id)
           .eq('user_id', session.user.id)
       : supabase
-          .from('forum_likes')
-          .insert({ post_id: post.id, user_id: session.user.id });
+          .from('forum_reactions')
+          .upsert({
+            post_id: post.id,
+            user_id: session.user.id,
+            reaction_type: type,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'post_id,user_id' });
     const { error } = await query;
     if (error) throw error;
-    post.liked = !post.liked;
-    post.likeCount += post.liked ? 1 : -1;
+
+    if (previous) {
+      post.reactionCounts[previous] = Math.max(
+        0,
+        (post.reactionCounts[previous] || 0) - 1
+      );
+    }
+    if (shouldRemove) {
+      post.myReaction = '';
+      post.reactionCount = Math.max(0, post.reactionCount - 1);
+    } else {
+      post.myReaction = type;
+      post.reactionCounts[type] = (post.reactionCounts[type] || 0) + 1;
+      if (!previous) post.reactionCount += 1;
+    }
     updatePostStats(card, post);
   } catch (error) {
-    setInfo(`Không thể cập nhật lượt thích: ${humanizeAuthError(error)}`, 'error');
+    setInfo(`Không thể cập nhật cảm xúc: ${humanizeAuthError(error)}`, 'error');
   } finally {
     button.disabled = false;
   }
+}
+
+async function registerPostView(post, card) {
+  if (registeredViews.has(post.id)) return;
+  registeredViews.add(post.id);
+  try {
+    const { data, error } = await supabase.rpc('register_forum_post_view', {
+      target_post_id: post.id
+    });
+    if (error) throw error;
+    if (data) {
+      post.viewCount += 1;
+      updatePostStats(card, post);
+    }
+  } catch {
+    registeredViews.delete(post.id);
+  }
+}
+
+let postViewObserver;
+
+function observePostView(card, post) {
+  if (!('IntersectionObserver' in window)) {
+    window.setTimeout(() => registerPostView(post, card), 800);
+    return;
+  }
+  if (!postViewObserver) {
+    postViewObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.45) return;
+        const target = entry.target;
+        postViewObserver.unobserve(target);
+        const record = posts.find(item => item.id === target.dataset.postId);
+        if (record) registerPostView(record, target);
+      });
+    }, { threshold: [0.45] });
+  }
+  postViewObserver.observe(card);
 }
 
 async function toggleComments(post, card) {
@@ -709,26 +1197,10 @@ async function toggleComments(post, card) {
   }
 }
 
-function commentMediaError(file) {
-  const type = mediaKind(file);
-  if (!type) return 'Chỉ hỗ trợ ảnh JPG, PNG, WebP, GIF hoặc video MP4, WebM, MOV.';
-  const limit = type === 'image'
-    ? IMAGE_OUTPUT_LIMIT
-    : r2Enabled()
-      ? VIDEO_OUTPUT_LIMIT
-      : 8 * 1024 * 1024;
-  if (file.size > limit) {
-    return type === 'image'
-      ? 'Ảnh bình luận phải nhỏ hơn 2 MB.'
-      : `Video bình luận phải nhỏ hơn ${r2Enabled() ? 25 : 8} MB.`;
-  }
-  return '';
-}
-
 function resetCommentMedia(form) {
   commentPrepareSequences.set(form, (commentPrepareSequences.get(form) || 0) + 1);
-  const currentUrl = commentPreviewUrls.get(form);
-  if (currentUrl) URL.revokeObjectURL(currentUrl);
+  const preparedItems = commentPreparedFiles.get(form) || [];
+  releasePreparedItems(preparedItems);
   commentPreviewUrls.delete(form);
   commentPreparedFiles.delete(form);
   commentPreparePromises.delete(form);
@@ -739,62 +1211,38 @@ function resetCommentMedia(form) {
   preview.hidden = true;
 }
 
-async function showCommentMediaPreview(form, file) {
+function renderCommentSelectionPreview(form) {
+  const items = commentPreparedFiles.get(form) || [];
+  const preview = form.querySelector('.comment-media-preview');
+  renderPreparedPreview(preview, items, index => {
+    const [removed] = items.splice(index, 1);
+    releasePreparedItems([removed]);
+    commentPreparedFiles.set(form, items);
+    commentPreviewUrls.set(form, items.map(item => item.previewUrl));
+    renderCommentSelectionPreview(form);
+    if (!items.length) form.querySelector('.comment-media-input').value = '';
+  });
+}
+
+async function showCommentMediaPreview(form, fileList) {
   resetCommentMedia(form);
-  if (!file) return;
+  if (!fileList?.length) return;
   const sequence = commentPrepareSequences.get(form);
-  let prepared;
   try {
-    if (mediaKind(file) === 'image') setInfo('Đang tối ưu ảnh bình luận...', 'info');
-    prepared = await prepareMedia(file);
+    setInfo('Đang xử lý media bình luận...', 'info');
+    const items = await prepareSelectedFiles(
+      fileList,
+      () => sequence === commentPrepareSequences.get(form)
+    );
     if (sequence !== commentPrepareSequences.get(form)) return;
+    commentPreparedFiles.set(form, items);
+    commentPreviewUrls.set(form, items.map(item => item.previewUrl));
+    renderCommentSelectionPreview(form);
+    setInfo(`Đã chuẩn bị ${items.length} tệp cho bình luận.`, 'success');
   } catch (error) {
     if (sequence !== commentPrepareSequences.get(form)) return;
     setInfo(error.message, 'error');
-    return;
   }
-  const invalid = commentMediaError(prepared);
-  if (invalid) return setInfo(invalid, 'error');
-
-  commentPreparedFiles.set(form, prepared);
-  const previewUrl = URL.createObjectURL(prepared);
-  commentPreviewUrls.set(form, previewUrl);
-  const preview = form.querySelector('.comment-media-preview');
-  const content = document.createElement(mediaKind(prepared) === 'video' ? 'video' : 'img');
-  content.src = previewUrl;
-  if (mediaKind(prepared) === 'video') content.controls = true;
-  else content.alt = 'Ảnh đính kèm bình luận';
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.textContent = '×';
-  remove.setAttribute('aria-label', 'Bỏ ảnh hoặc video khỏi bình luận');
-  remove.addEventListener('click', () => resetCommentMedia(form));
-  preview.append(content, remove);
-  preview.hidden = false;
-}
-
-async function uploadCommentMedia(file, postId) {
-  if (!file) return null;
-  const invalid = commentMediaError(file);
-  if (invalid) throw new Error(invalid);
-  if (r2Enabled()) {
-    return uploadToR2(session, file, { scope: 'comment', postId });
-  }
-  const path = uniqueMediaPath(file, `${postId}/`);
-  const { error } = await supabase.storage
-    .from('forum-comment-media')
-    .upload(path, file, {
-      cacheControl: '3600',
-      upsert: false,
-      contentType: file.type
-    });
-  if (error) throw error;
-  const { data } = supabase.storage.from('forum-comment-media').getPublicUrl(path);
-  return {
-    path,
-    url: data.publicUrl,
-    type: mediaKind(file)
-  };
 }
 
 async function loadComments(post, card) {
@@ -826,7 +1274,45 @@ async function loadComments(post, card) {
       .eq('post_id', post.id)
       .order('created_at', { ascending: true });
     if (error) throw error;
-    renderComments(data || [], post, card);
+    const comments = data || [];
+    if (comments.length) {
+      const { data: mediaRows, error: mediaError } = await supabase
+        .from('forum_comment_media')
+        .select(`
+          id,
+          comment_id,
+          media_url,
+          media_path,
+          media_type,
+          sort_order,
+          size_bytes,
+          width,
+          height,
+          duration_seconds
+        `)
+        .in('comment_id', comments.map(comment => comment.id))
+        .order('sort_order', { ascending: true });
+      if (mediaError) throw mediaError;
+      const groupedMedia = (mediaRows || []).reduce((map, row) => {
+        const values = map.get(row.comment_id) || [];
+        values.push(row);
+        map.set(row.comment_id, values);
+        return map;
+      }, new Map());
+      comments.forEach(comment => {
+        comment.mediaItems = groupedMedia.get(comment.id) || (
+          comment.media_url
+            ? [{
+                media_url: comment.media_url,
+                media_path: comment.media_path,
+                media_type: comment.media_type,
+                sort_order: 0
+              }]
+            : []
+        );
+      });
+    }
+    renderComments(comments, post, card);
     card.querySelector('.comment-panel').dataset.loaded = 'true';
   } catch (error) {
     loading.textContent = `Không thể tải bình luận: ${humanizeAuthError(error)}`;
@@ -875,17 +1361,10 @@ function renderComments(comments, post, card) {
     time.dateTime = comment.created_at;
     time.textContent = relativeTime(comment.created_at);
     bubble.append(authorLine, body);
-    if (comment.media_url) {
-      const media = document.createElement(comment.media_type === 'video' ? 'video' : 'img');
-      media.className = 'comment-media';
-      media.src = comment.media_url;
-      if (comment.media_type === 'video') {
-        media.controls = true;
-        media.preload = 'metadata';
-      } else {
-        media.alt = `Ảnh trong bình luận của ${profileName(author)}`;
-        media.loading = 'lazy';
-      }
+    if (comment.mediaItems?.length) {
+      const media = document.createElement('div');
+      media.className = 'comment-media-gallery';
+      renderMediaGallery(media, comment.mediaItems, profileName(author), true);
       bubble.appendChild(media);
     }
     bubble.appendChild(time);
@@ -906,9 +1385,15 @@ function renderComments(comments, post, card) {
           setInfo(`Không thể xóa bình luận: ${humanizeAuthError(error)}`, 'error');
           return;
         }
-        if (comment.media_path) {
-          await removeStoredMedia(comment.media_path, 'forum-comment-media');
-        }
+        const paths = new Set(
+          [
+            comment.media_path,
+            ...(comment.mediaItems || []).map(item => item.media_path)
+          ].filter(Boolean)
+        );
+        await Promise.allSettled(
+          [...paths].map(path => removeStoredMedia(path, 'forum-comment-media'))
+        );
         post.commentCount = Math.max(0, post.commentCount - 1);
         updatePostStats(card, post);
         await loadComments(post, card);
@@ -925,38 +1410,64 @@ async function addComment(event, post, card) {
   const form = event.currentTarget;
   await commentPreparePromises.get(form);
   const input = form.querySelector('.comment-input');
-  const mediaInput = form.querySelector('.comment-media-input');
   const button = form.querySelector('.comment-submit');
   const body = input.value.trim();
-  const file = commentPreparedFiles.get(form) || mediaInput.files?.[0];
-  if (!body && !file) return;
-  const invalid = file ? commentMediaError(file) : '';
-  if (invalid) {
-    setInfo(invalid, 'error');
-    return;
-  }
-  let uploaded;
+  const mediaItems = commentPreparedFiles.get(form) || [];
+  if (!body && !mediaItems.length) return;
+  let uploaded = [];
+  let createdCommentId = '';
   setBusy(button, true, '...');
   try {
-    uploaded = await uploadCommentMedia(file, post.id);
-    const { error } = await supabase.from('forum_comments').insert({
-      post_id: post.id,
-      author_id: session.user.id,
-      body: body || null,
-      media_url: uploaded?.url || null,
-      media_path: uploaded?.path || null,
-      media_type: uploaded?.type || null
+    uploaded = await uploadPreparedMediaList(mediaItems, {
+      scope: 'comment',
+      postId: post.id
     });
+    const firstMedia = uploaded[0];
+    const { data: createdComment, error } = await supabase
+      .from('forum_comments')
+      .insert({
+        post_id: post.id,
+        author_id: session.user.id,
+        body: body || null,
+        media_url: firstMedia?.url || null,
+        media_path: firstMedia?.path || null,
+        media_type: firstMedia?.type || null
+      })
+      .select('id')
+      .single();
     if (error) throw error;
+    createdCommentId = createdComment.id;
+
+    if (uploaded.length) {
+      const { error: mediaError } = await supabase
+        .from('forum_comment_media')
+        .insert(uploaded.map((item, index) => ({
+          comment_id: createdCommentId,
+          uploader_id: session.user.id,
+          media_url: item.url,
+          media_path: item.path,
+          media_type: item.type,
+          sort_order: index,
+          size_bytes: item.size_bytes,
+          width: item.width,
+          height: item.height,
+          duration_seconds: item.duration_seconds
+        })));
+      if (mediaError) throw mediaError;
+    }
+
     input.value = '';
     resetCommentMedia(form);
     post.commentCount += 1;
     updatePostStats(card, post);
     await loadComments(post, card);
   } catch (error) {
-    if (uploaded?.path) {
-      await removeStoredMedia(uploaded.path, 'forum-comment-media');
+    if (createdCommentId) {
+      await supabase.from('forum_comments').delete().eq('id', createdCommentId);
     }
+    await Promise.allSettled(
+      uploaded.map(item => removeStoredMedia(item.path, 'forum-comment-media'))
+    );
     setInfo(`Không thể gửi bình luận: ${humanizeAuthError(error)}`, 'error');
   } finally {
     setBusy(button, false);
@@ -999,27 +1510,100 @@ async function sharePost(post, card) {
   }
 }
 
+function openReportDialog(post) {
+  if (!canInteract() || post.author_id === session.user.id) return;
+  reportingPost = post;
+  elements.reportForm.reset();
+  if (typeof elements.reportDialog.showModal === 'function') {
+    elements.reportDialog.showModal();
+  } else {
+    elements.reportDialog.setAttribute('open', '');
+  }
+  window.setTimeout(() => elements.reportReason.focus(), 30);
+}
+
+function closeReportDialog() {
+  reportingPost = null;
+  if (typeof elements.reportDialog.close === 'function') {
+    elements.reportDialog.close();
+  } else {
+    elements.reportDialog.removeAttribute('open');
+  }
+}
+
+async function submitReport(event) {
+  event.preventDefault();
+  if (!reportingPost) return;
+  setBusy(elements.submitReport, true, 'Đang gửi...');
+  try {
+    const { error } = await supabase.from('forum_reports').insert({
+      post_id: reportingPost.id,
+      reporter_id: session.user.id,
+      reason: elements.reportReason.value,
+      details: elements.reportDetails.value.trim() || null
+    });
+    if (error) {
+      if (error.code === '23505') {
+        throw new Error('Bạn đã báo cáo bài viết này trước đó.');
+      }
+      throw error;
+    }
+    closeReportDialog();
+    setInfo(
+      'Đã gửi báo cáo. Khi bài nhận đủ báo cáo, hệ thống sẽ chuyển bài vào hàng chờ duyệt.',
+      'success'
+    );
+  } catch (error) {
+    setInfo(`Không thể gửi báo cáo: ${humanizeAuthError(error)}`, 'error');
+  } finally {
+    setBusy(elements.submitReport, false);
+  }
+}
+
 async function deletePost(post, card, button) {
   if (!window.confirm('Bạn chắc chắn muốn xóa bài viết này?')) return;
   setBusy(button, true, '...');
   try {
     const { data: commentMedia, error: commentMediaError } = await supabase
       .from('forum_comments')
-      .select('media_path')
+      .select('id, media_path')
       .eq('post_id', post.id)
-      .not('media_path', 'is', null);
+      .limit(1000);
     if (commentMediaError) throw commentMediaError;
-    const commentPaths = (commentMedia || []).map(item => item.media_path).filter(Boolean);
-    if (commentPaths.length) {
-      await Promise.all(
-        commentPaths.map(path => removeStoredMedia(path, 'forum-comment-media'))
-      );
+
+    const commentIds = (commentMedia || []).map(item => item.id);
+    let commentMediaRows = [];
+    if (commentIds.length) {
+      const { data, error } = await supabase
+        .from('forum_comment_media')
+        .select('media_path')
+        .in('comment_id', commentIds);
+      if (error) throw error;
+      commentMediaRows = data || [];
     }
+
+    const { data: postMediaRows, error: postMediaError } = await supabase
+      .from('forum_post_media')
+      .select('media_path')
+      .eq('post_id', post.id);
+    if (postMediaError) throw postMediaError;
+
+    const commentPaths = new Set([
+      ...(commentMedia || []).map(item => item.media_path),
+      ...commentMediaRows.map(item => item.media_path)
+    ].filter(Boolean));
+    const postPaths = new Set([
+      post.media_path,
+      ...(postMediaRows || []).map(item => item.media_path)
+    ].filter(Boolean));
+
+    await Promise.allSettled([
+      ...[...commentPaths].map(path => removeStoredMedia(path, 'forum-comment-media')),
+      ...[...postPaths].map(path => removeStoredMedia(path, 'forum-media'))
+    ]);
+
     const { error } = await supabase.from('forum_posts').delete().eq('id', post.id);
     if (error) throw error;
-    if (post.media_path) {
-      await removeStoredMedia(post.media_path, 'forum-media');
-    }
     posts = posts.filter(item => item.id !== post.id);
     card.remove();
     renderPosts();
@@ -1043,6 +1627,7 @@ async function removeStoredMedia(path, legacyBucket) {
 
 function configureAccount() {
   const name = profileName(currentProfile, session.user);
+  const limits = currentMediaLimits();
   elements.viewer.querySelector('span:last-child').textContent =
     `${name} · ${roleLabel(currentProfile.role)} · ${statusLabel(currentProfile.account_status)}`;
   elements.composerName.textContent = name;
@@ -1050,6 +1635,11 @@ function configureAccount() {
     currentProfile.avatar_url || session.user.user_metadata?.avatar_url || 'avatar.png';
   elements.readonly.hidden = canInteract();
   elements.openComposer.hidden = !canInteract();
+  elements.moderationFilter.hidden = !canModerate();
+  elements.mediaLimitNote.textContent =
+    `${limits.maxImages} ảnh · ${limits.maxVideos} video · ${limits.qualityLabel} · `
+    + `ảnh ${(limits.imageBytes / 1024 / 1024).toFixed(1)} MB · `
+    + `video ${Math.round(limits.videoBytes / 1024 / 1024)} MB`;
 }
 
 async function init() {
@@ -1082,12 +1672,16 @@ elements.tabs.forEach(tab => {
 });
 elements.form.addEventListener('submit', publishPost);
 elements.media.addEventListener('change', () => {
-  previewPreparePromise = showMediaPreview(elements.media.files[0]);
+  previewPreparePromise = showMediaPreview(elements.media.files);
 });
 elements.openComposer.addEventListener('click', openComposer);
 elements.closeComposer.addEventListener('click', closeComposer);
 elements.composerDialog.addEventListener('click', event => {
   if (event.target === elements.composerDialog) closeComposer();
+});
+elements.composerDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  closeComposer();
 });
 elements.search.addEventListener('input', renderPosts);
 elements.sortButtons.forEach(button => {
@@ -1100,9 +1694,27 @@ elements.sortButtons.forEach(button => {
 });
 elements.gradeFilter.addEventListener('change', loadPosts);
 elements.statusFilter.addEventListener('change', loadPosts);
+elements.moderationFilter.addEventListener('change', loadPosts);
+elements.closeMediaLightbox.addEventListener('click', closeMediaLightbox);
+elements.mediaLightbox.addEventListener('click', event => {
+  if (event.target === elements.mediaLightbox) closeMediaLightbox();
+});
+elements.mediaLightbox.addEventListener('cancel', event => {
+  event.preventDefault();
+  closeMediaLightbox();
+});
+elements.reportForm.addEventListener('submit', submitReport);
+elements.closeReportDialog.addEventListener('click', closeReportDialog);
+elements.reportDialog.addEventListener('click', event => {
+  if (event.target === elements.reportDialog) closeReportDialog();
+});
+elements.reportDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  closeReportDialog();
+});
 window.addEventListener('beforeunload', () => {
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  commentPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+  releasePreparedItems(selectedPostMedia);
+  commentPreviewUrls.forEach(urls => urls.forEach(url => URL.revokeObjectURL(url)));
 });
 
 init();

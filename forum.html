@@ -15,10 +15,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/account.css?v=20260730-6">
-  <link rel="stylesheet" href="assets/forum.css?v=20260730-2">
+  <link rel="stylesheet" href="assets/forum.css?v=20260730-3">
 </head>
 <body>
-  <header class="account-topbar">
+  <header class="account-topbar" aria-label="Điều hướng chính">
     <div class="account-topbar-inner">
       <a class="brand-link" href="./">
         <img src="avatar.png" alt="">
@@ -102,6 +102,12 @@
                 <option value="all">Tất cả trạng thái</option>
                 <option value="unsolved">Chưa giải</option>
                 <option value="solved">Đã giải</option>
+              </select>
+              <select id="moderationFilter" class="select" aria-label="Lọc trạng thái kiểm duyệt" hidden>
+                <option value="all">Tất cả kiểm duyệt</option>
+                <option value="pending_review">Chờ duyệt</option>
+                <option value="published">Đã duyệt</option>
+                <option value="rejected">Từ chối</option>
               </select>
             </div>
             <button id="openComposerButton" class="create-post-button" type="button">
@@ -197,11 +203,12 @@
             <div class="composer-actions">
               <label class="media-button">
                 <input id="postMedia" type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime">
+                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                  multiple>
                 <span aria-hidden="true">🖼️</span>
-                <span>Ảnh hoặc video</span>
+                <span>Thêm ảnh/video</span>
               </label>
-              <span class="composer-note">Ảnh WebP 720p tối đa 2 MB · video tối đa 25 MB</span>
+              <span id="mediaLimitNote" class="composer-note">Đang tải giới hạn media...</span>
               <button id="publishButton" class="button" type="submit">Đăng bài</button>
             </div>
           </form>
@@ -237,9 +244,23 @@
       <div class="post-media"></div>
       <div class="post-stats"></div>
       <div class="post-actions">
-        <button type="button" data-action="like"><span aria-hidden="true">♡</span><span>Thích</span></button>
+        <div class="reaction-action">
+          <button class="reaction-main" type="button">
+            <span data-reaction-icon aria-hidden="true">♡</span>
+            <span data-reaction-label>Cảm xúc</span>
+          </button>
+          <div class="reaction-picker" role="group" aria-label="Chọn cảm xúc">
+            <button type="button" data-reaction="like" title="Thích">👍</button>
+            <button type="button" data-reaction="love" title="Yêu thích">❤️</button>
+            <button type="button" data-reaction="haha" title="Haha">😆</button>
+            <button type="button" data-reaction="wow" title="Wow">😮</button>
+            <button type="button" data-reaction="sad" title="Buồn">😢</button>
+            <button type="button" data-reaction="angry" title="Phẫn nộ">😡</button>
+          </div>
+        </div>
         <button type="button" data-action="comment"><span aria-hidden="true">💬</span><span>Bình luận</span></button>
         <button type="button" data-action="share"><span aria-hidden="true">↗</span><span>Chia sẻ</span></button>
+        <button type="button" data-action="report"><span aria-hidden="true">⚑</span><span>Báo cáo</span></button>
       </div>
       <div class="comment-panel" hidden>
         <form class="comment-form">
@@ -250,18 +271,54 @@
           </div>
           <label class="comment-attach" title="Gắn ảnh hoặc video">
             <input class="comment-media-input" type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime">
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+              multiple>
             <span aria-hidden="true">🖼️</span>
             <span class="sr-only">Gắn ảnh hoặc video</span>
           </label>
           <button class="comment-submit" type="submit">Gửi</button>
         </form>
-        <p class="comment-media-note">Ảnh WebP 720p tối đa 2 MB · video R2 tối đa 25 MB</p>
+        <p class="comment-media-note">Đang tải giới hạn media...</p>
         <div class="comment-list"></div>
       </div>
     </article>
   </template>
 
-  <script type="module" src="assets/forum-page.js?v=20260730-4"></script>
+  <dialog id="mediaLightbox" class="media-lightbox">
+    <button id="closeMediaLightbox" class="lightbox-close" type="button"
+      aria-label="Đóng media">×</button>
+    <div id="mediaLightboxContent" class="media-lightbox-content"></div>
+  </dialog>
+
+  <dialog id="reportDialog" class="report-dialog">
+    <form id="reportForm" class="panel report-form">
+      <header aria-label="Thông tin báo cáo">
+        <div>
+          <strong>Báo cáo bài viết</strong>
+          <span>Quản trị viên sẽ xem xét nội dung này.</span>
+        </div>
+        <button id="closeReportDialog" class="dialog-close" type="button"
+          aria-label="Đóng báo cáo">×</button>
+      </header>
+      <label class="field">
+        <span>Lý do</span>
+        <select id="reportReason" class="select" required>
+          <option value="spam">Spam</option>
+          <option value="harassment">Nói xấu hoặc quấy rối</option>
+          <option value="adult">Nội dung nhạy cảm</option>
+          <option value="off_topic">Không đúng nội dung diễn đàn</option>
+          <option value="other">Lý do khác</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Mô tả thêm</span>
+        <textarea id="reportDetails" class="textarea" maxlength="500"
+          placeholder="Nêu ngắn gọn vấn đề để quản trị viên kiểm tra..."></textarea>
+      </label>
+      <button id="submitReport" class="button" type="submit">Gửi báo cáo</button>
+    </form>
+  </dialog>
+
+  <script type="module" src="assets/forum-page.js?v=20260730-5"></script>
 </body>
 </html>

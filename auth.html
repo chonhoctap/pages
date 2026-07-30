@@ -103,14 +103,32 @@
         <form id="resetForm" class="form-grid" hidden>
           <div>
             <h2 class="auth-title">Khôi phục mật khẩu</h2>
-            <p class="auth-subtitle">Chúng tôi sẽ gửi liên kết đặt lại mật khẩu vào email của bạn.</p>
+            <p class="auth-subtitle">Nhập email tài khoản. Chúng tôi sẽ gửi một mã xác nhận gồm 6 chữ số.</p>
           </div>
           <div class="field">
             <label for="resetEmail">Email</label>
             <input id="resetEmail" class="input" name="email" type="email" autocomplete="email" required>
           </div>
-          <button class="button" type="submit">Gửi liên kết</button>
+          <button class="button" type="submit">Gửi mã xác nhận</button>
           <button id="backToLoginButton" class="button button-secondary" type="button">Quay lại đăng nhập</button>
+        </form>
+
+        <form id="verifyResetForm" class="form-grid" hidden>
+          <div>
+            <h2 class="auth-title">Nhập mã xác nhận</h2>
+            <p class="auth-subtitle">Kiểm tra hộp thư và nhập mã 6 chữ số vừa nhận được.</p>
+          </div>
+          <div class="field">
+            <label for="verifyResetEmail">Email</label>
+            <input id="verifyResetEmail" class="input" name="email" type="email" autocomplete="email" readonly required>
+          </div>
+          <div class="field">
+            <label for="resetCode">Mã xác nhận</label>
+            <input id="resetCode" class="input otp-input" name="token" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="000000" required>
+            <span class="field-hint">Mã chỉ dùng một lần và có thời hạn ngắn.</span>
+          </div>
+          <button class="button" type="submit">Xác nhận mã</button>
+          <button id="requestAnotherCodeButton" class="button button-secondary" type="button">Gửi mã khác</button>
         </form>
 
         <form id="updatePasswordForm" class="form-grid" hidden>

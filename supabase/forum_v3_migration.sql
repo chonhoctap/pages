@@ -583,7 +583,7 @@ begin
     max_images := 6;
     max_videos := 2;
     max_image_bytes := 3145728;
-    max_video_bytes := 62914560;
+    max_video_bytes := 52428800;
   else
     max_images := 2;
     max_videos := 1;
@@ -769,10 +769,10 @@ grant insert (
 ) on table public.forum_comment_media to authenticated;
 grant delete on table public.forum_comment_media to authenticated;
 
--- Cho phép VIP tải video tối đa 60 MB. Giới hạn theo role được kiểm tra khi
+-- Supabase Free giới hạn file tối đa 50 MB. Giới hạn theo role được kiểm tra khi
 -- media được liên kết với bài/bình luận; file mồ côi sẽ được tác vụ dọn xóa.
 update storage.buckets
-set file_size_limit = 62914560
+set file_size_limit = 52428800
 where id in ('forum-media', 'forum-comment-media');
 
 -- ---------------------------------------------------------------------------

@@ -447,8 +447,34 @@ a{color:inherit}
 .member-info strong{font-size:12px}
 .member-info span{color:var(--blue);font-size:10px}
 .member-info small{color:var(--muted);font-size:9px}
-.role-controls{display:flex;align-items:center;gap:8px}
-.role-controls select{
+.member-identity{display:flex;align-items:center;gap:7px;min-width:0}
+.status-badge{
+  display:inline-flex;
+  flex:0 0 auto;
+  align-items:center;
+  width:max-content;
+  padding:3px 7px;
+  border-radius:999px;
+  color:#047857!important;
+  background:rgba(16,185,129,.12);
+  font-size:8px!important;
+  font-weight:800;
+  line-height:1;
+  text-transform:uppercase;
+  letter-spacing:.06em;
+}
+.status-badge[data-status="suspended"]{color:#b45309!important;background:rgba(245,158,11,.13)}
+.status-badge[data-status="banned"]{color:#b91c1c!important;background:rgba(239,68,68,.12)}
+[data-theme="dark"] .status-badge{color:#6ee7b7!important}
+[data-theme="dark"] .status-badge[data-status="suspended"]{color:#fcd34d!important}
+[data-theme="dark"] .status-badge[data-status="banned"]{color:#fca5a5!important}
+.access-controls{
+  display:grid;
+  grid-template-columns:minmax(120px,1fr) minmax(120px,1fr) auto;
+  align-items:center;
+  gap:8px;
+}
+.access-controls select{
   height:38px;
   padding:0 9px;
   border:1px solid var(--line);
@@ -492,7 +518,8 @@ a{color:inherit}
   .admin-toolbar{align-items:stretch;flex-direction:column}
   .admin-toolbar .input{max-width:none}
   .member-card{grid-template-columns:auto minmax(0,1fr)}
-  .role-controls{grid-column:1/-1;display:grid;grid-template-columns:1fr auto}
+  .access-controls{grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .access-controls .button{grid-column:1/-1}
   .form-actions{display:grid;grid-template-columns:1fr}
 }
 @media (prefers-reduced-motion:reduce){

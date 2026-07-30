@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css">
+  <link rel="stylesheet" href="assets/account.css?v=20260730-4">
 </head>
 <body>
   <header class="account-topbar">
@@ -38,7 +38,7 @@
       <div>
         <div class="eyebrow">Quản trị</div>
         <h1>Thành viên và phân quyền</h1>
-        <p>Cấp quyền thành viên, điều hành viên hoặc quản trị viên.</p>
+        <p>Cấp vai trò, tạm khóa hoặc cấm tài khoản. Mọi thay đổi đều được ghi nhật ký.</p>
       </div>
       <button id="logoutButton" class="button button-danger" type="button">Đăng xuất</button>
     </div>
@@ -55,13 +55,13 @@
 
     <section id="adminContent" class="panel admin-panel" hidden>
       <div class="admin-toolbar">
-        <input id="memberSearch" class="input" type="search" placeholder="Tìm username, tên hoặc quyền..." autocomplete="off">
+        <input id="memberSearch" class="input" type="search" placeholder="Tìm tên, quyền hoặc trạng thái..." autocomplete="off">
         <span id="roleCounts" class="role-counts"></span>
       </div>
       <div id="memberList" class="member-list"></div>
     </section>
   </main>
 
-  <script type="module" src="assets/admin-page.js"></script>
+  <script type="module" src="assets/admin-page.js?v=20260730-4"></script>
 </body>
 </html>

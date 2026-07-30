@@ -1,5 +1,19 @@
 # Thiết lập Supabase cho Chốn Học Tập
 
+## Project hiện tại: nâng cấp phân quyền
+
+Nếu Chốn Học Tập đã chạy `schema.sql` trước đây, không cần chạy lại toàn bộ
+schema. Mở **SQL Editor**, dán toàn bộ file `permissions_migration.sql`, chọn
+**Run** và đợi thông báo `Success. No rows returned`.
+
+Hãy chạy migration này trước khi cập nhật mã website. Migration bổ sung:
+
+- trạng thái `active` / `suspended` / `banned`;
+- kiểm tra tài khoản đang hoạt động ngay trong RLS;
+- RPC quản trị cập nhật role và trạng thái cùng lúc;
+- bảo vệ quản trị viên cuối cùng;
+- bảng `access_audit_log` ghi lại mọi thay đổi quyền.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -9,8 +23,9 @@ Trong Supabase Dashboard:
 3. Dán toàn bộ nội dung `schema.sql`.
 4. Chọn **Run**.
 
-File tạo bảng `profiles`, ba quyền `member` / `moderator` / `admin`, RLS,
-hàm cấp quyền dành riêng cho quản trị viên và bucket `avatars`.
+File tạo bảng `profiles`, ba quyền `member` / `moderator` / `admin`, ba trạng
+thái tài khoản, RLS, hàm cấp quyền dành riêng cho quản trị viên, nhật ký thay
+đổi quyền và bucket `avatars`.
 
 ## 2. Cấu hình URL đăng nhập
 
@@ -63,8 +78,9 @@ where id = (
 );
 ```
 
-Từ thời điểm đó, tài khoản chủ có thể mở `admin.html` để cấp quyền cho các
-thành viên khác. Người dùng thông thường không thể tự thay đổi cột `role`.
+Từ thời điểm đó, tài khoản chủ có thể mở `admin.html` để cấp quyền, tạm khóa
+hoặc cấm tài khoản. Người dùng thông thường không thể tự thay đổi `role` hay
+`account_status`.
 
 ## 6. Kiểm tra
 
@@ -72,7 +88,9 @@ thành viên khác. Người dùng thông thường không thể tự thay đổ
 2. Xác nhận email nếu Supabase yêu cầu.
 3. Đăng nhập và chỉnh sửa hồ sơ tại `profile.html`.
 4. Tải ảnh đại diện nhỏ hơn 2 MB.
-5. Đăng nhập tài khoản admin và thử thay đổi quyền trong `admin.html`.
-6. Bật Google provider rồi thử nút **Tiếp tục bằng Google**.
-7. Mở **Quên mật khẩu**, nhập email, nhận mã 6 số và đặt mật khẩu mới.
-8. Mở hồ sơ và thử đổi mật khẩu trong phần **Bảo mật tài khoản**.
+5. Đăng nhập tài khoản admin và thử thay đổi quyền/trạng thái trong `admin.html`.
+6. Xác nhận không thể tự hạ quyền hoặc khóa tài khoản admin của chính mình.
+7. Kiểm tra bảng `access_audit_log` có bản ghi sau mỗi lần thay đổi.
+8. Bật Google provider rồi thử nút **Tiếp tục bằng Google**.
+9. Mở **Quên mật khẩu**, nhập email, nhận mã 6 số và đặt mật khẩu mới.
+10. Mở hồ sơ và thử đổi mật khẩu trong phần **Bảo mật tài khoản**.

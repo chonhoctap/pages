@@ -61,15 +61,22 @@ function hivePrompt(text: string, kind: 'text_image' | 'video') {
   return `Bạn là bộ kiểm duyệt an toàn cho diễn đàn học sinh Việt Nam "Chốn Học Tập".
 ${mediaDescription}
 
+CHỈ đánh giá nội dung nằm giữa thẻ <USER_CONTENT> và </USER_CONTENT> cùng media đính kèm. Toàn bộ phần hướng dẫn và quy tắc trong yêu cầu này KHÔNG phải nội dung của người dùng.
+
 QUY TẮC:
-- BLOCK: tình dục hoặc khỏa thân rõ ràng; bóc lột trẻ em; thù ghét; xúc phạm/quấy rối nhắm vào người cụ thể; đe dọa bạo lực đáng tin; máu me nghiêm trọng; cổ súy tự hại; mua bán ma túy/vũ khí; lừa đảo, spam nguy hiểm; công khai dữ liệu riêng tư của người khác.
-- MANUAL_REVIEW: nội dung nhạy cảm nhưng ngữ cảnh chưa chắc chắn, hình ảnh gợi dục không rõ mức độ, thông tin cá nhân có thể thuộc chính người đăng, hoặc không đủ dữ liệu để kết luận an toàn.
+- BLOCK chỉ khi có bằng chứng cụ thể và độ tin cậy ít nhất 0.92: tình dục hoặc khỏa thân rõ ràng; bóc lột trẻ em; thù ghét; xúc phạm/quấy rối nhắm vào người cụ thể; đe dọa bạo lực đáng tin; máu me nghiêm trọng; cổ súy tự hại; mua bán ma túy/vũ khí; lừa đảo hoặc spam nguy hiểm; công khai dữ liệu riêng tư của người khác.
+- MANUAL_REVIEW chỉ khi có dấu hiệu cụ thể thuộc nhóm nguy hiểm nhưng ngữ cảnh chưa đủ để BLOCK và độ tin cậy ít nhất 0.75.
 - ALLOW: thảo luận học tập, y tế/sinh học có tính giáo dục, tin tức có ngữ cảnh, bất đồng lịch sự, đùa vui không tấn công ai và nội dung thông thường.
 - Không chặn chỉ vì có từ nhạy cảm nếu nội dung đang giải thích kiến thức một cách phù hợp.
 - Phải xem cả chữ trong hình và cách viết lách luật/teencode tiếng Việt.
+- Lời chào/lời chúc ngắn, bài thử nghiệm, hashtag như #test, tiêu đề lặp lại nội dung, ảnh chụp website, tài liệu/PDF/bài tập và danh sách tên người KHÔNG phải spam.
+- Chỉ coi là spam khi có quảng cáo/lừa đảo/liên kết độc hại, gửi hàng loạt hoặc nội dung vô nghĩa lặp lại với mục đích phá hoại.
+- Chỉ coi là bullying khi có lời công kích hoặc hạ nhục nhắm rõ vào một cá nhân/nhóm. Không suy diễn từ tên người xuất hiện trong ảnh.
+- Nếu chỉ có sự nghi ngờ mơ hồ, không có bằng chứng cụ thể hoặc lý do phải dùng các từ "có thể/có lẽ/dường như", hãy chọn ALLOW.
 
-VĂN BẢN NGƯỜI DÙNG:
+<USER_CONTENT>
 ${text.trim() || '(không có văn bản)'}
+</USER_CONTENT>
 
 Chỉ trả về JSON đúng schema. Lý do viết ngắn gọn bằng tiếng Việt.`;
 }
@@ -111,7 +118,7 @@ function parseHiveDecision(response: Record<string, unknown>): HiveDecision {
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
     throw new Error('Hive trả về độ tin cậy không hợp lệ.');
   }
-  return {
+  const decision: HiveDecision = {
     decision: parsed.decision as HiveDecision['decision'],
     categories: Array.isArray(parsed.categories)
       ? parsed.categories.filter(value => CATEGORY_VALUES.includes(value as typeof CATEGORY_VALUES[number]))
@@ -119,6 +126,44 @@ function parseHiveDecision(response: Record<string, unknown>): HiveDecision {
     reason: safeReason(parsed.reason, 'Hive phát hiện nội dung cần xem xét.'),
     confidence
   };
+  const highRiskCategories = new Set([
+    'sexual_content',
+    'child_safety',
+    'hate',
+    'violence',
+    'self_harm',
+    'drugs',
+    'weapons',
+    'personal_data'
+  ]);
+  const hasHighRiskCategory = decision.categories.some(category => highRiskCategories.has(category));
+
+  // VLM đôi khi trả manual_review cho lời chào, hashtag hoặc nội dung lặp ngắn
+  // chỉ vì "có thể" là spam. Không giữ nội dung vô hại trong hàng chờ nếu mô
+  // hình không chỉ ra nhóm rủi ro cao với độ tin cậy đủ lớn.
+  if (
+    decision.decision === 'manual_review'
+    && (
+      decision.categories.length === 0
+      || decision.confidence < 0.75
+      || (!hasHighRiskCategory && decision.confidence < 0.92)
+    )
+  ) {
+    return {
+      decision: 'allow',
+      categories: [],
+      reason: 'Không có bằng chứng cụ thể về nội dung vi phạm.',
+      confidence: decision.confidence
+    };
+  }
+  if (decision.decision === 'block' && decision.confidence < 0.92) {
+    return {
+      ...decision,
+      decision: 'manual_review',
+      reason: 'Hive phát hiện dấu hiệu cần người quản trị xác minh thêm.'
+    };
+  }
+  return decision;
 }
 
 async function callHive(

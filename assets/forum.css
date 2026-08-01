@@ -424,6 +424,14 @@
   display:flex;
   gap:8px;
 }
+.comment-moderation-actions{
+  margin:9px 0 0;
+}
+.comment-moderation-actions .button{
+  min-height:30px;
+  padding:6px 10px;
+  font-size:9px;
+}
 .report-admin-note{
   margin:0 18px 10px;
   padding:11px 12px;

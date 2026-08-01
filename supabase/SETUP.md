@@ -172,6 +172,35 @@ tồn tại. Do đó, tác giả xóa bài vừa đăng vẫn phải chờ đủ
 bài tiếp theo. Frontend đọc mốc này từ RPC bảo mật và giữ thêm bản tạm trên
 trình duyệt để đồng hồ không biến mất khi chuyển trang hoặc tải lại trang.
 
+## Nâng cấp diễn đàn V9
+
+Sau `forum_v8_migration.sql`, chạy tiếp toàn bộ `forum_v9_migration.sql`. V9
+bổ sung hai tầng kiểm duyệt nghiêm ngặt:
+
+- database chuẩn hóa chữ có dấu, số/ký hiệu thay chữ, ký tự lặp, dấu câu và
+  khoảng trắng nhằm chặn từ cấm cùng các biến thể cố tình viết né;
+- Edge Function dùng Hive Moderation cho văn bản, ảnh và video; các nhãn tình
+  dục, thù ghét, bắt nạt, bạo lực, vũ khí, máu me, thi thể, tự hại, kinh dị hoặc
+  đáng sợ được áp dụng ngưỡng chặt và không được công khai.
+
+Âm thanh không gửi cho AI. Bài viết hoặc bình luận có âm thanh luôn ở trạng
+thái chờ, chỉ tài khoản `admin` có nút Duyệt/Từ chối và chỉ admin nhận thông
+báo. `moderator` không thể duyệt âm thanh kể cả khi gọi RPC trực tiếp.
+
+### Chuyển Edge Function sang Hive
+
+Tạo API key trong Hive Moderation Dashboard, sau đó lưu khóa trong Supabase:
+
+```bash
+supabase secrets set HIVE_API_KEY=...
+supabase functions deploy moderate-forum
+```
+
+Edge Function gọi endpoint đồng bộ `api/v1/task/sync?legacy=1`, gửi từng
+`text_data` hoặc URL media công khai và giữ nội dung trong hàng chờ nếu Hive
+lỗi, hết lượt hoặc trả về dữ liệu không hợp lệ. Mã V9 không còn đọc
+`OPENAI_API_KEY`; chỉ xóa secret OpenAI sau khi đã thử Hive thành công.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -286,3 +315,6 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
     chỉ admin nhận thư còn bài viết vẫn công khai đến khi admin quyết định.
 29. Chạy `forum_v8_migration.sql`, đăng một bài rồi xóa ngay; tải lại diễn đàn
     và xác nhận nút đăng bài vẫn đếm ngược cho đến khi đủ 15 phút.
+30. Chạy `forum_v9_migration.sql`, deploy lại `moderate-forum` với
+    `HIVE_API_KEY`; thử từ cấm viết chèn dấu/số, ảnh máu me và bình luận âm
+    thanh. Xác nhận hai loại đầu bị từ chối, còn âm thanh chỉ admin có thể duyệt.

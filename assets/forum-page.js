@@ -321,6 +321,47 @@ async function runAutomaticModeration(payload) {
   return data;
 }
 
+async function retryPostModeration(post, button) {
+  setBusy(button, true, 'Đang kiểm tra...');
+  try {
+    const result = await runAutomaticModeration({ postId: post.id });
+    setInfo(
+      result?.published
+        ? 'Hive đã duyệt và công khai bài viết.'
+        : result?.allowed === false
+          ? 'Hive phát hiện nội dung vi phạm nên bài viết không được công khai.'
+          : 'Bài viết đã được chuyển cho người quản trị xem xét.',
+      result?.published ? 'success' : 'info'
+    );
+    await loadPosts();
+  } catch (error) {
+    setInfo(`Không thể kiểm tra lại: ${humanizeAuthError(error)}`, 'error');
+    setBusy(button, false);
+  }
+}
+
+async function retryCommentModeration(comment, post, card, button) {
+  setBusy(button, true, 'Đang kiểm tra...');
+  try {
+    const result = await runAutomaticModeration({ commentId: comment.id });
+    setInfo(
+      result?.published
+        ? 'Hive đã duyệt và công khai bình luận.'
+        : result?.allowed === false
+          ? 'Hive phát hiện bình luận vi phạm và đã ẩn bình luận.'
+          : 'Bình luận đã được chuyển cho người quản trị xem xét.',
+      result?.published ? 'success' : 'info'
+    );
+    await Promise.all([
+      loadComments(post, card),
+      refreshPostEngagement(post.id, true)
+    ]);
+  } catch (error) {
+    setInfo(`Không thể kiểm tra lại bình luận: ${humanizeAuthError(error)}`, 'error');
+    setBusy(button, false);
+  }
+}
+
 function mediaKind(file) {
   if (file?.type?.startsWith('image/')) return 'image';
   if (file?.type?.startsWith('video/')) return 'video';
@@ -761,10 +802,10 @@ async function publishPost(event) {
     resetPreview();
     closeComposer();
     setInfo(moderationResult?.published
-      ? (editing ? 'Đã lưu và AI đã duyệt bài viết.' : 'Đã đăng bài thành công.')
+      ? (editing ? 'Đã lưu và Hive đã duyệt bài viết.' : 'Đã đăng bài thành công.')
       : moderationResult?.allowed === false
         ? 'Nội dung không vượt qua kiểm duyệt nên không được công khai.'
-        : 'Nội dung đang chờ kiểm duyệt hoặc quản trị viên duyệt media.',
+        : 'Nội dung đã được chuyển cho người quản trị xem xét.',
     moderationResult?.published ? 'success' : 'info');
     if (!editing) postCooldownUntil = Date.now() + 15 * 60 * 1000;
     updatePostCooldownUi();
@@ -1475,20 +1516,28 @@ function renderPost(post) {
     moderationNote.textContent = post.moderation_reason
       || 'Bài viết đang chờ quản trị viên xem xét.';
     card.querySelector('.post-header').after(moderationNote);
-    if (canModerate()) {
+    if (canInteract() && (post.author_id === session.user.id || canModerate())) {
       const controls = document.createElement('div');
       controls.className = 'moderation-actions';
-      const approve = document.createElement('button');
-      approve.type = 'button';
-      approve.className = 'button button-small';
-      approve.textContent = 'Duyệt bài';
-      approve.addEventListener('click', () => reviewPost(post, 'approve', approve));
-      const reject = document.createElement('button');
-      reject.type = 'button';
-      reject.className = 'button button-small button-danger';
-      reject.textContent = 'Từ chối';
-      reject.addEventListener('click', () => reviewPost(post, 'reject', reject));
-      controls.append(approve, reject);
+      const retry = document.createElement('button');
+      retry.type = 'button';
+      retry.className = 'button button-small';
+      retry.textContent = 'Kiểm tra lại bằng Hive';
+      retry.addEventListener('click', () => retryPostModeration(post, retry));
+      controls.appendChild(retry);
+      if (canModerate()) {
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.className = 'button button-small';
+        approve.textContent = 'Duyệt bài';
+        approve.addEventListener('click', () => reviewPost(post, 'approve', approve));
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'button button-small button-danger';
+        reject.textContent = 'Từ chối';
+        reject.addEventListener('click', () => reviewPost(post, 'reject', reject));
+        controls.append(approve, reject);
+      }
       moderationNote.after(controls);
     }
   }
@@ -1753,6 +1802,38 @@ async function reviewPost(post, action, button) {
   }
 }
 
+async function reviewComment(comment, post, card, action, button) {
+  if (!canModerate()) {
+    setInfo('Chỉ điều hành viên hoặc quản trị viên được duyệt bình luận.', 'error');
+    return;
+  }
+  const note = action === 'reject'
+    ? window.prompt('Lý do từ chối bình luận:', comment.moderation_reason || '')
+    : '';
+  if (action === 'reject' && note === null) return;
+  setBusy(button, true, action === 'approve' ? 'Đang duyệt...' : 'Đang từ chối...');
+  try {
+    const { data, error } = await supabase.rpc('review_forum_comment', {
+      target_comment_id: comment.id,
+      review_action: action,
+      review_note: note || null
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Không tìm thấy bình luận cần duyệt.');
+    setInfo(
+      action === 'approve' ? 'Đã duyệt bình luận.' : 'Đã từ chối bình luận.',
+      'success'
+    );
+    await Promise.all([
+      loadComments(post, card),
+      refreshPostEngagement(post.id, true)
+    ]);
+  } catch (error) {
+    setInfo(`Không thể duyệt bình luận: ${humanizeAuthError(error)}`, 'error');
+    setBusy(button, false);
+  }
+}
+
 async function setReaction(post, type, card, button) {
   if (!canInteract()) {
     setInfo('Tài khoản đang tạm khóa nên chưa thể bày tỏ cảm xúc.', 'error');
@@ -1984,6 +2065,7 @@ async function loadComments(post, card) {
         parent_comment_id,
         moderation_status,
         moderation_reason,
+        ai_moderation_status,
         edited_at,
         created_at,
         author:profiles!forum_comments_author_id_fkey(
@@ -2107,12 +2189,43 @@ function renderComments(comments, post, card) {
     if (comment.moderation_status === 'pending_review') {
       const pending = document.createElement('span');
       pending.className = 'comment-pending';
-      pending.textContent = 'AI đang kiểm tra';
+      pending.textContent = comment.ai_moderation_status === 'pending'
+        ? 'Hive đang kiểm tra'
+        : 'Chờ quản trị viên duyệt';
+      pending.title = comment.moderation_reason || '';
       footer.appendChild(pending);
+      if (canInteract() && (comment.author_id === session.user.id || canModerate())) {
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.textContent = 'Kiểm tra lại';
+        retry.addEventListener('click', () => {
+          void retryCommentModeration(comment, post, card, retry);
+        });
+        footer.appendChild(retry);
+      }
+      if (canModerate()) {
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.textContent = 'Duyệt';
+        approve.addEventListener('click', () => {
+          void reviewComment(comment, post, card, 'approve', approve);
+        });
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'danger';
+        reject.textContent = 'Từ chối';
+        reject.addEventListener('click', () => {
+          void reviewComment(comment, post, card, 'reject', reject);
+        });
+        footer.append(approve, reject);
+      }
     } else if (comment.moderation_status === 'rejected') {
       const rejected = document.createElement('span');
       rejected.className = 'comment-rejected';
-      rejected.textContent = 'Đã bị AI ẩn';
+      rejected.textContent = comment.ai_moderation_status === 'rejected'
+        ? 'Không vượt qua kiểm duyệt'
+        : 'Không được duyệt';
+      rejected.title = comment.moderation_reason || '';
       footer.appendChild(rejected);
     }
     bubble.appendChild(footer);
@@ -2231,18 +2344,22 @@ async function addComment(event, post, card) {
     setReplyingTo(form);
     resetCommentMedia(form);
     commentCooldownUntil = Date.now() + 2 * 60 * 1000;
-    setInfo('Đã gửi bình luận. AI đang kiểm tra nội dung trong nền.', 'success');
+    setInfo('Đã gửi bình luận. Hive đang kiểm tra nội dung trong nền.', 'success');
     void loadComments(post, card);
     void runAutomaticModeration({ commentId: createdCommentId })
       .then(result => {
         if (result?.allowed === false) {
           setInfo('Bình luận không vượt qua kiểm duyệt và đã được ẩn.', 'info');
+        } else if (result?.manualReview) {
+          setInfo('Bình luận đã được chuyển cho người quản trị xem xét.', 'info');
+        } else if (result?.published) {
+          setInfo('Hive đã duyệt và công khai bình luận.', 'success');
         }
         return refreshPostEngagement(post.id, true);
       })
       .catch(moderationError => {
         console.warn('Automatic comment moderation unavailable', moderationError);
-        setInfo('Đã gửi bình luận. AI tạm thời chưa phản hồi nên nội dung vẫn được giữ an toàn.', 'info');
+        setInfo('Bình luận vẫn được giữ trong hàng chờ an toàn để người quản trị xem xét.', 'info');
       });
   } catch (error) {
     if (createdCommentId) {

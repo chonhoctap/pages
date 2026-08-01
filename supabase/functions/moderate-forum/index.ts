@@ -6,6 +6,38 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
+const HIVE_ENDPOINT = 'https://api.thehive.ai/api/v3/chat/completions';
+const HIVE_MODEL = 'hive/vision-language-model';
+const HIVE_MEDIA_BATCH_SIZE = 5;
+const HIVE_MAX_MEDIA_BATCHES = 4;
+
+const CATEGORY_VALUES = [
+  'sexual_content',
+  'child_safety',
+  'hate',
+  'bullying',
+  'violence',
+  'self_harm',
+  'drugs',
+  'weapons',
+  'spam_scam',
+  'personal_data',
+  'other'
+] as const;
+
+type HiveDecision = {
+  decision: 'allow' | 'block' | 'manual_review';
+  categories: string[];
+  reason: string;
+  confidence: number;
+};
+
+type HiveCheck = {
+  decision: HiveDecision;
+  response: Record<string, unknown>;
+  kind: 'text_image' | 'video';
+};
+
 function json(data: unknown, status = 200) {
   return Response.json(data, {
     status,
@@ -13,11 +45,231 @@ function json(data: unknown, status = 200) {
   });
 }
 
-function flaggedLabels(categories: Record<string, boolean> = {}) {
-  return Object.entries(categories)
-    .filter(([, value]) => value)
-    .map(([name]) => name)
-    .join(', ');
+function wait(milliseconds: number) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+function safeReason(value: unknown, fallback: string) {
+  const reason = String(value || '').replace(/\s+/gu, ' ').trim();
+  return reason ? reason.slice(0, 500) : fallback;
+}
+
+function hivePrompt(text: string, kind: 'text_image' | 'video') {
+  const mediaDescription = kind === 'video'
+    ? 'Hãy đánh giá toàn bộ các khung hình đại diện của video.'
+    : 'Hãy đánh giá văn bản và toàn bộ hình ảnh đính kèm như một nội dung thống nhất.';
+  return `Bạn là bộ kiểm duyệt an toàn cho diễn đàn học sinh Việt Nam "Chốn Học Tập".
+${mediaDescription}
+
+CHỈ đánh giá nội dung nằm giữa thẻ <USER_CONTENT> và </USER_CONTENT> cùng media đính kèm. Toàn bộ phần hướng dẫn và quy tắc trong yêu cầu này KHÔNG phải nội dung của người dùng.
+
+QUY TẮC:
+- BLOCK chỉ khi có bằng chứng cụ thể và độ tin cậy ít nhất 0.92: tình dục hoặc khỏa thân rõ ràng; bóc lột trẻ em; thù ghét; xúc phạm/quấy rối nhắm vào người cụ thể; đe dọa bạo lực đáng tin; máu me nghiêm trọng; cổ súy tự hại; mua bán ma túy/vũ khí; lừa đảo hoặc spam nguy hiểm; công khai dữ liệu riêng tư của người khác.
+- MANUAL_REVIEW chỉ khi có dấu hiệu cụ thể thuộc nhóm nguy hiểm nhưng ngữ cảnh chưa đủ để BLOCK và độ tin cậy ít nhất 0.75.
+- ALLOW: thảo luận học tập, y tế/sinh học có tính giáo dục, tin tức có ngữ cảnh, bất đồng lịch sự, đùa vui không tấn công ai và nội dung thông thường.
+- Không chặn chỉ vì có từ nhạy cảm nếu nội dung đang giải thích kiến thức một cách phù hợp.
+- Phải xem cả chữ trong hình và cách viết lách luật/teencode tiếng Việt.
+- Lời chào/lời chúc ngắn, bài thử nghiệm, hashtag như #test, tiêu đề lặp lại nội dung, ảnh chụp website, tài liệu/PDF/bài tập và danh sách tên người KHÔNG phải spam.
+- Chỉ coi là spam khi có quảng cáo/lừa đảo/liên kết độc hại, gửi hàng loạt hoặc nội dung vô nghĩa lặp lại với mục đích phá hoại.
+- Chỉ coi là bullying khi có lời công kích hoặc hạ nhục nhắm rõ vào một cá nhân/nhóm. Không suy diễn từ tên người xuất hiện trong ảnh.
+- Nếu chỉ có sự nghi ngờ mơ hồ, không có bằng chứng cụ thể hoặc lý do phải dùng các từ "có thể/có lẽ/dường như", hãy chọn ALLOW.
+
+<USER_CONTENT>
+${text.trim() || '(không có văn bản)'}
+</USER_CONTENT>
+
+Chỉ trả về JSON đúng schema. Lý do viết ngắn gọn bằng tiếng Việt.`;
+}
+
+function responseSchema() {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: 'chon_hoctap_moderation',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: {
+          decision: { type: 'string', enum: ['allow', 'block', 'manual_review'] },
+          categories: {
+            type: 'array',
+            items: { type: 'string', enum: CATEGORY_VALUES }
+          },
+          reason: { type: 'string' },
+          confidence: { type: 'number', minimum: 0, maximum: 1 }
+        },
+        required: ['decision', 'categories', 'reason', 'confidence'],
+        additionalProperties: false
+      }
+    }
+  };
+}
+
+function parseHiveDecision(response: Record<string, unknown>): HiveDecision {
+  const choices = Array.isArray(response.choices) ? response.choices : [];
+  const content = (choices[0] as { message?: { content?: unknown } } | undefined)
+    ?.message?.content;
+  if (typeof content !== 'string') throw new Error('Hive không trả về nội dung kiểm duyệt.');
+  const parsed = JSON.parse(content) as Partial<HiveDecision>;
+  if (!['allow', 'block', 'manual_review'].includes(String(parsed.decision))) {
+    throw new Error('Hive trả về quyết định không hợp lệ.');
+  }
+  const confidence = Number(parsed.confidence);
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+    throw new Error('Hive trả về độ tin cậy không hợp lệ.');
+  }
+  const decision: HiveDecision = {
+    decision: parsed.decision as HiveDecision['decision'],
+    categories: Array.isArray(parsed.categories)
+      ? parsed.categories.filter(value => CATEGORY_VALUES.includes(value as typeof CATEGORY_VALUES[number]))
+      : [],
+    reason: safeReason(parsed.reason, 'Hive phát hiện nội dung cần xem xét.'),
+    confidence
+  };
+  const highRiskCategories = new Set([
+    'sexual_content',
+    'child_safety',
+    'hate',
+    'violence',
+    'self_harm',
+    'drugs',
+    'weapons',
+    'personal_data'
+  ]);
+  const hasHighRiskCategory = decision.categories.some(category => highRiskCategories.has(category));
+
+  // VLM đôi khi trả manual_review cho lời chào, hashtag hoặc nội dung lặp ngắn
+  // chỉ vì "có thể" là spam. Không giữ nội dung vô hại trong hàng chờ nếu mô
+  // hình không chỉ ra nhóm rủi ro cao với độ tin cậy đủ lớn.
+  if (
+    decision.decision === 'manual_review'
+    && (
+      decision.categories.length === 0
+      || decision.confidence < 0.75
+      || (!hasHighRiskCategory && decision.confidence < 0.92)
+    )
+  ) {
+    return {
+      decision: 'allow',
+      categories: [],
+      reason: 'Không có bằng chứng cụ thể về nội dung vi phạm.',
+      confidence: decision.confidence
+    };
+  }
+  if (decision.decision === 'block' && decision.confidence < 0.92) {
+    return {
+      ...decision,
+      decision: 'manual_review',
+      reason: 'Hive phát hiện dấu hiệu cần người quản trị xác minh thêm.'
+    };
+  }
+  return decision;
+}
+
+async function callHive(
+  hiveKey: string,
+  text: string,
+  mediaRows: Array<{ media_type: string; media_url: string }>,
+  kind: 'text_image' | 'video'
+): Promise<HiveCheck> {
+  const content: Array<Record<string, unknown>> = [
+    { type: 'text', text: hivePrompt(text, kind) }
+  ];
+  for (const item of mediaRows) {
+    if (item.media_type === 'image') {
+      content.push({ type: 'image_url', image_url: { url: item.media_url } });
+    } else if (item.media_type === 'video') {
+      content.push({
+        type: 'media_url',
+        media_url: {
+          url: item.media_url,
+          sampling: { strategy: 'fps', fps: 0.5 },
+          prompt_scope: 'once'
+        }
+      });
+    }
+  }
+
+  let lastError = 'Hive tạm thời không phản hồi.';
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(HIVE_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${hiveKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: HIVE_MODEL,
+          messages: [{ role: 'user', content }],
+          response_format: responseSchema(),
+          max_tokens: 220,
+          temperature: 0,
+          top_p: 0.1
+        }),
+        signal: AbortSignal.timeout(60000)
+      });
+      const responseText = await response.text();
+      if (!response.ok) {
+        lastError = `Hive HTTP ${response.status}: ${responseText.slice(0, 300)}`;
+        if ((response.status === 429 || response.status >= 500) && attempt === 0) {
+          await wait(1000);
+          continue;
+        }
+        throw new Error(lastError);
+      }
+      const parsed = JSON.parse(responseText) as Record<string, unknown>;
+      return { decision: parseHiveDecision(parsed), response: parsed, kind };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (attempt === 0 && /timeout|network|fetch/iu.test(lastError)) {
+        await wait(1000);
+        continue;
+      }
+    }
+  }
+  throw new Error(lastError);
+}
+
+function combineChecks(checks: HiveCheck[]): HiveDecision {
+  const blocked = checks.find(check => check.decision.decision === 'block');
+  if (blocked) return blocked.decision;
+  const manual = checks.find(check => check.decision.decision === 'manual_review');
+  if (manual) return manual.decision;
+  const categories = [...new Set(checks.flatMap(check => check.decision.categories))];
+  const confidence = checks.length
+    ? Math.min(...checks.map(check => check.decision.confidence))
+    : 1;
+  return {
+    decision: 'allow',
+    categories,
+    reason: 'Nội dung phù hợp với quy tắc cộng đồng.',
+    confidence
+  };
+}
+
+async function notifyManualReview(
+  admin: ReturnType<typeof createClient>,
+  actorId: string,
+  id: string,
+  isPost: boolean
+) {
+  const { data: staff } = await admin
+    .from('profiles')
+    .select('id')
+    .in('role', ['moderator', 'admin'])
+    .eq('account_status', 'active');
+  if (!staff?.length) return;
+  await admin.from('forum_notifications').insert(staff.map(member => ({
+    recipient_id: member.id,
+    actor_id: actorId,
+    type: 'moderation',
+    post_id: isPost ? id : null,
+    comment_id: isPost ? null : id,
+    message: isPost
+      ? 'Có bài viết cần người quản trị xem xét sau bước kiểm duyệt Hive.'
+      : 'Có bình luận cần người quản trị xem xét sau bước kiểm duyệt Hive.'
+  })));
 }
 
 Deno.serve(async request => {
@@ -26,9 +278,9 @@ Deno.serve(async request => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const openaiKey = Deno.env.get('OPENAI_API_KEY');
+  const hiveKey = Deno.env.get('HIVE_API_KEY') || '';
   const authorization = request.headers.get('Authorization') || '';
-  if (!supabaseUrl || !serviceKey || !openaiKey) {
+  if (!supabaseUrl || !serviceKey) {
     return json({ error: 'Máy chủ kiểm duyệt chưa được cấu hình.' }, 503);
   }
   if (!authorization.startsWith('Bearer ')) return json({ error: 'Bạn cần đăng nhập.' }, 401);
@@ -56,7 +308,9 @@ Deno.serve(async request => {
     const isPost = Boolean(postId);
     const table = isPost ? 'forum_posts' : 'forum_comments';
     const id = postId || commentId;
-    const select = isPost ? 'id, author_id, title, body' : 'id, post_id, author_id, body';
+    const select = isPost
+      ? 'id, author_id, title, body, moderation_status, ai_moderation_status'
+      : 'id, post_id, author_id, body, moderation_status, ai_moderation_status';
     const { data: record, error: recordError } = await admin
       .from(table)
       .select(select)
@@ -65,6 +319,13 @@ Deno.serve(async request => {
     if (recordError || !record) return json({ error: 'Không tìm thấy nội dung.' }, 404);
     if (record.author_id !== actor.id && !['moderator', 'admin'].includes(actor.role)) {
       return json({ error: 'Bạn không có quyền kiểm duyệt nội dung này.' }, 403);
+    }
+    if (
+      record.author_id === actor.id
+      && !['moderator', 'admin'].includes(actor.role)
+      && record.moderation_status === 'rejected'
+    ) {
+      return json({ error: 'Nội dung đã bị từ chối. Hãy chỉnh sửa trước khi kiểm tra lại.' }, 403);
     }
 
     const mediaTable = isPost ? 'forum_post_media' : 'forum_comment_media';
@@ -76,53 +337,79 @@ Deno.serve(async request => {
       .order('sort_order');
     if (mediaError) throw mediaError;
 
-    const hasUnsupportedMedia = (mediaRows || [])
-      .some(item => ['video', 'audio'].includes(item.media_type));
-    const requiresManualReview = isPost && hasUnsupportedMedia;
     const textToCheck = isPost ? `${record.title}\n\n${record.body || ''}` : (record.body || '');
-    const input: Array<Record<string, unknown>> = [];
-    if (textToCheck.trim()) input.push({ type: 'text', text: textToCheck });
-    (mediaRows || [])
-      .filter(item => item.media_type === 'image' && item.media_url)
-      .slice(0, 5)
-      .forEach(item => input.push({
-        type: 'image_url',
-        image_url: { url: item.media_url }
-      }));
+    const images = (mediaRows || []).filter(item => item.media_type === 'image' && item.media_url);
+    const videos = (mediaRows || []).filter(item => item.media_type === 'video' && item.media_url);
+    const hasAudio = (mediaRows || []).some(item => item.media_type === 'audio');
+    const imageBatches = Array.from(
+      { length: Math.ceil(images.length / HIVE_MEDIA_BATCH_SIZE) },
+      (_, index) => images.slice(index * HIVE_MEDIA_BATCH_SIZE, (index + 1) * HIVE_MEDIA_BATCH_SIZE)
+    );
 
-    let result: Record<string, unknown> & {
-      flagged: boolean;
-      categories: Record<string, boolean>;
-    } = { flagged: false, categories: {} };
-    if (input.length) {
-      const moderationResponse = await fetch('https://api.openai.com/v1/moderations', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${openaiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ model: 'omni-moderation-latest', input })
-      });
-      if (!moderationResponse.ok) {
-        console.error('OpenAI moderation failed', moderationResponse.status, await moderationResponse.text());
-        return json({ error: 'AI tạm thời chưa kiểm tra được. Nội dung vẫn ở hàng chờ.' }, 502);
+    const checks: HiveCheck[] = [];
+    const manualReasons: string[] = [];
+    if (!hiveKey) {
+      manualReasons.push('Hive Moderation chưa được cấu hình khóa API.');
+    } else if (imageBatches.length > HIVE_MAX_MEDIA_BATCHES || videos.length > 2) {
+      manualReasons.push('Nội dung có quá nhiều tệp để kiểm tra tự động an toàn.');
+    } else {
+      try {
+        if (textToCheck.trim() || imageBatches.length) {
+          if (!imageBatches.length) {
+            checks.push(await callHive(hiveKey, textToCheck, [], 'text_image'));
+          } else {
+            for (const batch of imageBatches) {
+              checks.push(await callHive(hiveKey, textToCheck, batch, 'text_image'));
+            }
+          }
+        }
+        for (const video of videos) {
+          checks.push(await callHive(hiveKey, textToCheck, [video], 'video'));
+        }
+      } catch (error) {
+        console.error('Hive moderation failed', error instanceof Error ? error.message : error);
+        manualReasons.push('Hive tạm thời không hoàn tất kiểm duyệt.');
       }
-
-      const moderation = await moderationResponse.json();
-      const moderationResult = moderation.results?.[0];
-      if (!moderationResult) return json({ error: 'AI không trả về kết quả hợp lệ.' }, 502);
-      result = moderationResult;
     }
-    const reason = flaggedLabels(result.categories)
-      || (requiresManualReview ? 'Video/âm thanh trong bài viết cần quản trị viên duyệt.' : null);
+    if (hasAudio) {
+      manualReasons.push('Hive chưa hỗ trợ kiểm duyệt giọng nói tiếng Việt.');
+    }
+
+    const hiveDecision = combineChecks(checks);
+    const shouldBlock = hiveDecision.decision === 'block';
+    const needsManualReview = !shouldBlock && (
+      hiveDecision.decision === 'manual_review' || manualReasons.length > 0
+    );
+    const reason = shouldBlock
+      ? hiveDecision.reason
+      : needsManualReview
+        ? [hiveDecision.decision === 'manual_review' ? hiveDecision.reason : '', ...manualReasons]
+          .filter(Boolean).join(' ')
+        : null;
+    const aiStatus = shouldBlock
+      ? 'rejected'
+      : needsManualReview
+        ? 'manual_review'
+        : 'approved';
+    const result = {
+      provider: 'hive',
+      model: HIVE_MODEL,
+      decision: hiveDecision,
+      manualReasons,
+      checkedAt: new Date().toISOString(),
+      checks: checks.map(check => ({
+        kind: check.kind,
+        decision: check.decision,
+        taskId: check.response.id || null
+      }))
+    };
 
     if (isPost) {
-      const status = result.flagged ? 'rejected' : requiresManualReview ? 'pending_review' : 'published';
-      const aiStatus = result.flagged ? 'rejected' : requiresManualReview ? 'manual_review' : 'approved';
+      const status = shouldBlock ? 'rejected' : needsManualReview ? 'pending_review' : 'published';
       const { error } = await admin.from('forum_posts').update({
         moderation_status: status,
         moderation_reason: reason,
-        visibility: result.flagged ? 'hidden' : 'visible',
+        visibility: shouldBlock ? 'hidden' : 'visible',
         ai_moderation_status: aiStatus,
         ai_moderation_reason: reason,
         ai_moderation_result: result,
@@ -130,36 +417,27 @@ Deno.serve(async request => {
       }).eq('id', id);
       if (error) throw error;
     } else {
-      // Bình luận không qua hàng chờ thủ công. AI kiểm tra văn bản và ảnh;
-      // video/âm thanh đi kèm không được endpoint Moderations phân tích.
-      const status = result.flagged ? 'rejected' : 'published';
+      const status = shouldBlock ? 'rejected' : needsManualReview ? 'pending_review' : 'published';
       const { error } = await admin.from('forum_comments').update({
         moderation_status: status,
-        moderation_reason: reason
+        moderation_reason: reason,
+        ai_moderation_status: aiStatus,
+        ai_moderation_reason: reason,
+        ai_moderation_result: result,
+        ai_moderated_at: new Date().toISOString()
       }).eq('id', id);
       if (error) throw error;
     }
 
-    if (requiresManualReview && !result.flagged) {
-      const { data: staff } = await admin
-        .from('profiles').select('id')
-        .in('role', ['moderator', 'admin']).eq('account_status', 'active');
-      if (staff?.length) {
-        await admin.from('forum_notifications').insert(staff.map(member => ({
-          recipient_id: member.id,
-          actor_id: actor.id,
-          type: 'moderation',
-          post_id: id,
-          comment_id: null,
-          message: 'Video hoặc âm thanh mới đang chờ duyệt thủ công.'
-        })));
-      }
+    if (needsManualReview && record.ai_moderation_status !== 'manual_review') {
+      await notifyManualReview(admin, actor.id, id, isPost);
     }
 
     return json({
-      allowed: !result.flagged,
-      published: !result.flagged && !requiresManualReview,
-      manualReview: requiresManualReview && !result.flagged,
+      provider: 'hive',
+      allowed: !shouldBlock,
+      published: !shouldBlock && !needsManualReview,
+      manualReview: needsManualReview,
       reason
     });
   } catch (error) {

@@ -73,6 +73,34 @@ Bộ lọc database chỉ tự nhận diện được một phần từ ngữ đ
 cảm và hành vi nói xấu vẫn phải dùng báo cáo cộng đồng hoặc dịch vụ kiểm duyệt
 media ở backend; không nên coi bộ lọc từ khóa là chính xác tuyệt đối.
 
+## Nâng cấp diễn đàn V5
+
+Sau `forum_v4_migration.sql`, chạy tiếp toàn bộ `forum_v5_migration.sql` trước
+khi cập nhật website. V5 bổ sung menu quản lý bài, ẩn/hiện, trả lời bình luận,
+tag, thông báo, báo cáo chuyển ngay về hàng chờ, quản lý bài trong hồ sơ và các
+trường địa chỉ/điện thoại/mạng xã hội.
+
+Hạn mức mới áp dụng giống nhau cho bài viết và bình luận:
+
+- thành viên: 2 ảnh 720p tổng tối đa 5 MB, 1 âm thanh 1 phút/2 MB, không video;
+- VIP và moderator: 5 ảnh 720p, 1 video 720p/1 phút, 1 âm thanh 2 phút/5 MB;
+- admin: không giới hạn nghiệp vụ; hạ tầng hiện vẫn chặn ở 50 MB mỗi tệp.
+
+### Triển khai kiểm duyệt AI
+
+Edge Function giữ nội dung ở trạng thái chờ đến khi AI trả kết quả, nên khóa
+OpenAI không xuất hiện trong GitHub Pages:
+
+```bash
+supabase functions deploy moderate-forum
+supabase secrets set OPENAI_API_KEY=...
+```
+
+Mô hình `omni-moderation-latest` tự kiểm tra văn bản và ảnh. Vì endpoint này
+không nhận video/âm thanh, nội dung có hai loại media đó được giữ trong hàng chờ
+để moderator/admin duyệt thủ công. Nếu Edge Function hoặc API tạm lỗi, hệ thống
+đóng an toàn: nội dung vẫn ở hàng chờ, không tự công khai.
+
 ### Tự dọn bài và Supabase Storage
 
 Workflow `.github/workflows/cleanup-forum.yml` chạy vào phút 17 mỗi giờ. Nó xóa
@@ -99,8 +127,8 @@ chuyển tệp mới sang Cloudflare R2 sau khi cấu hình Worker.
 3. Chép URL `workers.dev` vào `assets/media-config.js`.
 4. Không bật Public Development URL cho bucket và không đưa Access Key hoặc
    Secret Key R2 vào repository.
-5. Ảnh được trình duyệt đổi sang WebP, thu về khung 720p và giới hạn 2 MB trước
-   khi tải lên. Video hiện được kiểm tra định dạng và giới hạn 25 MB; R2 là nơi
+5. Ảnh của member/VIP/moderator được thu về khung 720p trước khi tải lên. Video
+   VIP/moderator được kiểm tra 720p và 1 phút; R2 là nơi
    lưu trữ chứ không tự mã hóa lại video.
 
 Nếu `MEDIA_API_URL` còn trống, website tạm thời dùng hai bucket Supabase cũ để
@@ -206,3 +234,7 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
     5 ngày, chưa có bình luận là 7 ngày; bài Giải trí là 14 ngày.
 23. Chạy workflow dọn dẹp thủ công với `dry_run = true`, đối chiếu số bài hết
     hạn rồi mới cho phép lần chạy thật.
+24. Chạy `forum_v5_migration.sql`, deploy `moderate-forum`, rồi thử đủ member,
+    VIP, moderator và admin ở cả bài viết lẫn bình luận.
+25. Thử tag, trả lời, báo cáo, ẩn/hiện và kiểm tra chuông thông báo; bài có
+    video/âm thanh phải ở hàng chờ cho đến khi staff duyệt.

@@ -14,8 +14,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260730-6">
-  <link rel="stylesheet" href="assets/forum.css?v=20260801-1">
+  <link rel="stylesheet" href="assets/account.css?v=20260801-7">
+  <link rel="stylesheet" href="assets/forum.css?v=20260801-2">
 </head>
 <body>
   <header class="account-topbar" aria-label="Điều hướng chính">
@@ -27,6 +27,17 @@
       <div class="topbar-actions">
         <a class="topbar-link" href="./">Tài liệu</a>
         <a class="topbar-link" href="profile.html">Hồ sơ</a>
+        <div class="notification-shell">
+          <button id="notificationButton" class="notification-button" type="button"
+            aria-expanded="false" aria-controls="notificationPanel" aria-label="Thông báo">
+            <span aria-hidden="true">🔔</span>
+            <span id="notificationBadge" class="notification-badge" hidden>0</span>
+          </button>
+          <section id="notificationPanel" class="notification-panel panel" hidden>
+            <header><strong>Thông báo</strong><button id="markAllReadButton" type="button">Đọc tất cả</button></header>
+            <div id="notificationList" class="notification-list"></div>
+          </section>
+        </div>
         <button class="theme-button" type="button" data-theme-toggle aria-pressed="false">
           <span data-theme-icon aria-hidden="true">🌙</span>
           <span data-theme-label>Giao diện tối</span>
@@ -235,7 +246,11 @@
             <time></time>
           </div>
         </div>
-        <button class="post-menu-button" type="button" aria-label="Tùy chọn bài viết">•••</button>
+        <div class="post-menu-shell">
+          <button class="post-menu-button" type="button" aria-label="Tùy chọn bài viết"
+            aria-haspopup="menu" aria-expanded="false">•••</button>
+          <div class="post-menu" role="menu" hidden></div>
+        </div>
       </header>
       <div class="post-meta"></div>
       <h2 class="post-title">Bài viết</h2>
@@ -278,6 +293,9 @@
           </label>
           <button class="comment-submit" type="submit">Gửi</button>
         </form>
+        <div class="replying-indicator" hidden>
+          <span></span><button type="button" aria-label="Hủy trả lời">×</button>
+        </div>
         <p class="comment-media-note">Đang tải giới hạn media...</p>
         <div class="comment-list"></div>
       </div>
@@ -319,6 +337,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="assets/forum-page.js?v=20260801-1"></script>
+  <script type="module" src="assets/forum-page.js?v=20260801-2"></script>
 </body>
 </html>

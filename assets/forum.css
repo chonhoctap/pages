@@ -443,6 +443,8 @@
   overflow-wrap:anywhere;
 }
 .post-body:empty{display:none}
+.mention-link{color:var(--blue);font-weight:700;text-decoration:none}
+.mention-link:hover{text-decoration:underline}
 .post-hashtags{
   margin:10px 18px 0;
   display:flex;
@@ -713,7 +715,6 @@
 .media-gallery.compact.count-1{grid-auto-rows:minmax(120px,300px)}
 .media-gallery.compact .media-play{width:36px;height:36px;font-size:14px}
 .media-gallery.compact .media-more{font-size:22px}
-}
 .comment-bubble time{display:block;margin-top:5px;color:var(--muted);font-size:8px}
 .comment-delete{
   width:28px;
@@ -826,6 +827,81 @@
 .sidebar-card li+li{margin-top:6px}
 .sidebar-card p{margin:0;color:var(--muted);font-size:10px;line-height:1.7}
 
+/* V5: nhịp chữ và thao tác gần với bảng tin Facebook. */
+.post-author strong{font-size:14px}
+.post-author>div:last-child{font-size:12px}
+.post-role{font-size:9px}
+.post-chip,.solve-button{font-size:11px}
+.post-title{font-size:18px;line-height:1.35}
+.post-body{font-size:15px;line-height:1.55}
+.post-hashtags button{font-size:13px}
+.post-stats{font-size:12px}
+.post-actions>button,.reaction-main{font-size:13px;font-weight:700}
+.comment-input{font-size:14px}
+.comment-submit{font-size:12px}
+.comment-media-note{font-size:10px;line-height:1.45}
+.comment-bubble strong,.comment-bubble p{font-size:13px}
+.comment-role{font-size:8px}
+.comment-bubble time,.comment-footer button,.comment-pending{font-size:11px}
+.comment-empty{font-size:12px}
+
+.post-menu-shell{position:relative}
+.post-menu{
+  position:absolute;
+  z-index:12;
+  top:38px;
+  right:0;
+  width:190px;
+  padding:6px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:var(--surface);
+  box-shadow:0 16px 38px rgba(15,23,42,.22);
+}
+.post-menu button{
+  width:100%;padding:10px;border:0;border-radius:9px;color:var(--text);
+  background:transparent;text-align:left;cursor:pointer;font-size:12px;font-weight:700;
+}
+.post-menu button:hover{background:var(--surface-soft)}
+.post-menu button.danger{color:var(--danger)}
+
+.comment-reply{margin-left:40px}
+.comment-footer{display:flex;align-items:center;gap:9px;margin-top:6px}
+.comment-footer time{margin:0}
+.comment-footer button{padding:0;border:0;color:var(--blue);background:transparent;cursor:pointer;font-weight:700}
+.comment-footer button.danger{color:var(--danger)}
+.comment-pending{color:#a16207}
+.replying-indicator{
+  margin:8px 0 0 41px;padding:7px 10px;display:flex;align-items:center;
+  justify-content:space-between;border-radius:10px;color:var(--muted);background:var(--surface);font-size:11px;
+}
+.replying-indicator button{border:0;color:var(--muted);background:transparent;cursor:pointer;font-size:16px}
+
+.notification-shell{position:relative}
+.notification-button{
+  position:relative;width:40px;height:40px;border:1px solid var(--line);border-radius:12px;
+  color:var(--text);background:var(--surface);cursor:pointer;font-size:16px;
+}
+.notification-badge{
+  position:absolute;top:-5px;right:-5px;min-width:19px;height:19px;padding:0 5px;
+  border:2px solid var(--surface);border-radius:999px;color:white;background:var(--danger);
+  font-size:9px;font-weight:800;line-height:15px;
+}
+.notification-panel{
+  position:absolute;z-index:30;top:48px;right:0;width:min(360px,calc(100vw - 24px));
+  max-height:520px;padding:0;overflow:hidden;
+}
+.notification-panel header{padding:13px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+.notification-panel header button{border:0;color:var(--blue);background:transparent;cursor:pointer;font-size:11px;font-weight:700}
+.notification-list{max-height:450px;overflow:auto}
+.notification-item{padding:11px 13px;display:flex;gap:10px;color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}
+.notification-item.unread{background:color-mix(in srgb,var(--blue) 8%,var(--surface))}
+.notification-item img{width:38px;height:38px;border-radius:12px;object-fit:cover}
+.notification-item>span{min-width:0;display:grid;gap:4px}
+.notification-item strong{font-size:11px;line-height:1.4}
+.notification-item small{color:var(--muted);font-size:9px}
+.notification-empty{padding:24px;text-align:center;color:var(--muted);font-size:11px}
+
 @media (max-width:880px){
   .forum-layout{grid-template-columns:1fr}
   .forum-sidebar{position:static;grid-template-columns:1fr 1fr}
@@ -856,7 +932,7 @@
   .post-body,.post-hashtags{margin-left:14px;margin-right:14px}
   .post-stats{margin:0 14px}
   .post-actions{padding-left:5px;padding-right:5px;gap:2px}
-  .post-actions>button,.reaction-main{gap:4px;font-size:8px}
+  .post-actions>button,.reaction-main{gap:4px;font-size:11px}
   .reaction-picker{left:-5px}
   .reaction-picker button{width:31px;height:31px;font-size:18px}
   .comment-panel{padding:11px 12px 15px}
@@ -868,4 +944,6 @@
   .media-gallery.count-1{grid-auto-rows:minmax(210px,460px)}
   .media-lightbox-content{padding:64px 10px 58px}
   .forum-sidebar{grid-template-columns:1fr}
+  .comment-reply{margin-left:24px}
+  .notification-panel{position:fixed;top:65px;right:12px}
 }

@@ -1,6 +1,7 @@
 const MB = 1024 * 1024;
-const MEMBER_LIMITS = { image: 1.5 * MB, video: 25 * MB, audio: 10 * MB };
-const ELEVATED_LIMITS = { image: 3 * MB, video: 50 * MB, audio: 20 * MB };
+const MEMBER_LIMITS = { image: 5 * MB, video: 0, audio: 2 * MB };
+const VIP_LIMITS = { image: 5 * MB, video: 50 * MB, audio: 5 * MB };
+const ADMIN_LIMITS = { image: 50 * MB, video: 50 * MB, audio: 50 * MB };
 
 const MEDIA_TYPES = new Map([
   ['image/jpeg', { kind: 'image', extension: 'jpg' }],
@@ -19,8 +20,9 @@ const MEDIA_TYPES = new Map([
 ]);
 
 function mediaLimit(role, kind) {
-  const elevated = ['vip', 'moderator', 'admin'].includes(role);
-  return (elevated ? ELEVATED_LIMITS : MEMBER_LIMITS)[kind];
+  if (role === 'admin') return ADMIN_LIMITS[kind];
+  if (['vip', 'moderator'].includes(role)) return VIP_LIMITS[kind];
+  return MEMBER_LIMITS[kind];
 }
 
 function mediaLabel(kind) {
@@ -201,6 +203,10 @@ async function upload(request, env) {
       'Chỉ hỗ trợ ảnh JPG/PNG/WebP/GIF, video MP4/WebM/MOV hoặc âm thanh MP3/M4A/OGG/WebM/WAV.',
       415
     );
+  }
+
+  if (profile.role === 'member' && media.kind === 'video') {
+    return errorResponse(request, env, 'Thành viên thường không được tải video.', 403);
   }
 
   const declaredLength = Number(request.headers.get('Content-Length') || 0);

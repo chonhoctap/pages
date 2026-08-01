@@ -11,8 +11,9 @@ Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải l�
 - Chỉ tài khoản `active` được tải tệp.
 - Chủ tệp, moderator hoặc admin mới được xóa.
 - Mỗi tài khoản tối đa 12 lượt tải lên trong một phút để hạn chế lạm dụng.
-- Thành viên: ảnh 1,5 MB, video 25 MB, âm thanh 10 MB.
-- VIP/staff: ảnh 3 MB, video 50 MB, âm thanh 20 MB.
+- Thành viên: ảnh tối đa 5 MB/tệp, không video, âm thanh 2 MB.
+- VIP/moderator: ảnh 5 MB, video 50 MB, âm thanh 5 MB.
+- Admin: tối đa kỹ thuật 50 MB/tệp; giới hạn số lượng/thời lượng được DB kiểm tra.
 - CORS chỉ mở cho `https://chonhoctap.github.io` và localhost khi phát triển.
 
 ## Thiết lập lần đầu

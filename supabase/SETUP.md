@@ -134,6 +134,24 @@ chuyển tệp mới sang Cloudflare R2 sau khi cấu hình Worker.
 Nếu `MEDIA_API_URL` còn trống, website tạm thời dùng hai bucket Supabase cũ để
 không làm gián đoạn phiên bản đang chạy.
 
+## Nâng cấp diễn đàn V6
+
+Sau `forum_v5_migration.sql`, chạy tiếp toàn bộ `forum_v6_migration.sql` trong
+SQL Editor. V6 bổ sung:
+
+- chống spam bình luận ở database: mỗi tài khoản chỉ gửi một bình luận sau
+  mỗi 2 phút, kể cả khi tải lại trang hoặc xóa bình luận vừa gửi;
+- Realtime cho bài viết, media, bình luận, cảm xúc, lượt chia sẻ, báo cáo và
+  hộp thư thông báo;
+- báo cáo mới xuất hiện ngay trong hộp thư của moderator và admin.
+
+Sau đó deploy lại Edge Function `moderate-forum` bằng mã V6. Bình luận được lưu
+ngay và AI kiểm tra trong nền; bình luận sạch tự công khai, bình luận vi phạm bị
+ẩn mà không cần moderator duyệt. AI hiện kiểm tra văn bản và ảnh. Video/âm thanh
+trong bình luận không qua hàng chờ thủ công, nhưng bản thân hai loại tệp này
+chưa được endpoint Moderations phân tích. Bài viết có video/âm thanh vẫn chờ
+moderator/admin duyệt như V5.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -238,3 +256,8 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
     VIP, moderator và admin ở cả bài viết lẫn bình luận.
 25. Thử tag, trả lời, báo cáo, ẩn/hiện và kiểm tra chuông thông báo; bài có
     video/âm thanh phải ở hàng chờ cho đến khi staff duyệt.
+26. Chạy `forum_v6_migration.sql`, deploy lại `moderate-forum`, rồi mở diễn đàn
+    trên hai cửa sổ để kiểm tra Realtime, danh sách người thả cảm xúc và hộp thư
+    báo cáo của moderator/admin.
+27. Gửi hai bình luận liên tiếp và xác nhận lần hai bị chặn đủ 2 phút; bình luận
+    đầu xuất hiện ngay với trạng thái AI đang kiểm tra, không còn nút duyệt tay.

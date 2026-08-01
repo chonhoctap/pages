@@ -78,10 +78,10 @@ Deno.serve(async request => {
 
     const hasUnsupportedMedia = (mediaRows || [])
       .some(item => ['video', 'audio'].includes(item.media_type));
-    const input: Array<Record<string, unknown>> = [{
-      type: 'text',
-      text: isPost ? `${record.title}\n\n${record.body || ''}` : (record.body || '')
-    }];
+    const requiresManualReview = isPost && hasUnsupportedMedia;
+    const textToCheck = isPost ? `${record.title}\n\n${record.body || ''}` : (record.body || '');
+    const input: Array<Record<string, unknown>> = [];
+    if (textToCheck.trim()) input.push({ type: 'text', text: textToCheck });
     (mediaRows || [])
       .filter(item => item.media_type === 'image' && item.media_url)
       .slice(0, 5)
@@ -90,28 +90,35 @@ Deno.serve(async request => {
         image_url: { url: item.media_url }
       }));
 
-    const moderationResponse = await fetch('https://api.openai.com/v1/moderations', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${openaiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ model: 'omni-moderation-latest', input })
-    });
-    if (!moderationResponse.ok) {
-      console.error('OpenAI moderation failed', moderationResponse.status, await moderationResponse.text());
-      return json({ error: 'AI tạm thời chưa kiểm tra được. Nội dung vẫn ở hàng chờ.' }, 502);
-    }
+    let result: Record<string, unknown> & {
+      flagged: boolean;
+      categories: Record<string, boolean>;
+    } = { flagged: false, categories: {} };
+    if (input.length) {
+      const moderationResponse = await fetch('https://api.openai.com/v1/moderations', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${openaiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'omni-moderation-latest', input })
+      });
+      if (!moderationResponse.ok) {
+        console.error('OpenAI moderation failed', moderationResponse.status, await moderationResponse.text());
+        return json({ error: 'AI tạm thời chưa kiểm tra được. Nội dung vẫn ở hàng chờ.' }, 502);
+      }
 
-    const moderation = await moderationResponse.json();
-    const result = moderation.results?.[0];
-    if (!result) return json({ error: 'AI không trả về kết quả hợp lệ.' }, 502);
+      const moderation = await moderationResponse.json();
+      const moderationResult = moderation.results?.[0];
+      if (!moderationResult) return json({ error: 'AI không trả về kết quả hợp lệ.' }, 502);
+      result = moderationResult;
+    }
     const reason = flaggedLabels(result.categories)
-      || (hasUnsupportedMedia ? 'Video/âm thanh cần quản trị viên duyệt.' : null);
+      || (requiresManualReview ? 'Video/âm thanh trong bài viết cần quản trị viên duyệt.' : null);
 
     if (isPost) {
-      const status = result.flagged ? 'rejected' : hasUnsupportedMedia ? 'pending_review' : 'published';
-      const aiStatus = result.flagged ? 'rejected' : hasUnsupportedMedia ? 'manual_review' : 'approved';
+      const status = result.flagged ? 'rejected' : requiresManualReview ? 'pending_review' : 'published';
+      const aiStatus = result.flagged ? 'rejected' : requiresManualReview ? 'manual_review' : 'approved';
       const { error } = await admin.from('forum_posts').update({
         moderation_status: status,
         moderation_reason: reason,
@@ -123,7 +130,9 @@ Deno.serve(async request => {
       }).eq('id', id);
       if (error) throw error;
     } else {
-      const status = result.flagged ? 'rejected' : hasUnsupportedMedia ? 'pending_review' : 'published';
+      // Bình luận không qua hàng chờ thủ công. AI kiểm tra văn bản và ảnh;
+      // video/âm thanh đi kèm không được endpoint Moderations phân tích.
+      const status = result.flagged ? 'rejected' : 'published';
       const { error } = await admin.from('forum_comments').update({
         moderation_status: status,
         moderation_reason: reason
@@ -131,8 +140,7 @@ Deno.serve(async request => {
       if (error) throw error;
     }
 
-    if (hasUnsupportedMedia && !result.flagged) {
-      const targetPostId = isPost ? id : record.post_id;
+    if (requiresManualReview && !result.flagged) {
       const { data: staff } = await admin
         .from('profiles').select('id')
         .in('role', ['moderator', 'admin']).eq('account_status', 'active');
@@ -141,8 +149,8 @@ Deno.serve(async request => {
           recipient_id: member.id,
           actor_id: actor.id,
           type: 'moderation',
-          post_id: targetPostId,
-          comment_id: isPost ? null : id,
+          post_id: id,
+          comment_id: null,
           message: 'Video hoặc âm thanh mới đang chờ duyệt thủ công.'
         })));
       }
@@ -150,8 +158,8 @@ Deno.serve(async request => {
 
     return json({
       allowed: !result.flagged,
-      published: !result.flagged && !hasUnsupportedMedia,
-      manualReview: hasUnsupportedMedia && !result.flagged,
+      published: !result.flagged && !requiresManualReview,
+      manualReview: requiresManualReview && !result.flagged,
       reason
     });
   } catch (error) {

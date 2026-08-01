@@ -6,9 +6,12 @@ const SUPABASE_TUS_URL =
   'https://qartstnodgujgqkczzml.storage.supabase.co/storage/v1/upload/resumable';
 export const IMAGE_OUTPUT_LIMIT = 1.5 * MB;
 export const VIDEO_OUTPUT_LIMIT = 25 * MB;
+export const AUDIO_OUTPUT_LIMIT = 10 * MB;
 export const VIP_IMAGE_OUTPUT_LIMIT = 3 * MB;
 export const VIP_VIDEO_OUTPUT_LIMIT = 50 * MB;
+export const VIP_AUDIO_OUTPUT_LIMIT = 20 * MB;
 export const MEDIA_DURATION_LIMIT = 180;
+export const AUDIO_DURATION_LIMIT = 600;
 
 export function mediaLimitsForRole(role) {
   const elevated = ['vip', 'moderator', 'admin'].includes(role);
@@ -16,8 +19,10 @@ export function mediaLimitsForRole(role) {
     elevated,
     maxImages: elevated ? 6 : 2,
     maxVideos: elevated ? 2 : 1,
+    maxAudios: elevated ? 2 : 1,
     imageBytes: elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
     videoBytes: elevated ? VIP_VIDEO_OUTPUT_LIMIT : VIDEO_OUTPUT_LIMIT,
+    audioBytes: elevated ? VIP_AUDIO_OUTPUT_LIMIT : AUDIO_OUTPUT_LIMIT,
     maxWidth: elevated ? 1920 : 1280,
     maxHeight: elevated ? 1080 : 720,
     qualityLabel: elevated ? '1080p' : '720p'
@@ -31,6 +36,7 @@ export function r2Enabled() {
 function mediaType(file) {
   if (file?.type?.startsWith('image/')) return 'image';
   if (file?.type?.startsWith('video/')) return 'video';
+  if (file?.type?.startsWith('audio/')) return 'audio';
   return '';
 }
 
@@ -160,6 +166,41 @@ function videoMetadata(file) {
   });
 }
 
+function audioMetadata(file) {
+  return new Promise((resolve, reject) => {
+    const audio = document.createElement('audio');
+    const url = URL.createObjectURL(file);
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      audio.removeAttribute('src');
+      audio.load();
+    };
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('Không đọc được thông tin âm thanh. Hãy dùng MP3, M4A, OGG, WebM hoặc WAV.'));
+    }, 12000);
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => {
+      window.clearTimeout(timeout);
+      const result = {
+        width: null,
+        height: null,
+        durationSeconds: Number.isFinite(audio.duration)
+          ? Math.max(1, Math.ceil(audio.duration))
+          : null
+      };
+      cleanup();
+      resolve(result);
+    };
+    audio.onerror = () => {
+      window.clearTimeout(timeout);
+      cleanup();
+      reject(new Error('Trình duyệt không đọc được tệp âm thanh này.'));
+    };
+    audio.src = url;
+  });
+}
+
 export async function mediaMetadata(file) {
   if (file?.type?.startsWith('image/')) {
     const source = await decodeImage(file);
@@ -172,6 +213,7 @@ export async function mediaMetadata(file) {
     return result;
   }
   if (file?.type?.startsWith('video/')) return videoMetadata(file);
+  if (file?.type?.startsWith('audio/')) return audioMetadata(file);
   return { width: null, height: null, durationSeconds: null };
 }
 
@@ -186,10 +228,35 @@ function fitsFrame(metadata, limits) {
 export async function prepareMedia(file, role = 'member') {
   const kind = mediaType(file);
   if (!kind) {
-    throw new Error('Chỉ hỗ trợ ảnh hoặc video.');
+    throw new Error('Chỉ hỗ trợ ảnh, video hoặc âm thanh.');
   }
   const limits = mediaLimitsForRole(role);
   if (kind === 'image') return optimizeImage(file, role);
+  if (kind === 'audio') {
+    if (file.size > limits.audioBytes) {
+      throw new Error(
+        `Âm thanh phải nhỏ hơn ${Math.round(limits.audioBytes / MB)} MB.`
+      );
+    }
+    if (![
+      'audio/mpeg',
+      'audio/mp4',
+      'audio/ogg',
+      'audio/webm',
+      'audio/wav',
+      'audio/x-wav'
+    ].includes(file.type)) {
+      throw new Error('Chỉ hỗ trợ âm thanh MP3, M4A, OGG, WebM hoặc WAV.');
+    }
+    const metadata = await mediaMetadata(file);
+    if (
+      metadata.durationSeconds
+      && metadata.durationSeconds > AUDIO_DURATION_LIMIT
+    ) {
+      throw new Error('Âm thanh tối đa 10 phút.');
+    }
+    return file;
+  }
   if (file.size > limits.videoBytes) {
     throw new Error(
       `Video phải nhỏ hơn ${Math.round(limits.videoBytes / MB)} MB.`

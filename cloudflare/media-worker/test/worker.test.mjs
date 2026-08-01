@@ -77,6 +77,58 @@ test('authenticated active member can upload a valid image', async t => {
   assert.equal(stored.options.httpMetadata.contentType, 'image/jpeg');
 });
 
+test('authenticated active member can upload a valid MP3 audio file', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) {
+      return Response.json({ id: '4cc57975-9f97-4c9d-8f4e-19bba306d335' });
+    }
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{
+        id: '4cc57975-9f97-4c9d-8f4e-19bba306d335',
+        role: 'member',
+        account_status: 'active'
+      }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+
+  let stored;
+  const env = {
+    ...baseEnv,
+    MEDIA_BUCKET: {
+      async put(key, body, options) {
+        stored = { key, body, options };
+      }
+    }
+  };
+  const mp3 = new TextEncoder().encode('ID3\u0004\u0000\u0000\u0000\u0000\u0000\u0000');
+  const response = await worker.fetch(
+    new Request('https://media.example/api/media', {
+      method: 'POST',
+      headers: {
+        Origin: baseEnv.ALLOWED_ORIGIN,
+        Authorization: 'Bearer valid-token',
+        'Content-Type': 'audio/mpeg',
+        'X-Media-Scope': 'post',
+        'X-File-Name': 'loi-giai.mp3'
+      },
+      body: mp3
+    }),
+    env
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 201);
+  assert.equal(payload.type, 'audio');
+  assert.match(payload.path, /\.mp3$/u);
+  assert.equal(stored.options.httpMetadata.contentType, 'audio/mpeg');
+});
+
 test('upload without a Supabase session is rejected', async () => {
   const response = await worker.fetch(
     new Request('https://media.example/api/media', {

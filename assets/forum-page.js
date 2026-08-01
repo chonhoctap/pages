@@ -10,7 +10,7 @@ import {
   setBusy,
   initThemeToggle,
   humanizeAuthError
-} from './supabase-client.js?v=20260730-6';
+} from './supabase-client.js?v=20260801-7';
 import {
   r2Enabled,
   prepareMedia,
@@ -19,7 +19,7 @@ import {
   uploadToR2,
   uploadToSupabaseResumable,
   deleteFromR2
-} from './media-storage.js?v=20260801-1';
+} from './media-storage.js?v=20260801-2';
 
 initThemeToggle();
 
@@ -86,7 +86,12 @@ const elements = {
   reportReason: document.getElementById('reportReason'),
   reportDetails: document.getElementById('reportDetails'),
   closeReportDialog: document.getElementById('closeReportDialog'),
-  submitReport: document.getElementById('submitReport')
+  submitReport: document.getElementById('submitReport'),
+  notificationButton: document.getElementById('notificationButton'),
+  notificationBadge: document.getElementById('notificationBadge'),
+  notificationPanel: document.getElementById('notificationPanel'),
+  notificationList: document.getElementById('notificationList'),
+  markAllRead: document.getElementById('markAllReadButton')
 };
 
 let session;
@@ -101,12 +106,15 @@ let selectedPostMedia = [];
 let reportingPost = null;
 let postCooldownUntil = 0;
 let postCooldownTimer = 0;
+let notificationTimer = 0;
 const commentPreviewUrls = new Map();
 const commentPreparedFiles = new Map();
 const commentPrepareSequences = new Map();
 const commentPreparePromises = new Map();
 const registeredViews = new Set();
 let openReactionAction = null;
+let editingPost = null;
+const replyingToByForm = new Map();
 
 const REACTIONS = {
   like: { emoji: '👍', label: 'Thích' },
@@ -233,6 +241,33 @@ function parseHashtags(raw) {
   return [...new Set(values)].slice(0, 8);
 }
 
+function parseMentions(...values) {
+  const matches = values.join(' ').matchAll(/(?:^|\s)@([a-z0-9_]{3,24})\b/giu);
+  return [...new Set([...matches].map(match => match[1].toLowerCase()))].slice(0, 20);
+}
+
+function renderTextWithMentions(element, value) {
+  element.replaceChildren();
+  const text = String(value || '');
+  let cursor = 0;
+  for (const match of text.matchAll(/@([a-z0-9_]{3,24})\b/giu)) {
+    element.append(document.createTextNode(text.slice(cursor, match.index)));
+    const link = document.createElement('a');
+    link.className = 'mention-link';
+    link.href = `profile.html?user=${encodeURIComponent(match[1].toLowerCase())}`;
+    link.textContent = match[0];
+    element.appendChild(link);
+    cursor = match.index + match[0].length;
+  }
+  element.append(document.createTextNode(text.slice(cursor)));
+}
+
+async function runAutomaticModeration(payload) {
+  const { data, error } = await supabase.functions.invoke('moderate-forum', { body: payload });
+  if (error) throw error;
+  return data;
+}
+
 function mediaKind(file) {
   if (file?.type?.startsWith('image/')) return 'image';
   if (file?.type?.startsWith('video/')) return 'video';
@@ -283,9 +318,10 @@ function selectionCountError(files) {
     || videoCount > limits.maxVideos
     || audioCount > limits.maxAudios
   ) {
+    const label = value => Number.isFinite(value) ? value : 'không giới hạn';
     return `Tài khoản ${roleLabel(currentProfile?.role)} được chọn tối đa `
-      + `${limits.maxImages} ảnh, ${limits.maxVideos} video và `
-      + `${limits.maxAudios} tệp âm thanh.`;
+      + `${label(limits.maxImages)} ảnh, ${label(limits.maxVideos)} video và `
+      + `${label(limits.maxAudios)} tệp âm thanh.`;
   }
   return '';
 }
@@ -381,6 +417,15 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
         previewUrl: URL.createObjectURL(prepared)
       });
     }
+    const preparedImageBytes = preparedItems
+      .filter(item => item.type === 'image')
+      .reduce((sum, item) => sum + item.file.size, 0);
+    if (preparedImageBytes > currentMediaLimits().totalImageBytes) {
+      throw new Error(
+        `Tổng dung lượng ảnh sau nén tối đa `
+        + `${Math.round(currentMediaLimits().totalImageBytes / 1024 / 1024)} MB.`
+      );
+    }
     return preparedItems;
   } catch (error) {
     releasePreparedItems(preparedItems);
@@ -423,7 +468,7 @@ function openComposer() {
     setInfo('Tài khoản đang bị hạn chế nên chưa thể đăng bài.', 'error');
     return;
   }
-  const remaining = cooldownSeconds();
+  const remaining = editingPost ? 0 : cooldownSeconds();
   if (remaining > 0) {
     setInfo(
       `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`,
@@ -439,9 +484,31 @@ function openComposer() {
   window.setTimeout(() => elements.title.focus(), 30);
 }
 
+function openEditComposer(post) {
+  if (post.author_id !== session.user.id || !canInteract()) return;
+  editingPost = post;
+  currentCategory = post.category;
+  updateCategoryUi();
+  elements.subject.value = post.subject || 'khac';
+  elements.grade.value = post.grade || 'other';
+  elements.title.value = post.title || '';
+  elements.body.value = post.body || '';
+  elements.hashtags.value = (post.hashtags || []).map(tag => `#${tag}`).join(' ');
+  elements.media.disabled = true;
+  elements.mediaLimitNote.textContent = 'Giữ nguyên media hiện có khi chỉnh sửa.';
+  elements.publish.textContent = 'Lưu thay đổi';
+  elements.composerPrompt.textContent = 'Chỉnh sửa bài viết';
+  openComposer();
+}
+
 function closeComposer() {
   resetPreview();
   elements.form.reset();
+  editingPost = null;
+  elements.media.disabled = false;
+  elements.publish.textContent = 'Đăng bài';
+  delete elements.publish.dataset.originalText;
+  configureAccount();
   if (typeof elements.composerDialog.close === 'function') {
     elements.composerDialog.close();
   } else {
@@ -555,7 +622,8 @@ async function publishPost(event) {
     setInfo('Tài khoản đang bị hạn chế nên chưa thể đăng bài.', 'error');
     return;
   }
-  const remaining = cooldownSeconds();
+  const editing = editingPost;
+  const remaining = editing ? 0 : cooldownSeconds();
   if (remaining > 0) {
     setInfo(
       `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`,
@@ -571,7 +639,7 @@ async function publishPost(event) {
     elements.title.focus();
     return;
   }
-  const mediaItems = [...selectedPostMedia];
+  const mediaItems = editing ? [] : [...selectedPostMedia];
   let uploaded = [];
   let createdPostId = '';
   setBusy(elements.publish, true, 'Đang đăng...');
@@ -590,15 +658,22 @@ async function publishPost(event) {
       media_path: firstMedia?.path || null,
       media_type: firstMedia?.type || null
     };
-    const { data: createdPost, error } = await supabase
-      .from('forum_posts')
-      .insert(payload)
+    const request = editing
+      ? supabase.from('forum_posts').update({
+          title: payload.title,
+          body: payload.body,
+          hashtags: payload.hashtags,
+          subject: payload.subject,
+          grade: payload.grade
+        }).eq('id', editing.id)
+      : supabase.from('forum_posts').insert(payload);
+    const { data: createdPost, error } = await request
       .select('id, moderation_status')
       .single();
     if (error) throw error;
     createdPostId = createdPost.id;
 
-    if (uploaded.length) {
+    if (!editing && uploaded.length) {
       const { error: mediaError } = await supabase
         .from('forum_post_media')
         .insert(uploaded.map((item, index) => ({
@@ -616,20 +691,33 @@ async function publishPost(event) {
       if (mediaError) throw mediaError;
     }
 
+    let moderationResult;
+    try {
+      moderationResult = await runAutomaticModeration({ postId: createdPostId });
+    } catch (moderationError) {
+      console.warn('Automatic moderation unavailable', moderationError);
+    }
+    const mentions = parseMentions(title, elements.body.value);
+    const { error: mentionError } = await supabase.rpc('sync_forum_post_mentions', {
+      target_post_id: createdPostId,
+      usernames: mentions
+    });
+    if (mentionError) throw mentionError;
+
     elements.form.reset();
     resetPreview();
     closeComposer();
-    setInfo(
-      createdPost.moderation_status === 'pending_review'
-        ? 'Bài đã được gửi vào hàng chờ để quản trị viên xem xét.'
-        : 'Đã đăng bài thành công.',
-      createdPost.moderation_status === 'pending_review' ? 'info' : 'success'
-    );
-    postCooldownUntil = Date.now() + 15 * 60 * 1000;
+    setInfo(moderationResult?.published
+      ? (editing ? 'Đã lưu và AI đã duyệt bài viết.' : 'Đã đăng bài thành công.')
+      : moderationResult?.allowed === false
+        ? 'Nội dung không vượt qua kiểm duyệt nên không được công khai.'
+        : 'Nội dung đang chờ kiểm duyệt hoặc quản trị viên duyệt media.',
+    moderationResult?.published ? 'success' : 'info');
+    if (!editing) postCooldownUntil = Date.now() + 15 * 60 * 1000;
     updatePostCooldownUi();
     await loadPosts();
   } catch (error) {
-    if (createdPostId) {
+    if (createdPostId && !editing) {
       await supabase.from('forum_posts').delete().eq('id', createdPostId);
     }
     await Promise.allSettled(
@@ -717,6 +805,9 @@ async function loadPosts() {
       media_type,
       moderation_status,
       moderation_reason,
+      visibility,
+      edited_at,
+      ai_moderation_status,
       is_pinned,
       expires_at,
       created_at,
@@ -1028,6 +1119,7 @@ function renderPost(post) {
     dateStyle: 'medium',
     timeStyle: 'short'
   }).format(new Date(post.created_at));
+  if (post.edited_at) time.textContent += ' · đã chỉnh sửa';
 
   const meta = card.querySelector('.post-meta');
   meta.append(chip(post.category === 'question' ? 'Hỏi đáp' : 'Giải trí'));
@@ -1037,6 +1129,7 @@ function renderPost(post) {
   } else if (post.moderation_status === 'rejected') {
     meta.append(chip('Không được duyệt', 'rejected'));
   }
+  if (post.visibility === 'hidden') meta.append(chip('Đang ẩn', 'rejected'));
   if (post.category === 'question') {
     meta.append(
       chip(SUBJECT_LABELS[post.subject] || 'Môn khác'),
@@ -1090,7 +1183,7 @@ function renderPost(post) {
   }
 
   card.querySelector('.post-title').textContent = post.title;
-  card.querySelector('.post-body').textContent = post.body || '';
+  renderTextWithMentions(card.querySelector('.post-body'), post.body || '');
   const hashtags = card.querySelector('.post-hashtags');
   (post.hashtags || []).forEach(value => {
     const tag = document.createElement('button');
@@ -1135,14 +1228,7 @@ function renderPost(post) {
   reportButton.hidden = !canInteract() || post.author_id === session.user.id;
   reportButton.addEventListener('click', () => openReportDialog(post));
 
-  const menu = card.querySelector('.post-menu-button');
-  const mayDelete = canInteract() && (post.author_id === session.user.id || canModerate());
-  menu.hidden = !mayDelete;
-  if (mayDelete) {
-    menu.setAttribute('aria-label', 'Xóa bài viết');
-    menu.title = 'Xóa bài viết';
-    menu.addEventListener('click', () => deletePost(post, card, menu));
-  }
+  configurePostMenu(post, card);
 
   const commentForm = card.querySelector('.comment-form');
   commentForm.querySelector('img').src = currentProfile.avatar_url || 'avatar.png';
@@ -1153,12 +1239,75 @@ function renderPost(post) {
     commentPreparePromises.set(commentForm, task);
   });
   const limits = currentMediaLimits();
-  card.querySelector('.comment-media-note').textContent =
-    `${limits.maxImages} ảnh · ${limits.maxVideos} video · ${limits.maxAudios} âm thanh · `
-    + `${limits.qualityLabel} · video 3 phút · âm thanh 10 phút`;
+  card.querySelector('.comment-media-note').textContent = mediaLimitDescription(limits);
   commentForm.addEventListener('submit', event => addComment(event, post, card));
+  card.querySelector('.replying-indicator button')
+    .addEventListener('click', () => setReplyingTo(commentForm));
   observePostView(card, post);
   return fragment;
+}
+
+function appendPostMenuItem(container, label, action, danger = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.role = 'menuitem';
+  button.textContent = label;
+  button.classList.toggle('danger', danger);
+  button.addEventListener('click', action);
+  container.appendChild(button);
+  return button;
+}
+
+function configurePostMenu(post, card) {
+  const shell = card.querySelector('.post-menu-shell');
+  const toggle = card.querySelector('.post-menu-button');
+  const menu = card.querySelector('.post-menu');
+  const owner = canInteract() && post.author_id === session.user.id;
+  const staff = canModerate();
+  shell.hidden = !owner && !staff;
+  if (shell.hidden) return;
+
+  if (owner) {
+    appendPostMenuItem(menu, 'Chỉnh sửa bài viết', () => openEditComposer(post));
+    appendPostMenuItem(
+      menu,
+      post.visibility === 'hidden' ? 'Hiện bài viết' : 'Ẩn bài viết',
+      () => setPostVisibility(post, post.visibility !== 'hidden')
+    );
+  }
+  if (staff && post.moderation_status !== 'published') {
+    appendPostMenuItem(menu, 'Duyệt bài viết', () => reviewPost(post, 'approve', toggle));
+  }
+  if (staff && post.visibility !== 'hidden') {
+    appendPostMenuItem(menu, 'Ẩn bài viết', () => setPostVisibility(post, true));
+  } else if (staff && !owner) {
+    appendPostMenuItem(menu, 'Hiện bài viết', () => setPostVisibility(post, false));
+  }
+  appendPostMenuItem(menu, 'Xóa bài viết', () => deletePost(post, card, toggle), true);
+
+  toggle.addEventListener('click', event => {
+    event.stopPropagation();
+    document.querySelectorAll('.post-menu:not([hidden])').forEach(open => {
+      if (open !== menu) open.hidden = true;
+    });
+    menu.hidden = !menu.hidden;
+    toggle.setAttribute('aria-expanded', String(!menu.hidden));
+  });
+}
+
+async function setPostVisibility(post, shouldHide) {
+  try {
+    const { data, error } = await supabase.rpc('set_forum_post_visibility', {
+      target_post_id: post.id,
+      should_hide: shouldHide
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Bạn không có quyền thay đổi bài viết này.');
+    setInfo(shouldHide ? 'Đã ẩn bài viết.' : 'Đã hiện bài viết.', 'success');
+    await loadPosts();
+  } catch (error) {
+    setInfo(`Không thể đổi trạng thái bài: ${humanizeAuthError(error)}`, 'error');
+  }
 }
 
 function renderPosts() {
@@ -1408,6 +1557,10 @@ async function loadComments(post, card) {
         media_url,
         media_path,
         media_type,
+        parent_comment_id,
+        moderation_status,
+        moderation_reason,
+        edited_at,
         created_at,
         author:profiles!forum_comments_author_id_fkey(
           username,
@@ -1479,6 +1632,7 @@ function renderComments(comments, post, card) {
     const author = authorOf(comment) || {};
     const item = document.createElement('article');
     item.className = 'comment-item';
+    item.classList.toggle('comment-reply', Boolean(comment.parent_comment_id));
     const avatar = document.createElement('img');
     avatar.src = author.avatar_url || 'avatar.png';
     avatar.alt = `Hồ sơ của ${profileName(author)}`;
@@ -1501,10 +1655,11 @@ function renderComments(comments, post, card) {
     role.textContent = roleLabel(author.role || 'member');
     authorLine.append(nameLink, role);
     const body = document.createElement('p');
-    body.textContent = comment.body || '';
+    renderTextWithMentions(body, comment.body || '');
     const time = document.createElement('time');
     time.dateTime = comment.created_at;
     time.textContent = relativeTime(comment.created_at);
+    if (comment.edited_at) time.textContent += ' · đã sửa';
     bubble.append(authorLine, body);
     if (comment.mediaItems?.length) {
       const media = document.createElement('div');
@@ -1512,7 +1667,38 @@ function renderComments(comments, post, card) {
       renderMediaGallery(media, comment.mediaItems, profileName(author), true);
       bubble.appendChild(media);
     }
-    bubble.appendChild(time);
+    const footer = document.createElement('div');
+    footer.className = 'comment-footer';
+    footer.appendChild(time);
+    if (canInteract()) {
+      const reply = document.createElement('button');
+      reply.type = 'button';
+      reply.textContent = 'Trả lời';
+      reply.addEventListener('click', () => {
+        const form = card.querySelector('.comment-form');
+        setReplyingTo(form, comment, author);
+      });
+      footer.appendChild(reply);
+    }
+    if (comment.moderation_status === 'pending_review') {
+      const pending = document.createElement('span');
+      pending.className = 'comment-pending';
+      pending.textContent = 'Đang chờ duyệt';
+      footer.appendChild(pending);
+      if (canModerate()) {
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.textContent = 'Duyệt';
+        approve.addEventListener('click', () => reviewComment(comment, 'approve', post, card, approve));
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'danger';
+        reject.textContent = 'Từ chối';
+        reject.addEventListener('click', () => reviewComment(comment, 'reject', post, card, reject));
+        footer.append(approve, reject);
+      }
+    }
+    bubble.appendChild(footer);
     item.append(avatarLink, bubble);
 
     if (canInteract() && (comment.author_id === session.user.id || canModerate())) {
@@ -1549,6 +1735,41 @@ function renderComments(comments, post, card) {
   });
 }
 
+async function reviewComment(comment, action, post, card, button) {
+  setBusy(button, true, '...');
+  try {
+    const { data, error } = await supabase.rpc('review_forum_comment', {
+      target_comment_id: comment.id,
+      review_action: action,
+      review_note: action === 'approve' ? null : 'Không phù hợp quy tắc cộng đồng.'
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Không thể cập nhật bình luận.');
+    await loadComments(post, card);
+    setInfo(action === 'approve' ? 'Đã duyệt bình luận.' : 'Đã từ chối bình luận.', 'success');
+  } catch (error) {
+    setBusy(button, false);
+    setInfo(`Không thể duyệt bình luận: ${humanizeAuthError(error)}`, 'error');
+  }
+}
+
+function setReplyingTo(form, comment = null, author = null) {
+  const indicator = form.parentElement.querySelector('.replying-indicator');
+  if (!comment) {
+    replyingToByForm.delete(form);
+    indicator.hidden = true;
+    indicator.querySelector('span').textContent = '';
+    form.querySelector('.comment-input').placeholder = 'Viết bình luận...';
+    return;
+  }
+  replyingToByForm.set(form, comment);
+  indicator.hidden = false;
+  indicator.querySelector('span').textContent = `Đang trả lời ${profileName(author)}`;
+  const input = form.querySelector('.comment-input');
+  input.placeholder = `Trả lời ${profileName(author)}...`;
+  input.focus();
+}
+
 async function addComment(event, post, card) {
   event.preventDefault();
   if (!canInteract()) return;
@@ -1576,7 +1797,8 @@ async function addComment(event, post, card) {
         body: body || null,
         media_url: firstMedia?.url || null,
         media_path: firstMedia?.path || null,
-        media_type: firstMedia?.type || null
+        media_type: firstMedia?.type || null,
+        parent_comment_id: replyingToByForm.get(form)?.id || null
       })
       .select('id')
       .single();
@@ -1601,11 +1823,24 @@ async function addComment(event, post, card) {
       if (mediaError) throw mediaError;
     }
 
+    let moderationResult;
+    try {
+      moderationResult = await runAutomaticModeration({ commentId: createdCommentId });
+    } catch (moderationError) {
+      console.warn('Automatic comment moderation unavailable', moderationError);
+    }
+
     input.value = '';
+    setReplyingTo(form);
     resetCommentMedia(form);
     post.commentCount += 1;
     updatePostStats(card, post);
     await loadComments(post, card);
+    if (!moderationResult?.published) {
+      setInfo(moderationResult?.allowed === false
+        ? 'Bình luận không vượt qua kiểm duyệt.'
+        : 'Bình luận đang chờ kiểm duyệt.', 'info');
+    }
   } catch (error) {
     if (createdCommentId) {
       await supabase.from('forum_comments').delete().eq('id', createdCommentId);
@@ -1695,9 +1930,10 @@ async function submitReport(event) {
     }
     closeReportDialog();
     setInfo(
-      'Đã gửi báo cáo. Khi bài nhận đủ báo cáo, hệ thống sẽ chuyển bài vào hàng chờ duyệt.',
+      'Đã gửi báo cáo. Bài đã được chuyển về hàng chờ để quản trị viên kiểm tra.',
       'success'
     );
+    await loadPosts();
   } catch (error) {
     setInfo(`Không thể gửi báo cáo: ${humanizeAuthError(error)}`, 'error');
   } finally {
@@ -1770,6 +2006,65 @@ async function removeStoredMedia(path, legacyBucket) {
   if (error) throw error;
 }
 
+async function loadNotifications() {
+  const { data, error } = await supabase
+    .from('forum_notifications')
+    .select(`
+      id, type, message, post_id, comment_id, read_at, created_at,
+      actor:profiles!forum_notifications_actor_id_fkey(username, display_name, avatar_url)
+    `)
+    .order('created_at', { ascending: false })
+    .limit(40);
+  if (error) throw error;
+  const notifications = data || [];
+  const unread = notifications.filter(item => !item.read_at).length;
+  elements.notificationBadge.hidden = unread === 0;
+  elements.notificationBadge.textContent = unread > 99 ? '99+' : String(unread);
+  elements.notificationList.replaceChildren();
+  if (!notifications.length) {
+    const empty = document.createElement('p');
+    empty.className = 'notification-empty';
+    empty.textContent = 'Chưa có thông báo.';
+    elements.notificationList.appendChild(empty);
+    return;
+  }
+  notifications.forEach(item => {
+    const actor = Array.isArray(item.actor) ? item.actor[0] || {} : item.actor || {};
+    const link = document.createElement('a');
+    link.className = 'notification-item';
+    link.classList.toggle('unread', !item.read_at);
+    link.href = item.post_id
+      ? `forum.html?post=${encodeURIComponent(item.post_id)}`
+      : 'forum.html';
+    const avatar = document.createElement('img');
+    avatar.src = actor.avatar_url || 'avatar.png';
+    avatar.alt = '';
+    const copy = document.createElement('span');
+    const message = document.createElement('strong');
+    message.textContent = item.message;
+    const time = document.createElement('small');
+    time.textContent = relativeTime(item.created_at);
+    copy.append(message, time);
+    link.append(avatar, copy);
+    link.addEventListener('click', () => {
+      if (!item.read_at) supabase.from('forum_notifications')
+        .update({ read_at: new Date().toISOString() }).eq('id', item.id);
+    });
+    elements.notificationList.appendChild(link);
+  });
+}
+
+async function markAllNotificationsRead() {
+  const { error } = await supabase.from('forum_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .is('read_at', null);
+  if (error) {
+    setInfo(`Không thể cập nhật thông báo: ${humanizeAuthError(error)}`, 'error');
+    return;
+  }
+  await loadNotifications();
+}
+
 function configureAccount() {
   const name = profileName(currentProfile, session.user);
   const limits = currentMediaLimits();
@@ -1781,12 +2076,24 @@ function configureAccount() {
   elements.readonly.hidden = canInteract();
   elements.openComposer.hidden = !canInteract();
   elements.moderationFilter.hidden = !canModerate();
-  elements.mediaLimitNote.textContent =
-    `${limits.maxImages} ảnh · ${limits.maxVideos} video · ${limits.maxAudios} âm thanh · `
-    + `${limits.qualityLabel} · `
-    + `ảnh ${(limits.imageBytes / 1024 / 1024).toFixed(1)} MB · `
-    + `video ${Math.round(limits.videoBytes / 1024 / 1024)} MB · `
-    + `âm thanh ${Math.round(limits.audioBytes / 1024 / 1024)} MB`;
+  elements.mediaLimitNote.textContent = mediaLimitDescription(limits);
+  if (limits.maxVideos === 0) {
+    elements.media.accept = elements.media.accept
+      .split(',')
+      .filter(type => !type.startsWith('video/'))
+      .join(',');
+  }
+}
+
+function mediaLimitDescription(limits) {
+  if (limits.admin) return 'Không giới hạn số lượng · tối đa kỹ thuật 50 MB/tệp';
+  const video = limits.maxVideos
+    ? `${limits.maxVideos} video 1 phút`
+    : 'không hỗ trợ video';
+  return `${limits.maxImages} ảnh (tổng ${Math.round(limits.totalImageBytes / 1024 / 1024)} MB) · `
+    + `${video} · ${limits.maxAudios} âm thanh `
+    + `${Math.round(limits.audioBytes / 1024 / 1024)} MB/`
+    + `${Math.round(limits.audioDuration / 60)} phút · ${limits.qualityLabel}`;
 }
 
 async function init() {
@@ -1803,9 +2110,20 @@ async function init() {
     configureAccount();
     await refreshPostCooldown();
     postCooldownTimer = window.setInterval(updatePostCooldownUi, 1000);
+    notificationTimer = window.setInterval(() => loadNotifications().catch(() => {}), 45000);
+    const editId = new URLSearchParams(window.location.search).get('edit');
+    if (editId) {
+      const { data: editTarget } = await supabase.from('forum_posts')
+        .select('category').eq('id', editId).eq('author_id', session.user.id).maybeSingle();
+      if (editTarget?.category) currentCategory = editTarget.category;
+    }
     updateCategoryUi();
     elements.app.hidden = false;
-    await loadPosts();
+    await Promise.all([loadPosts(), loadNotifications()]);
+    if (editId) {
+      const post = posts.find(item => item.id === editId && item.author_id === session.user.id);
+      if (post) openEditComposer(post);
+    }
   } catch (error) {
     setInfo(`Không thể mở diễn đàn: ${humanizeAuthError(error)}`, 'error');
   }
@@ -1861,7 +2179,21 @@ elements.reportDialog.addEventListener('cancel', event => {
   event.preventDefault();
   closeReportDialog();
 });
+elements.notificationButton.addEventListener('click', event => {
+  event.stopPropagation();
+  elements.notificationPanel.hidden = !elements.notificationPanel.hidden;
+  elements.notificationButton.setAttribute('aria-expanded', String(!elements.notificationPanel.hidden));
+});
+elements.notificationPanel.addEventListener('click', event => event.stopPropagation());
+elements.markAllRead.addEventListener('click', markAllNotificationsRead);
 document.addEventListener('click', event => {
+  if (!elements.notificationPanel.hidden) {
+    elements.notificationPanel.hidden = true;
+    elements.notificationButton.setAttribute('aria-expanded', 'false');
+  }
+  document.querySelectorAll('.post-menu:not([hidden])').forEach(menu => {
+    if (!menu.contains(event.target)) menu.hidden = true;
+  });
   if (openReactionAction && !openReactionAction.contains(event.target)) {
     closeReactionPicker();
   }
@@ -1871,6 +2203,7 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('beforeunload', () => {
   window.clearInterval(postCooldownTimer);
+  window.clearInterval(notificationTimer);
   releasePreparedItems(selectedPostMedia);
   commentPreviewUrls.forEach(urls => urls.forEach(url => URL.revokeObjectURL(url)));
 });

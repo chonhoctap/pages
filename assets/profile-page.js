@@ -9,7 +9,8 @@ import {
   setBusy,
   initThemeToggle,
   humanizeAuthError
-} from './supabase-client.js';
+} from './supabase-client.js?v=20260801-7';
+import { r2Enabled, deleteFromR2 } from './media-storage.js?v=20260801-2';
 
 initThemeToggle();
 
@@ -31,11 +32,16 @@ const elements = {
   publicUsername: document.getElementById('publicUsername'),
   publicGrade: document.getElementById('publicGrade'),
   publicBio: document.getElementById('publicBio'),
+  publicAddress: document.getElementById('publicAddress'),
+  publicPhone: document.getElementById('publicPhone'),
+  publicSocialLinks: document.getElementById('publicSocialLinks'),
   publicJoined: document.getElementById('publicJoined'),
   ownSummaryActions: document.getElementById('ownSummaryActions'),
   publicSummaryActions: document.getElementById('publicSummaryActions'),
   profileFormPanel: document.getElementById('profileFormPanel'),
   securityPanel: document.getElementById('securityPanel'),
+  ownPostsPanel: document.getElementById('ownPostsPanel'),
+  ownPostsList: document.getElementById('ownPostsList'),
   adminLink: document.getElementById('adminLink'),
   logoutButton: document.getElementById('logoutButton'),
   changePasswordForm: document.getElementById('changePasswordForm'),
@@ -63,6 +69,11 @@ function fillProfile() {
   elements.form.elements.display_name.value = profile.display_name || '';
   elements.form.elements.bio.value = profile.bio || '';
   elements.form.elements.grade.value = profile.grade || '';
+  elements.form.elements.address.value = profile.address || '';
+  elements.form.elements.phone.value = profile.phone || '';
+  elements.form.elements.facebook_url.value = profile.facebook_url || '';
+  elements.form.elements.tiktok_url.value = profile.tiktok_url || '';
+  elements.form.elements.instagram_url.value = profile.instagram_url || '';
   elements.role.textContent = roleLabel(profile.role);
   elements.role.dataset.role = profile.role;
   elements.avatar.src = profile.avatar_url || user.user_metadata?.avatar_url || 'avatar.png';
@@ -82,6 +93,21 @@ function fillPublicProfile() {
   elements.publicUsername.textContent = `@${profile.username}`;
   elements.publicGrade.textContent = `Khối lớp: ${GRADE_LABELS[profile.grade] || 'Chưa cập nhật'}`;
   elements.publicBio.textContent = profile.bio || 'Thành viên chưa viết phần giới thiệu.';
+  elements.publicAddress.textContent = profile.address ? `Địa chỉ: ${profile.address}` : '';
+  elements.publicPhone.textContent = profile.phone ? `Điện thoại: ${profile.phone}` : '';
+  elements.publicSocialLinks.replaceChildren();
+  [
+    ['Facebook', profile.facebook_url],
+    ['TikTok', profile.tiktok_url],
+    ['Instagram', profile.instagram_url]
+  ].filter(([, url]) => url).forEach(([label, url]) => {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = label;
+    elements.publicSocialLinks.appendChild(link);
+  });
   elements.publicJoined.textContent = `Tham gia ${new Intl.DateTimeFormat('vi-VN', {
     dateStyle: 'medium'
   }).format(new Date(profile.created_at))}`;
@@ -91,6 +117,7 @@ function fillPublicProfile() {
   elements.publicSummaryActions.hidden = false;
   elements.profileFormPanel.hidden = true;
   elements.securityPanel.hidden = true;
+  elements.ownPostsPanel.hidden = true;
   elements.content.classList.add('public-profile-view');
   elements.adminLink.hidden = viewerProfile.role !== 'admin';
 }
@@ -138,6 +165,11 @@ elements.form.addEventListener('submit', async event => {
   const displayName = String(form.get('display_name') || '').trim();
   const bio = String(form.get('bio') || '').trim();
   const grade = String(form.get('grade') || '');
+  const address = String(form.get('address') || '').trim();
+  const phone = String(form.get('phone') || '').trim();
+  const facebookUrl = String(form.get('facebook_url') || '').trim();
+  const tiktokUrl = String(form.get('tiktok_url') || '').trim();
+  const instagramUrl = String(form.get('instagram_url') || '').trim();
 
   if (!/^[a-z0-9_]{3,24}$/.test(username)) {
     showMessage(elements.message, 'Username gồm 3–24 ký tự: chữ thường, số hoặc dấu gạch dưới.', 'error');
@@ -151,6 +183,11 @@ elements.form.addEventListener('submit', async event => {
     showMessage(elements.message, 'Giới thiệu không được vượt quá 280 ký tự.', 'error');
     return;
   }
+  const socialUrls = [facebookUrl, tiktokUrl, instagramUrl].filter(Boolean);
+  if (socialUrls.some(value => !/^https:\/\//iu.test(value))) {
+    showMessage(elements.message, 'Liên kết mạng xã hội phải bắt đầu bằng https://', 'error');
+    return;
+  }
 
   setBusy(button, true, 'Đang lưu...');
   showMessage(elements.message, '');
@@ -161,13 +198,18 @@ elements.form.addEventListener('submit', async event => {
       display_name: displayName,
       bio: bio || null,
       grade: grade || null,
+      address: address || null,
+      phone: phone || null,
+      facebook_url: facebookUrl || null,
+      tiktok_url: tiktokUrl || null,
+      instagram_url: instagramUrl || null,
       avatar_url: avatarUrl || null
     };
     const { data, error } = await supabase
       .from('profiles')
       .update(payload)
       .eq('id', session.user.id)
-      .select('id, username, display_name, avatar_url, bio, grade, role, created_at, updated_at')
+      .select('id, username, display_name, avatar_url, bio, grade, role, address, phone, facebook_url, tiktok_url, instagram_url, created_at, updated_at')
       .single();
     if (error) throw error;
     profile = data;
@@ -183,6 +225,104 @@ elements.form.addEventListener('submit', async event => {
     setBusy(button, false);
   }
 });
+
+async function loadOwnPosts() {
+  const { data, error } = await supabase.from('forum_posts')
+    .select('id, category, title, visibility, moderation_status, created_at')
+    .eq('author_id', session.user.id)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  elements.ownPostsList.replaceChildren();
+  if (!data?.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Bạn chưa đăng bài nào.';
+    elements.ownPostsList.appendChild(empty);
+    return;
+  }
+  data.forEach(post => {
+    const item = document.createElement('article');
+    item.className = 'own-post-item';
+    const copy = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = post.title;
+    const meta = document.createElement('small');
+    meta.textContent = `${post.category === 'question' ? 'Hỏi đáp' : 'Giải trí'} · `
+      + `${post.visibility === 'hidden' ? 'Đang ẩn' : 'Đang hiện'} · `
+      + `${post.moderation_status === 'published' ? 'Đã duyệt' : 'Chờ/không duyệt'}`;
+    copy.append(title, meta);
+    const actions = document.createElement('div');
+    actions.className = 'own-post-actions';
+    const edit = document.createElement('a');
+    edit.href = `forum.html?edit=${encodeURIComponent(post.id)}`;
+    edit.textContent = 'Chỉnh sửa';
+    const visibility = document.createElement('button');
+    visibility.type = 'button';
+    visibility.textContent = post.visibility === 'hidden' ? 'Hiện' : 'Ẩn';
+    visibility.addEventListener('click', async () => {
+      visibility.disabled = true;
+      const { error: rpcError } = await supabase.rpc('set_forum_post_visibility', {
+        target_post_id: post.id,
+        should_hide: post.visibility !== 'hidden'
+      });
+      if (rpcError) showMessage(elements.message, humanizeAuthError(rpcError), 'error');
+      else await loadOwnPosts();
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'danger';
+    remove.textContent = 'Xóa';
+    remove.addEventListener('click', async () => {
+      if (!window.confirm('Xóa vĩnh viễn bài viết này?')) return;
+      remove.disabled = true;
+      try {
+        await removeOwnPostMedia(post.id);
+        const { error: deleteError } = await supabase.from('forum_posts').delete().eq('id', post.id);
+        if (deleteError) throw deleteError;
+        await loadOwnPosts();
+        showMessage(elements.message, 'Đã xóa bài viết.', 'success');
+      } catch (deleteError) {
+        remove.disabled = false;
+        showMessage(elements.message, humanizeAuthError(deleteError), 'error');
+      }
+    });
+    actions.append(edit, visibility, remove);
+    item.append(copy, actions);
+    elements.ownPostsList.appendChild(item);
+  });
+}
+
+async function removeOwnPostMedia(postId) {
+  const [{ data: postMedia, error: postError }, { data: comments, error: commentError }] = await Promise.all([
+    supabase.from('forum_post_media').select('media_path').eq('post_id', postId),
+    supabase.from('forum_comments').select('id, media_path').eq('post_id', postId)
+  ]);
+  if (postError) throw postError;
+  if (commentError) throw commentError;
+  const commentIds = (comments || []).map(item => item.id);
+  let commentMedia = [];
+  if (commentIds.length) {
+    const { data, error } = await supabase.from('forum_comment_media')
+      .select('media_path').in('comment_id', commentIds);
+    if (error) throw error;
+    commentMedia = data || [];
+  }
+  const paths = new Set([
+    ...(postMedia || []).map(item => item.media_path),
+    ...(comments || []).map(item => item.media_path),
+    ...commentMedia.map(item => item.media_path)
+  ].filter(Boolean));
+  await Promise.allSettled([...paths].map(async path => {
+    if (/^(post|comment)\//u.test(path) && r2Enabled()) {
+      await deleteFromR2(session, path);
+      return;
+    }
+    const bucket = path.startsWith(`${session.user.id}/`) && path.includes(`/${postId}/`)
+      ? 'forum-comment-media'
+      : 'forum-media';
+    await supabase.storage.from(bucket).remove([path]);
+  }));
+}
 
 elements.logoutButton.addEventListener('click', async () => {
   setBusy(elements.logoutButton, true, 'Đang đăng xuất...');
@@ -234,7 +374,7 @@ async function init() {
     if (requestedUsername && requestedUsername !== viewerProfile.username) {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, display_name, avatar_url, bio, grade, role, account_status, created_at')
+        .select('id, username, display_name, avatar_url, bio, grade, role, account_status, address, phone, facebook_url, tiktok_url, instagram_url, created_at')
         .eq('username', requestedUsername)
         .single();
       if (error) throw error;
@@ -244,6 +384,7 @@ async function init() {
     } else {
       profile = viewerProfile;
       fillProfile();
+      await loadOwnPosts();
     }
     elements.loading.hidden = true;
     elements.content.hidden = false;

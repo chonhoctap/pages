@@ -144,3 +144,65 @@ test('upload without a Supabase session is rejected', async () => {
   );
   assert.equal(response.status, 401);
 });
+
+test('regular members cannot upload video', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) return Response.json({ id: '4cc57975-9f97-4c9d-8f4e-19bba306d335' });
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{
+        id: '4cc57975-9f97-4c9d-8f4e-19bba306d335',
+        role: 'member',
+        account_status: 'active'
+      }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+  const env = { ...baseEnv, MEDIA_BUCKET: { async put() {} } };
+  const mp4 = new Uint8Array([0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70]);
+  const response = await worker.fetch(new Request('https://media.example/api/media', {
+    method: 'POST',
+    headers: {
+      Origin: baseEnv.ALLOWED_ORIGIN,
+      Authorization: 'Bearer valid-token',
+      'Content-Type': 'video/mp4',
+      'X-Media-Scope': 'post'
+    },
+    body: mp4
+  }), env);
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error, /không được tải video/iu);
+});
+
+test('VIP audio is capped at 5 MB', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) return Response.json({ id: '4cc57975-9f97-4c9d-8f4e-19bba306d335' });
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{
+        id: '4cc57975-9f97-4c9d-8f4e-19bba306d335',
+        role: 'vip',
+        account_status: 'active'
+      }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+  const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
+  oversized.set(new TextEncoder().encode('ID3'));
+  const response = await worker.fetch(new Request('https://media.example/api/media', {
+    method: 'POST',
+    headers: {
+      Origin: baseEnv.ALLOWED_ORIGIN,
+      Authorization: 'Bearer valid-token',
+      'Content-Type': 'audio/mpeg',
+      'X-Media-Scope': 'post'
+    },
+    body: oversized
+  }), { ...baseEnv, MEDIA_BUCKET: { async put() {} } });
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /5 MB/iu);
+});

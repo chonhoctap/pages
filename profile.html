@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260730-6">
+  <link rel="stylesheet" href="assets/account.css?v=20260801-7">
 </head>
 <body>
   <header class="account-topbar">
@@ -62,6 +62,9 @@
           <p id="publicUsername"></p>
           <p id="publicGrade"></p>
           <p id="publicBio"></p>
+          <p id="publicAddress"></p>
+          <p id="publicPhone"></p>
+          <div id="publicSocialLinks" class="public-social-links"></div>
           <p id="publicJoined"></p>
         </div>
         <div id="ownSummaryActions" class="summary-actions">
@@ -105,10 +108,40 @@
             <textarea id="profileBio" class="textarea" name="bio" maxlength="280" placeholder="Chia sẻ đôi chút về bạn..."></textarea>
             <span class="field-hint">Tối đa 280 ký tự.</span>
           </div>
+          <div class="field field-full">
+            <label for="profileAddress">Địa chỉ</label>
+            <input id="profileAddress" class="input" name="address" type="text" maxlength="180"
+              placeholder="Thông tin hiển thị công khai, không dùng để đăng nhập">
+          </div>
+          <div class="field">
+            <label for="profilePhone">Số điện thoại</label>
+            <input id="profilePhone" class="input" name="phone" type="tel" maxlength="24"
+              placeholder="Chỉ là thông tin hồ sơ công khai">
+          </div>
+          <div class="field">
+            <label for="profileFacebook">Facebook</label>
+            <input id="profileFacebook" class="input" name="facebook_url" type="url" maxlength="300" placeholder="https://facebook.com/...">
+          </div>
+          <div class="field">
+            <label for="profileTiktok">TikTok</label>
+            <input id="profileTiktok" class="input" name="tiktok_url" type="url" maxlength="300" placeholder="https://tiktok.com/@...">
+          </div>
+          <div class="field">
+            <label for="profileInstagram">Instagram</label>
+            <input id="profileInstagram" class="input" name="instagram_url" type="url" maxlength="300" placeholder="https://instagram.com/...">
+          </div>
           <div class="form-actions field-full">
             <button class="button" type="submit">Lưu thay đổi</button>
           </div>
         </form>
+      </section>
+
+      <section id="ownPostsPanel" class="panel profile-form-panel own-posts-panel" aria-labelledby="ownPostsTitle">
+        <div class="security-heading">
+          <div><h2 id="ownPostsTitle">Bài viết của tôi</h2><p>Chỉnh sửa, ẩn, hiện hoặc xóa bài đã đăng.</p></div>
+          <a class="link-button" href="forum.html">Đăng bài mới</a>
+        </div>
+        <div id="ownPostsList" class="own-posts-list"><p>Đang tải bài viết...</p></div>
       </section>
 
       <section id="securityPanel" class="panel profile-form-panel security-panel" aria-labelledby="securityTitle">
@@ -138,6 +171,6 @@
     </div>
   </main>
 
-  <script type="module" src="assets/profile-page.js?v=20260730-2"></script>
+  <script type="module" src="assets/profile-page.js?v=20260801-3"></script>
 </body>
 </html>

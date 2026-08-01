@@ -52,7 +52,7 @@ export async function requireSession() {
 export async function getProfile(userId) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, username, display_name, avatar_url, bio, grade, role, account_status, created_at, updated_at')
+    .select('id, username, display_name, avatar_url, bio, grade, role, account_status, address, phone, facebook_url, tiktok_url, instagram_url, created_at, updated_at')
     .eq('id', userId)
     .single();
   if (error) throw error;

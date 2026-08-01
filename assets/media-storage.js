@@ -4,28 +4,36 @@ import { Upload } from 'https://cdn.jsdelivr.net/npm/tus-js-client@4/+esm';
 const MB = 1024 * 1024;
 const SUPABASE_TUS_URL =
   'https://qartstnodgujgqkczzml.storage.supabase.co/storage/v1/upload/resumable';
-export const IMAGE_OUTPUT_LIMIT = 1.5 * MB;
-export const VIDEO_OUTPUT_LIMIT = 25 * MB;
-export const AUDIO_OUTPUT_LIMIT = 10 * MB;
-export const VIP_IMAGE_OUTPUT_LIMIT = 3 * MB;
+export const IMAGE_OUTPUT_LIMIT = 5 * MB;
+export const VIDEO_OUTPUT_LIMIT = 50 * MB;
+export const AUDIO_OUTPUT_LIMIT = 2 * MB;
+export const VIP_IMAGE_OUTPUT_LIMIT = 5 * MB;
 export const VIP_VIDEO_OUTPUT_LIMIT = 50 * MB;
-export const VIP_AUDIO_OUTPUT_LIMIT = 20 * MB;
-export const MEDIA_DURATION_LIMIT = 180;
-export const AUDIO_DURATION_LIMIT = 600;
+export const VIP_AUDIO_OUTPUT_LIMIT = 5 * MB;
+export const MEDIA_DURATION_LIMIT = 60;
+export const MEMBER_AUDIO_DURATION_LIMIT = 60;
+export const VIP_AUDIO_DURATION_LIMIT = 120;
 
 export function mediaLimitsForRole(role) {
-  const elevated = ['vip', 'moderator', 'admin'].includes(role);
+  const admin = role === 'admin';
+  const elevated = ['vip', 'moderator'].includes(role);
   return {
-    elevated,
-    maxImages: elevated ? 6 : 2,
-    maxVideos: elevated ? 2 : 1,
-    maxAudios: elevated ? 2 : 1,
-    imageBytes: elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
-    videoBytes: elevated ? VIP_VIDEO_OUTPUT_LIMIT : VIDEO_OUTPUT_LIMIT,
-    audioBytes: elevated ? VIP_AUDIO_OUTPUT_LIMIT : AUDIO_OUTPUT_LIMIT,
-    maxWidth: elevated ? 1920 : 1280,
-    maxHeight: elevated ? 1080 : 720,
-    qualityLabel: elevated ? '1080p' : '720p'
+    elevated: elevated || admin,
+    admin,
+    maxImages: admin ? Infinity : elevated ? 5 : 2,
+    maxVideos: admin ? Infinity : elevated ? 1 : 0,
+    maxAudios: admin ? Infinity : 1,
+    imageBytes: admin ? 50 * MB : elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
+    totalImageBytes: admin ? Infinity : elevated ? 25 * MB : 5 * MB,
+    videoBytes: admin ? 50 * MB : VIP_VIDEO_OUTPUT_LIMIT,
+    audioBytes: admin ? 50 * MB : elevated ? VIP_AUDIO_OUTPUT_LIMIT : AUDIO_OUTPUT_LIMIT,
+    videoDuration: admin ? Infinity : MEDIA_DURATION_LIMIT,
+    audioDuration: admin ? Infinity : elevated
+      ? VIP_AUDIO_DURATION_LIMIT
+      : MEMBER_AUDIO_DURATION_LIMIT,
+    maxWidth: admin ? Infinity : 1280,
+    maxHeight: admin ? Infinity : 720,
+    qualityLabel: admin ? 'nguyên bản' : '720p'
   };
 }
 
@@ -79,6 +87,7 @@ async function decodeImage(file) {
 export async function optimizeImage(file, role = 'member') {
   if (!file?.type?.startsWith('image/')) return file;
   const limits = mediaLimitsForRole(role);
+  if (limits.admin) return file;
   if (file.type === 'image/gif') {
     if (file.size > limits.imageBytes) {
       throw new Error(
@@ -251,9 +260,9 @@ export async function prepareMedia(file, role = 'member') {
     const metadata = await mediaMetadata(file);
     if (
       metadata.durationSeconds
-      && metadata.durationSeconds > AUDIO_DURATION_LIMIT
+      && metadata.durationSeconds > limits.audioDuration
     ) {
-      throw new Error('Âm thanh tối đa 10 phút.');
+      throw new Error(`Âm thanh tối đa ${Math.round(limits.audioDuration / 60)} phút.`);
     }
     return file;
   }
@@ -274,9 +283,9 @@ export async function prepareMedia(file, role = 'member') {
   }
   if (
     metadata.durationSeconds
-    && metadata.durationSeconds > MEDIA_DURATION_LIMIT
+    && metadata.durationSeconds > limits.videoDuration
   ) {
-    throw new Error('Video tối đa 3 phút.');
+    throw new Error('Video tối đa 1 phút.');
   }
   return file;
 }

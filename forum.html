@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/account.css?v=20260730-6">
-  <link rel="stylesheet" href="assets/forum.css?v=20260730-4">
+  <link rel="stylesheet" href="assets/forum.css?v=20260801-1">
 </head>
 <body>
   <header class="account-topbar" aria-label="Điều hướng chính">
@@ -203,10 +203,10 @@
             <div class="composer-actions">
               <label class="media-button">
                 <input id="postMedia" type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                  accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/mp4,audio/ogg,audio/webm,audio/wav,audio/x-wav"
                   multiple>
-                <span aria-hidden="true">🖼️</span>
-                <span>Thêm ảnh/video</span>
+                <span aria-hidden="true">🎞️</span>
+                <span>Thêm ảnh/video/âm thanh</span>
               </label>
               <span id="mediaLimitNote" class="composer-note">Đang tải giới hạn media...</span>
               <button id="publishButton" class="button" type="submit">Đăng bài</button>
@@ -269,12 +269,12 @@
             <input class="comment-input" type="text" maxlength="1200" placeholder="Viết bình luận...">
             <div class="comment-media-preview" hidden></div>
           </div>
-          <label class="comment-attach" title="Gắn ảnh hoặc video">
+          <label class="comment-attach" title="Gắn ảnh, video hoặc âm thanh">
             <input class="comment-media-input" type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+              accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/mp4,audio/ogg,audio/webm,audio/wav,audio/x-wav"
               multiple>
-            <span aria-hidden="true">🖼️</span>
-            <span class="sr-only">Gắn ảnh hoặc video</span>
+            <span aria-hidden="true">🎞️</span>
+            <span class="sr-only">Gắn ảnh, video hoặc âm thanh</span>
           </label>
           <button class="comment-submit" type="submit">Gửi</button>
         </form>
@@ -319,6 +319,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="assets/forum-page.js?v=20260730-6"></script>
+  <script type="module" src="assets/forum-page.js?v=20260801-1"></script>
 </body>
 </html>

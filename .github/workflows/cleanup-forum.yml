@@ -2,8 +2,8 @@ name: Dọn bài diễn đàn hết hạn
 
 on:
   schedule:
-    # 02:17 mỗi ngày theo giờ Việt Nam (19:17 UTC).
-    - cron: '17 19 * * *'
+    # Chạy phút 17 mỗi giờ để bài hết hạn được dọn trong vòng khoảng một giờ.
+    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       dry_run:

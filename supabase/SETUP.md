@@ -51,6 +51,20 @@ Sau hai migration diễn đàn ở trên, chạy tiếp toàn bộ
 - Hỏi đáp chưa giải hết hạn sau 5 ngày, đã giải sau 7 ngày;
 - bài Giải trí hết hạn sau 15 ngày; bài ghim không tự hết hạn.
 
+## Hoàn thiện diễn đàn V4
+
+Sau `forum_v3_migration.sql`, chạy tiếp toàn bộ file
+`forum_v4_migration.sql`. Migration này cập nhật đúng quy tắc sử dụng hiện tại:
+
+- mọi tài khoản chỉ được đăng một bài sau mỗi 15 phút;
+- Hỏi đáp đã giải tự xóa sau 3 ngày kể từ lúc đánh dấu;
+- Hỏi đáp chưa giải có bình luận tự xóa sau 5 ngày, chưa có bình luận sau 7 ngày;
+- bài Giải trí tự xóa sau 14 ngày; bài ghim vẫn không tự hết hạn;
+- bài hết hạn bị ẩn ngay, rồi workflow dọn dữ liệu chạy mỗi giờ;
+- bài viết và bình luận nhận thêm âm thanh MP3, M4A, OGG, WebM hoặc WAV;
+- thành viên được gắn 1 âm thanh tối đa 10 MB, VIP/staff được gắn 2 âm thanh,
+  mỗi tệp tối đa 20 MB; thời lượng tối đa 10 phút.
+
 Supabase Free giới hạn mỗi file tối đa 50 MB. Website dùng TUS resumable upload
 cho tệp lớn hơn 6 MB để đường truyền không ổn định có thể tải đáng tin cậy hơn.
 Khi chuyển sang R2 có thể nâng giới hạn VIP nếu backend R2 cũng được cập nhật.
@@ -61,8 +75,8 @@ media ở backend; không nên coi bộ lọc từ khóa là chính xác tuyệt
 
 ### Tự dọn bài và Supabase Storage
 
-Workflow `.github/workflows/cleanup-forum.yml` chạy lúc 02:17 mỗi ngày theo giờ
-Việt Nam. Nó xóa ảnh/video trong `forum-comment-media` và `forum-media` trước,
+Workflow `.github/workflows/cleanup-forum.yml` chạy vào phút 17 mỗi giờ. Nó xóa
+ảnh/video/âm thanh trong `forum-comment-media` và `forum-media` trước,
 sau đó mới xóa bài cùng dữ liệu liên quan.
 
 Vào GitHub repository > **Settings > Secrets and variables > Actions** và tạo:
@@ -186,5 +200,9 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
     thứ hai bị chặn trong 15 phút.
 20. Dùng tài khoản thường thử liên kết quá 2 ảnh hoặc 1 video; xác nhận
     database từ chối. Lặp lại với VIP ở giới hạn 6 ảnh và 2 video.
-21. Chạy workflow dọn dẹp thủ công với `dry_run = true`, đối chiếu số bài hết
+21. Chạy `forum_v4_migration.sql`, thử tải một tệp âm thanh và xác nhận trình
+    phát xuất hiện trong bài hoặc bình luận.
+22. Xác nhận bài Hỏi đáp đã giải có hạn 3 ngày; bài chưa giải có bình luận là
+    5 ngày, chưa có bình luận là 7 ngày; bài Giải trí là 14 ngày.
+23. Chạy workflow dọn dẹp thủ công với `dry_run = true`, đối chiếu số bài hết
     hạn rồi mới cho phép lần chạy thật.

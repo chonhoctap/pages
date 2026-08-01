@@ -1,5 +1,6 @@
-const IMAGE_LIMIT = 2 * 1024 * 1024;
-const VIDEO_LIMIT = 25 * 1024 * 1024;
+const MB = 1024 * 1024;
+const MEMBER_LIMITS = { image: 1.5 * MB, video: 25 * MB, audio: 10 * MB };
+const ELEVATED_LIMITS = { image: 3 * MB, video: 50 * MB, audio: 20 * MB };
 
 const MEDIA_TYPES = new Map([
   ['image/jpeg', { kind: 'image', extension: 'jpg' }],
@@ -8,8 +9,30 @@ const MEDIA_TYPES = new Map([
   ['image/gif', { kind: 'image', extension: 'gif' }],
   ['video/mp4', { kind: 'video', extension: 'mp4' }],
   ['video/webm', { kind: 'video', extension: 'webm' }],
-  ['video/quicktime', { kind: 'video', extension: 'mov' }]
+  ['video/quicktime', { kind: 'video', extension: 'mov' }],
+  ['audio/mpeg', { kind: 'audio', extension: 'mp3' }],
+  ['audio/mp4', { kind: 'audio', extension: 'm4a' }],
+  ['audio/ogg', { kind: 'audio', extension: 'ogg' }],
+  ['audio/webm', { kind: 'audio', extension: 'webm' }],
+  ['audio/wav', { kind: 'audio', extension: 'wav' }],
+  ['audio/x-wav', { kind: 'audio', extension: 'wav' }]
 ]);
+
+function mediaLimit(role, kind) {
+  const elevated = ['vip', 'moderator', 'admin'].includes(role);
+  return (elevated ? ELEVATED_LIMITS : MEMBER_LIMITS)[kind];
+}
+
+function mediaLabel(kind) {
+  if (kind === 'image') return 'Ảnh';
+  if (kind === 'video') return 'Video';
+  return 'Âm thanh';
+}
+
+function megabyteLabel(bytes) {
+  const value = bytes / MB;
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
 
 function corsHeaders(request, env) {
   const origin = request.headers.get('Origin');
@@ -105,6 +128,22 @@ function signatureMatches(bytes, contentType) {
   if (contentType === 'video/mp4' || contentType === 'video/quicktime') {
     return ascii(bytes, 4, 4) === 'ftyp';
   }
+  if (contentType === 'audio/mpeg') {
+    return ascii(bytes, 0, 3) === 'ID3'
+      || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0);
+  }
+  if (contentType === 'audio/mp4') {
+    return ascii(bytes, 4, 4) === 'ftyp';
+  }
+  if (contentType === 'audio/ogg') {
+    return ascii(bytes, 0, 4) === 'OggS';
+  }
+  if (contentType === 'audio/webm') {
+    return bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3;
+  }
+  if (contentType === 'audio/wav' || contentType === 'audio/x-wav') {
+    return ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WAVE';
+  }
   return false;
 }
 
@@ -156,16 +195,22 @@ async function upload(request, env) {
     .toLowerCase();
   const media = MEDIA_TYPES.get(contentType);
   if (!media) {
-    return errorResponse(request, env, 'Chỉ hỗ trợ JPG, PNG, WebP, GIF, MP4, WebM hoặc MOV.', 415);
+    return errorResponse(
+      request,
+      env,
+      'Chỉ hỗ trợ ảnh JPG/PNG/WebP/GIF, video MP4/WebM/MOV hoặc âm thanh MP3/M4A/OGG/WebM/WAV.',
+      415
+    );
   }
 
   const declaredLength = Number(request.headers.get('Content-Length') || 0);
-  const limit = media.kind === 'image' ? IMAGE_LIMIT : VIDEO_LIMIT;
+  const limit = mediaLimit(profile.role, media.kind);
+  const label = mediaLabel(media.kind);
   if (declaredLength > limit) {
     return errorResponse(
       request,
       env,
-      media.kind === 'image' ? 'Ảnh vượt quá 2 MB.' : 'Video vượt quá 25 MB.',
+      `${label} vượt quá ${megabyteLabel(limit)} MB.`,
       413
     );
   }
@@ -175,7 +220,7 @@ async function upload(request, env) {
     return errorResponse(
       request,
       env,
-      media.kind === 'image' ? 'Ảnh phải nhỏ hơn 2 MB.' : 'Video phải nhỏ hơn 25 MB.',
+      `${label} phải nhỏ hơn ${megabyteLabel(limit)} MB.`,
       413
     );
   }

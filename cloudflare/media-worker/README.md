@@ -1,7 +1,7 @@
 # Cloudflare R2 media Worker
 
 Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải lên, đọc và xóa
-ảnh/video trong bucket R2 riêng tư `chonhoctap-media`.
+ảnh/video/âm thanh trong bucket R2 riêng tư `chonhoctap-media`.
 
 ## Bảo mật
 
@@ -11,7 +11,8 @@ Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải l�
 - Chỉ tài khoản `active` được tải tệp.
 - Chủ tệp, moderator hoặc admin mới được xóa.
 - Mỗi tài khoản tối đa 12 lượt tải lên trong một phút để hạn chế lạm dụng.
-- Ảnh tối đa 2 MB; video tối đa 25 MB.
+- Thành viên: ảnh 1,5 MB, video 25 MB, âm thanh 10 MB.
+- VIP/staff: ảnh 3 MB, video 50 MB, âm thanh 20 MB.
 - CORS chỉ mở cho `https://chonhoctap.github.io` và localhost khi phát triển.
 
 ## Thiết lập lần đầu

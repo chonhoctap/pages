@@ -94,6 +94,7 @@ const elements = {
   markAllRead: document.getElementById('markAllReadButton'),
   reactionListDialog: document.getElementById('reactionListDialog'),
   reactionListSummary: document.getElementById('reactionListSummary'),
+  reactionListFilters: document.getElementById('reactionListFilters'),
   reactionList: document.getElementById('reactionList'),
   closeReactionList: document.getElementById('closeReactionList')
 };
@@ -124,6 +125,9 @@ const registeredViews = new Set();
 let openReactionAction = null;
 let editingPost = null;
 const replyingToByForm = new Map();
+const reactionPendingPosts = new Set();
+let reactionListRows = [];
+let activeReactionListFilter = 'all';
 
 const REACTIONS = {
   like: { emoji: '👍', label: 'Thích' },
@@ -896,7 +900,8 @@ async function loadPosts() {
         commentsResult,
         sharesResult,
         mediaResult,
-        metricsResult
+        metricsResult,
+        reportsResult
       ] = await Promise.all([
         supabase
           .from('forum_reactions')
@@ -923,13 +928,21 @@ async function loadPosts() {
         supabase
           .from('forum_post_metrics')
           .select('post_id, view_count, reaction_count, comment_count, share_count, trending_score')
-          .in('post_id', ids)
+          .in('post_id', ids),
+        currentProfile?.role === 'admin'
+          ? supabase
+              .from('forum_reports')
+              .select('id, post_id, reason, details, created_at')
+              .eq('status', 'open')
+              .in('post_id', ids)
+          : Promise.resolve({ data: [], error: null })
       ]);
       if (reactionsResult.error) throw reactionsResult.error;
       if (commentsResult.error) throw commentsResult.error;
       if (sharesResult.error) throw sharesResult.error;
       if (mediaResult.error) throw mediaResult.error;
       if (metricsResult.error) throw metricsResult.error;
+      if (reportsResult.error) throw reportsResult.error;
       if (sequence !== loadSequence) return;
 
       const commentCounts = countByPost(commentsResult.data);
@@ -939,6 +952,7 @@ async function loadPosts() {
       const metricsByPost = new Map(
         (metricsResult.data || []).map(metric => [metric.post_id, metric])
       );
+      const reportsByPost = groupByPost(reportsResult.data);
       posts.forEach(post => {
         const postReactions = reactionsByPost.get(post.id) || [];
         const metric = metricsByPost.get(post.id) || {};
@@ -954,6 +968,7 @@ async function loadPosts() {
         post.shareCount = Number(metric.share_count ?? shareCounts.get(post.id) ?? 0);
         post.viewCount = Number(metric.view_count || 0);
         post.trendingScore = Number(metric.trending_score || 0);
+        post.openReports = reportsByPost.get(post.id) || [];
         post.mediaItems = mediaByPost.get(post.id) || (
           post.media_url
             ? [{
@@ -1080,8 +1095,11 @@ function setupForumRealtime() {
       table: 'forum_notifications',
       filter: `recipient_id=eq.${session.user.id}`
     }, scheduleRealtimeNotifications)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'forum_reports' }, () => {
-      if (canModerate()) scheduleRealtimeNotifications();
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_reports' }, () => {
+      if (currentProfile?.role === 'admin') {
+        scheduleRealtimeNotifications();
+        scheduleRealtimeFeedReload();
+      }
     })
     .subscribe(status => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -1121,10 +1139,88 @@ function updatePostStats(card, post) {
     post.myReaction ? reaction.label : 'Cảm xúc';
   reactionButton.classList.toggle('reacted', Boolean(post.myReaction));
   reactionButton.dataset.reaction = post.myReaction || '';
+  reactionButton.setAttribute('aria-pressed', String(Boolean(post.myReaction)));
+  reactionButton.title = post.myReaction
+    ? `Bấm để bỏ ${reaction.label.toLocaleLowerCase('vi')}; nhấn giữ để đổi cảm xúc`
+    : 'Bấm để Thích; nhấn giữ hoặc rê chuột để chọn cảm xúc khác';
+  card.querySelectorAll('.reaction-picker [data-reaction]').forEach(button => {
+    const selected = button.dataset.reaction === post.myReaction;
+    button.classList.toggle('selected', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  });
+}
+
+function renderReactionList(filter = activeReactionListFilter) {
+  activeReactionListFilter = filter;
+  const visible = filter === 'all'
+    ? reactionListRows
+    : reactionListRows.filter(item => item.reaction_type === filter);
+  elements.reactionList.replaceChildren();
+  elements.reactionListFilters.querySelectorAll('button').forEach(button => {
+    const selected = button.dataset.filter === filter;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-selected', String(selected));
+  });
+  if (!visible.length) {
+    const empty = document.createElement('p');
+    empty.className = 'reaction-list-empty';
+    empty.textContent = reactionListRows.length
+      ? 'Chưa có cảm xúc thuộc loại này.'
+      : 'Chưa có ai thả cảm xúc.';
+    elements.reactionList.appendChild(empty);
+    return;
+  }
+  visible.forEach(item => {
+    const profile = Array.isArray(item.user) ? item.user[0] || {} : item.user || {};
+    const link = document.createElement('a');
+    link.className = 'reaction-list-item';
+    link.href = publicProfileUrl(profile);
+    const avatar = document.createElement('img');
+    avatar.src = profile.avatar_url || 'avatar.png';
+    avatar.alt = '';
+    const copy = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = profileName(profile);
+    const role = document.createElement('small');
+    role.textContent = roleLabel(profile.role || 'member');
+    copy.append(name, role);
+    const emoji = document.createElement('span');
+    emoji.className = 'reaction-list-emoji';
+    emoji.textContent = REACTIONS[item.reaction_type]?.emoji || '♡';
+    emoji.title = REACTIONS[item.reaction_type]?.label || 'Cảm xúc';
+    link.append(avatar, copy, emoji);
+    elements.reactionList.appendChild(link);
+  });
+}
+
+function renderReactionListFilters() {
+  elements.reactionListFilters.replaceChildren();
+  const counts = reactionListRows.reduce((result, item) => {
+    result[item.reaction_type] = (result[item.reaction_type] || 0) + 1;
+    return result;
+  }, {});
+  const filters = [
+    ['all', `Tất cả ${reactionListRows.length}`],
+    ...Object.entries(REACTIONS)
+      .filter(([type]) => counts[type])
+      .map(([type, reaction]) => [type, `${reaction.emoji} ${counts[type]}`])
+  ];
+  filters.forEach(([type, label]) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.role = 'tab';
+    button.dataset.filter = type;
+    button.textContent = label;
+    button.addEventListener('click', () => renderReactionList(type));
+    elements.reactionListFilters.appendChild(button);
+  });
 }
 
 async function openReactionList(post) {
   if (!post?.id) return;
+  reactionListRows = [];
+  activeReactionListFilter = 'all';
+  elements.reactionListFilters.replaceChildren();
   elements.reactionList.replaceChildren();
   elements.reactionListSummary.textContent = 'Đang tải...';
   const loading = document.createElement('p');
@@ -1149,37 +1245,10 @@ async function openReactionList(post) {
       .eq('post_id', post.id)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    const reactions = data || [];
-    elements.reactionListSummary.textContent = `${reactions.length} người`;
-    elements.reactionList.replaceChildren();
-    if (!reactions.length) {
-      const empty = document.createElement('p');
-      empty.className = 'reaction-list-empty';
-      empty.textContent = 'Chưa có ai thả cảm xúc.';
-      elements.reactionList.appendChild(empty);
-      return;
-    }
-    reactions.forEach(item => {
-      const profile = Array.isArray(item.user) ? item.user[0] || {} : item.user || {};
-      const link = document.createElement('a');
-      link.className = 'reaction-list-item';
-      link.href = publicProfileUrl(profile);
-      const avatar = document.createElement('img');
-      avatar.src = profile.avatar_url || 'avatar.png';
-      avatar.alt = '';
-      const copy = document.createElement('span');
-      const name = document.createElement('strong');
-      name.textContent = profileName(profile);
-      const role = document.createElement('small');
-      role.textContent = roleLabel(profile.role || 'member');
-      copy.append(name, role);
-      const emoji = document.createElement('span');
-      emoji.className = 'reaction-list-emoji';
-      emoji.textContent = REACTIONS[item.reaction_type]?.emoji || '♡';
-      emoji.title = REACTIONS[item.reaction_type]?.label || 'Cảm xúc';
-      link.append(avatar, copy, emoji);
-      elements.reactionList.appendChild(link);
-    });
+    reactionListRows = data || [];
+    elements.reactionListSummary.textContent = `${reactionListRows.length} người`;
+    renderReactionListFilters();
+    renderReactionList();
   } catch (error) {
     elements.reactionListSummary.textContent = 'Có lỗi';
     elements.reactionList.replaceChildren();
@@ -1369,6 +1438,9 @@ function renderPost(post) {
     meta.append(chip('Không được duyệt', 'rejected'));
   }
   if (post.visibility === 'hidden') meta.append(chip('Đang ẩn', 'rejected'));
+  if (currentProfile?.role === 'admin' && post.openReports?.length) {
+    meta.append(chip(`⚑ ${post.openReports.length} báo cáo`, 'reported'));
+  }
   if (post.category === 'question') {
     meta.append(
       chip(SUBJECT_LABELS[post.subject] || 'Môn khác'),
@@ -1420,6 +1492,23 @@ function renderPost(post) {
       moderationNote.after(controls);
     }
   }
+  if (currentProfile?.role === 'admin' && post.openReports?.length) {
+    const reportNote = document.createElement('div');
+    reportNote.className = 'report-admin-note';
+    const reasonLabels = {
+      spam: 'Spam',
+      harassment: 'Nói xấu hoặc quấy rối',
+      adult: 'Nội dung nhạy cảm',
+      off_topic: 'Không đúng nội dung diễn đàn',
+      other: 'Lý do khác'
+    };
+    const descriptions = post.openReports.map((report, index) => {
+      const detail = report.details ? ` — ${report.details}` : '';
+      return `${index + 1}. ${reasonLabels[report.reason] || report.reason}${detail}`;
+    });
+    reportNote.textContent = `Báo cáo đang chờ admin quyết định:\n${descriptions.join('\n')}`;
+    card.querySelector('.post-header').after(reportNote);
+  }
 
   card.querySelector('.post-title').textContent = post.title;
   renderTextWithMentions(card.querySelector('.post-body'), post.body || '');
@@ -1446,11 +1535,7 @@ function renderPost(post) {
   updatePostStats(card, post);
   const reactionAction = card.querySelector('.reaction-action');
   const reactionButton = card.querySelector('.reaction-main');
-  reactionButton.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopPropagation();
-    toggleReactionPicker(reactionAction);
-  });
+  configureReactionInteraction(post, card, reactionAction, reactionButton);
   card.querySelectorAll('.reaction-picker [data-reaction]').forEach(button => {
     button.addEventListener('click', async event => {
       event.preventDefault();
@@ -1517,6 +1602,9 @@ function configurePostMenu(post, card) {
   if (staff && post.moderation_status !== 'published') {
     appendPostMenuItem(menu, 'Duyệt bài viết', () => reviewPost(post, 'approve', toggle));
   }
+  if (currentProfile?.role === 'admin' && post.openReports?.length) {
+    appendPostMenuItem(menu, 'Duyệt báo cáo · Giữ bài', () => approveReportedPost(post));
+  }
   if (staff && !owner) {
     appendPostMenuItem(
       menu,
@@ -1544,10 +1632,36 @@ async function setPostVisibility(post, shouldHide) {
     });
     if (error) throw error;
     if (!data) throw new Error('Bạn không có quyền thay đổi bài viết này.');
+    if (shouldHide && currentProfile?.role === 'admin' && post.openReports?.length) {
+      await resolvePostReports(post, 'resolved');
+    }
     setInfo(shouldHide ? 'Đã ẩn bài viết.' : 'Đã hiện bài viết.', 'success');
     await loadPosts();
   } catch (error) {
     setInfo(`Không thể đổi trạng thái bài: ${humanizeAuthError(error)}`, 'error');
+  }
+}
+
+async function resolvePostReports(post, status) {
+  const reports = [...(post.openReports || [])];
+  for (const report of reports) {
+    const { data, error } = await supabase.rpc('review_forum_report', {
+      target_report_id: report.id,
+      review_status: status
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Báo cáo đã được tài khoản khác xử lý.');
+  }
+  post.openReports = [];
+}
+
+async function approveReportedPost(post) {
+  try {
+    await resolvePostReports(post, 'dismissed');
+    setInfo('Admin đã duyệt báo cáo và quyết định giữ bài viết công khai.', 'success');
+    await loadPosts();
+  } catch (error) {
+    setInfo(`Không thể xử lý báo cáo: ${humanizeAuthError(error)}`, 'error');
   }
 }
 
@@ -1644,10 +1758,29 @@ async function setReaction(post, type, card, button) {
     setInfo('Tài khoản đang tạm khóa nên chưa thể bày tỏ cảm xúc.', 'error');
     return;
   }
-  if (!REACTIONS[type]) return;
+  if (!REACTIONS[type] || reactionPendingPosts.has(post.id)) return;
   const previous = post.myReaction;
   const shouldRemove = previous === type;
-  button.disabled = true;
+  const previousCounts = { ...(post.reactionCounts || {}) };
+  const previousTotal = post.reactionCount || 0;
+  reactionPendingPosts.add(post.id);
+
+  if (previous) {
+    post.reactionCounts[previous] = Math.max(
+      0,
+      (post.reactionCounts[previous] || 0) - 1
+    );
+  }
+  if (shouldRemove) {
+    post.myReaction = '';
+    post.reactionCount = Math.max(0, previousTotal - 1);
+  } else {
+    post.myReaction = type;
+    post.reactionCounts[type] = (post.reactionCounts[type] || 0) + 1;
+    post.reactionCount = previous ? previousTotal : previousTotal + 1;
+  }
+  updatePostStats(card, post);
+
   try {
     const query = shouldRemove
       ? supabase
@@ -1665,27 +1798,70 @@ async function setReaction(post, type, card, button) {
           }, { onConflict: 'post_id,user_id' });
     const { error } = await query;
     if (error) throw error;
-
-    if (previous) {
-      post.reactionCounts[previous] = Math.max(
-        0,
-        (post.reactionCounts[previous] || 0) - 1
-      );
-    }
-    if (shouldRemove) {
-      post.myReaction = '';
-      post.reactionCount = Math.max(0, post.reactionCount - 1);
-    } else {
-      post.myReaction = type;
-      post.reactionCounts[type] = (post.reactionCounts[type] || 0) + 1;
-      if (!previous) post.reactionCount += 1;
-    }
-    updatePostStats(card, post);
   } catch (error) {
+    post.myReaction = previous;
+    post.reactionCounts = previousCounts;
+    post.reactionCount = previousTotal;
+    updatePostStats(card, post);
     setInfo(`Không thể cập nhật cảm xúc: ${humanizeAuthError(error)}`, 'error');
   } finally {
-    button.disabled = false;
+    reactionPendingPosts.delete(post.id);
   }
+}
+
+function configureReactionInteraction(post, card, action, mainButton) {
+  let holdTimer = 0;
+  let heldOpen = false;
+  let suppressNextClick = false;
+  let startX = 0;
+  let startY = 0;
+
+  const cancelHold = () => {
+    window.clearTimeout(holdTimer);
+    holdTimer = 0;
+  };
+  mainButton.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'mouse') return;
+    heldOpen = false;
+    startX = event.clientX;
+    startY = event.clientY;
+    cancelHold();
+    holdTimer = window.setTimeout(() => {
+      heldOpen = true;
+      suppressNextClick = true;
+      if (!action.classList.contains('is-open')) toggleReactionPicker(action);
+      navigator.vibrate?.(18);
+    }, 420);
+  });
+  mainButton.addEventListener('pointermove', event => {
+    if (Math.hypot(event.clientX - startX, event.clientY - startY) > 12) cancelHold();
+  });
+  mainButton.addEventListener('pointerup', event => {
+    cancelHold();
+    if (!heldOpen) return;
+    const target = document.elementFromPoint(event.clientX, event.clientY)
+      ?.closest?.('.reaction-picker [data-reaction]');
+    if (target && action.contains(target)) {
+      void setReaction(post, target.dataset.reaction, card, target);
+      closeReactionPicker(action);
+      heldOpen = false;
+    }
+  });
+  mainButton.addEventListener('pointercancel', cancelHold);
+  mainButton.addEventListener('contextmenu', event => {
+    if (heldOpen) event.preventDefault();
+  });
+  mainButton.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      heldOpen = false;
+      return;
+    }
+    closeReactionPicker(action);
+    void setReaction(post, post.myReaction || 'like', card, mainButton);
+  });
 }
 
 async function registerPostView(post, card) {
@@ -1746,6 +1922,7 @@ function resetCommentMedia(form) {
   input.value = '';
   preview.replaceChildren();
   preview.hidden = true;
+  form.querySelector('.comment-attach')?.classList.remove('has-media');
 }
 
 function renderCommentSelectionPreview(form) {
@@ -1759,16 +1936,20 @@ function renderCommentSelectionPreview(form) {
     renderCommentSelectionPreview(form);
     if (!items.length) form.querySelector('.comment-media-input').value = '';
   });
+  form.querySelector('.comment-attach')?.classList.toggle('has-media', Boolean(items.length));
 }
 
 async function showCommentMediaPreview(form, fileList) {
+  // FileList thay đổi ngay khi input bị reset, vì vậy phải chụp lại danh sách
+  // trước khi dọn lựa chọn cũ.
+  const selectedFiles = [...(fileList || [])];
   resetCommentMedia(form);
-  if (!fileList?.length) return;
+  if (!selectedFiles.length) return;
   const sequence = commentPrepareSequences.get(form);
   try {
     setInfo('Đang xử lý media bình luận...', 'info');
     const items = await prepareSelectedFiles(
-      fileList,
+      selectedFiles,
       () => sequence === commentPrepareSequences.get(form)
     );
     if (sequence !== commentPrepareSequences.get(form)) return;
@@ -2160,10 +2341,9 @@ async function submitReport(event) {
     }
     closeReportDialog();
     setInfo(
-      'Đã gửi báo cáo. Bài đã được chuyển về hàng chờ để quản trị viên kiểm tra.',
+      'Đã gửi báo cáo đến quản trị viên. Bài viết vẫn hiển thị trong lúc chờ xem xét.',
       'success'
     );
-    await loadPosts();
   } catch (error) {
     setInfo(`Không thể gửi báo cáo: ${humanizeAuthError(error)}`, 'error');
   } finally {

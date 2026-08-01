@@ -86,20 +86,23 @@ Hạn mức mới áp dụng giống nhau cho bài viết và bình luận:
 - VIP và moderator: 5 ảnh 720p, 1 video 720p/1 phút, 1 âm thanh 2 phút/5 MB;
 - admin: không giới hạn nghiệp vụ; hạ tầng hiện vẫn chặn ở 50 MB mỗi tệp.
 
-### Triển khai kiểm duyệt AI
+### Triển khai kiểm duyệt bằng Hive
 
-Edge Function giữ nội dung ở trạng thái chờ đến khi AI trả kết quả, nên khóa
-OpenAI không xuất hiện trong GitHub Pages:
+Edge Function giữ nội dung ở trạng thái chờ đến khi Hive trả kết quả, nên khóa
+Hive không xuất hiện trong GitHub Pages:
 
 ```bash
 supabase functions deploy moderate-forum
-supabase secrets set OPENAI_API_KEY=...
+supabase secrets set HIVE_API_KEY=...
 ```
 
-Mô hình `omni-moderation-latest` tự kiểm tra văn bản và ảnh. Vì endpoint này
-không nhận video/âm thanh, nội dung có hai loại media đó được giữ trong hàng chờ
-để moderator/admin duyệt thủ công. Nếu Edge Function hoặc API tạm lỗi, hệ thống
-đóng an toàn: nội dung vẫn ở hàng chờ, không tự công khai.
+Tạo V3 Secret Key tại **Hive > Playground API Keys**. Edge Function dùng mô hình
+`hive/vision-language-model` để kiểm tra văn bản, ảnh và khung hình video theo
+quy tắc cộng đồng của Chốn Học Tập. Hive chưa hỗ trợ kiểm duyệt giọng nói tiếng
+Việt, vì vậy nội dung có âm thanh được chuyển cho moderator/admin duyệt thủ công.
+Nếu Hive hết credit, quá hạn mức hoặc tạm lỗi, Edge Function tự đổi nội dung sang
+hàng chờ thủ công và gửi thông báo cho staff; không để trạng thái "AI đang kiểm
+tra" vô hạn và không tự công khai.
 
 ### Tự dọn bài và Supabase Storage
 
@@ -145,12 +148,8 @@ SQL Editor. V6 bổ sung:
   hộp thư thông báo;
 - báo cáo mới xuất hiện ngay trong hộp thư của moderator và admin.
 
-Sau đó deploy lại Edge Function `moderate-forum` bằng mã V6. Bình luận được lưu
-ngay và AI kiểm tra trong nền; bình luận sạch tự công khai, bình luận vi phạm bị
-ẩn mà không cần moderator duyệt. AI hiện kiểm tra văn bản và ảnh. Video/âm thanh
-trong bình luận không qua hàng chờ thủ công, nhưng bản thân hai loại tệp này
-chưa được endpoint Moderations phân tích. Bài viết có video/âm thanh vẫn chờ
-moderator/admin duyệt như V5.
+Sau đó deploy lại Edge Function `moderate-forum`. Bình luận được lưu ngay và hệ
+thống kiểm tra trong nền; bình luận sạch tự công khai, bình luận vi phạm bị ẩn.
 
 ## Nâng cấp diễn đàn V7
 
@@ -163,6 +162,16 @@ trigger báo cáo cũ tự động ẩn.
 V7 đồng thời sửa lỗi FileList làm media bình luận biến mất ngay sau khi chọn và
 nâng thao tác cảm xúc: bấm nhanh để Thích/bỏ cảm xúc, nhấn giữ trên màn hình cảm
 ứng hoặc rê chuột để chọn loại khác, đồng thời có bộ lọc người thả theo từng loại.
+
+## Nâng cấp diễn đàn V8
+
+Sau `forum_v7_migration.sql`, chạy tiếp toàn bộ `forum_v8_migration.sql`, thêm
+secret `HIVE_API_KEY`, rồi deploy lại Edge Function `moderate-forum`. V8 thay
+OpenAI bằng Hive V3, bổ sung lịch sử kiểm duyệt cho bình luận và chuyển mọi lỗi
+nhà cung cấp thành hàng chờ thủ công có thông báo. Chủ nội dung và staff có nút
+**Kiểm tra lại bằng Hive**; moderator/admin có thể duyệt hoặc từ chối bình luận
+ngay trên diễn đàn. Âm thanh tiếng Việt tiếp tục do người quản trị xem xét vì
+Hive Audio Moderation chưa hỗ trợ tiếng Việt.
 
 ## 1. Tạo database và chính sách bảo mật
 

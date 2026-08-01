@@ -138,12 +138,42 @@ const REACTIONS = {
   angry: { emoji: '😡', label: 'Phẫn nộ' }
 };
 
+const POST_COOLDOWN_STORAGE_PREFIX = 'chonhoctap-forum-post-cooldown:';
+
 function canInteract() {
   return currentProfile?.account_status === 'active';
 }
 
 function cooldownSeconds() {
   return Math.max(0, Math.ceil((postCooldownUntil - Date.now()) / 1000));
+}
+
+function postCooldownStorageKey() {
+  return session?.user?.id
+    ? `${POST_COOLDOWN_STORAGE_PREFIX}${session.user.id}`
+    : '';
+}
+
+function storedPostCooldown() {
+  const key = postCooldownStorageKey();
+  if (!key) return 0;
+  try {
+    const value = Number(window.localStorage.getItem(key));
+    return Number.isFinite(value) && value > Date.now() ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function rememberPostCooldown(until) {
+  const key = postCooldownStorageKey();
+  if (!key) return;
+  try {
+    if (until > Date.now()) window.localStorage.setItem(key, String(until));
+    else window.localStorage.removeItem(key);
+  } catch {
+    // Database vẫn là lớp chống spam chính khi trình duyệt chặn localStorage.
+  }
 }
 
 function cooldownLabel(totalSeconds) {
@@ -208,17 +238,29 @@ async function refreshCommentCooldown() {
 
 async function refreshPostCooldown() {
   if (!session?.user?.id || !canInteract()) return;
-  const { data, error } = await supabase
-    .from('forum_posts')
-    .select('created_at')
-    .eq('author_id', session.user.id)
-    .order('created_at', { ascending: false })
-    .limit(1);
-  if (error) throw error;
-  const latestAt = data?.[0]?.created_at;
-  postCooldownUntil = latestAt
-    ? new Date(latestAt).getTime() + 15 * 60 * 1000
-    : 0;
+  let serverCooldownUntil = 0;
+  const { data: nextPostAt, error: rpcError } = await supabase
+    .rpc('get_forum_post_cooldown');
+
+  if (!rpcError) {
+    serverCooldownUntil = nextPostAt ? new Date(nextPostAt).getTime() : 0;
+  } else {
+    // Tương thích trong lúc website mới đã lên nhưng migration V8 chưa chạy.
+    const { data, error } = await supabase
+      .from('forum_posts')
+      .select('created_at')
+      .eq('author_id', session.user.id)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    const latestAt = data?.[0]?.created_at;
+    serverCooldownUntil = latestAt
+      ? new Date(latestAt).getTime() + 15 * 60 * 1000
+      : 0;
+  }
+
+  postCooldownUntil = Math.max(serverCooldownUntil, storedPostCooldown());
+  rememberPostCooldown(postCooldownUntil);
   updatePostCooldownUi();
 }
 
@@ -721,7 +763,7 @@ async function publishPost(event) {
         }).eq('id', editing.id)
       : supabase.from('forum_posts').insert(payload);
     const { data: createdPost, error } = await request
-      .select('id, moderation_status')
+      .select('id, moderation_status, created_at')
       .single();
     if (error) throw error;
     createdPostId = createdPost.id;
@@ -766,7 +808,10 @@ async function publishPost(event) {
         ? 'Nội dung không vượt qua kiểm duyệt nên không được công khai.'
         : 'Nội dung đang chờ kiểm duyệt hoặc quản trị viên duyệt media.',
     moderationResult?.published ? 'success' : 'info');
-    if (!editing) postCooldownUntil = Date.now() + 15 * 60 * 1000;
+    if (!editing) {
+      postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
+      rememberPostCooldown(postCooldownUntil);
+    }
     updatePostCooldownUi();
     await loadPosts();
   } catch (error) {

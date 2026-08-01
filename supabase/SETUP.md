@@ -164,6 +164,14 @@ V7 đồng thời sửa lỗi FileList làm media bình luận biến mất ngay
 nâng thao tác cảm xúc: bấm nhanh để Thích/bỏ cảm xúc, nhấn giữ trên màn hình cảm
 ứng hoặc rê chuột để chọn loại khác, đồng thời có bộ lọc người thả theo từng loại.
 
+## Nâng cấp diễn đàn V8
+
+Sau `forum_v7_migration.sql`, chạy tiếp toàn bộ `forum_v8_migration.sql`. V8
+lưu mốc chống spam đăng bài trong bảng riêng thay vì suy ra từ bài gần nhất còn
+tồn tại. Do đó, tác giả xóa bài vừa đăng vẫn phải chờ đủ 15 phút mới được đăng
+bài tiếp theo. Frontend đọc mốc này từ RPC bảo mật và giữ thêm bản tạm trên
+trình duyệt để đồng hồ không biến mất khi chuyển trang hoặc tải lại trang.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -276,3 +284,5 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
 28. Chạy `forum_v7_migration.sql`; thử ảnh/âm thanh/video trong bình luận theo
     từng role, thao tác cảm xúc bằng chuột và cảm ứng, rồi gửi báo cáo để xác nhận
     chỉ admin nhận thư còn bài viết vẫn công khai đến khi admin quyết định.
+29. Chạy `forum_v8_migration.sql`, đăng một bài rồi xóa ngay; tải lại diễn đàn
+    và xác nhận nút đăng bài vẫn đếm ngược cho đến khi đủ 15 phút.

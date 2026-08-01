@@ -286,6 +286,18 @@ function canModerate() {
   return canInteract() && ['moderator', 'admin'].includes(currentProfile?.role);
 }
 
+function isForumAdmin() {
+  return canInteract() && currentProfile?.role === 'admin';
+}
+
+function containsAudio(mediaItems = []) {
+  return mediaItems.some(item => item?.media_type === 'audio' || item?.type === 'audio');
+}
+
+function canReviewContent(mediaItems = []) {
+  return canModerate() && (!containsAudio(mediaItems) || isForumAdmin());
+}
+
 function authorOf(record) {
   return Array.isArray(record?.author) ? record.author[0] : record?.author;
 }
@@ -806,7 +818,8 @@ async function publishPost(event) {
       ? (editing ? 'Đã lưu và AI đã duyệt bài viết.' : 'Đã đăng bài thành công.')
       : moderationResult?.allowed === false
         ? 'Nội dung không vượt qua kiểm duyệt nên không được công khai.'
-        : 'Nội dung đang chờ kiểm duyệt hoặc quản trị viên duyệt media.',
+        : moderationResult?.reason
+          || 'Nội dung đang chờ kiểm duyệt hoặc quản trị viên duyệt media.',
     moderationResult?.published ? 'success' : 'info');
     if (!editing) {
       postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
@@ -1520,7 +1533,7 @@ function renderPost(post) {
     moderationNote.textContent = post.moderation_reason
       || 'Bài viết đang chờ quản trị viên xem xét.';
     card.querySelector('.post-header').after(moderationNote);
-    if (canModerate()) {
+    if (canReviewContent(post.mediaItems)) {
       const controls = document.createElement('div');
       controls.className = 'moderation-actions';
       const approve = document.createElement('button');
@@ -1644,7 +1657,7 @@ function configurePostMenu(post, card) {
       () => setPostVisibility(post, post.visibility !== 'hidden')
     );
   }
-  if (staff && post.moderation_status !== 'published') {
+  if (staff && post.moderation_status !== 'published' && canReviewContent(post.mediaItems)) {
     appendPostMenuItem(menu, 'Duyệt bài viết', () => reviewPost(post, 'approve', toggle));
   }
   if (currentProfile?.role === 'admin' && post.openReports?.length) {
@@ -1774,6 +1787,10 @@ async function reviewPost(post, action, button) {
     setInfo('Chỉ điều hành viên hoặc quản trị viên được duyệt bài.', 'error');
     return;
   }
+  if (containsAudio(post.mediaItems) && !isForumAdmin()) {
+    setInfo('Bài viết có âm thanh chỉ quản trị viên được duyệt.', 'error');
+    return;
+  }
   const note = action === 'reject'
     ? window.prompt('Lý do từ chối bài viết:', post.moderation_reason || '')
     : '';
@@ -1795,6 +1812,38 @@ async function reviewPost(post, action, button) {
   } catch (error) {
     setInfo(`Không thể duyệt bài: ${humanizeAuthError(error)}`, 'error');
     setBusy(button, false);
+  }
+}
+
+async function reviewComment(comment, post, card, action, button) {
+  if (!isForumAdmin()) {
+    setInfo('Bình luận có âm thanh chỉ quản trị viên được duyệt.', 'error');
+    return;
+  }
+  const note = action === 'reject'
+    ? window.prompt('Lý do từ chối bình luận:', comment.moderation_reason || '')
+    : '';
+  if (action === 'reject' && note === null) return;
+  setBusy(button, true, action === 'approve' ? 'Đang duyệt...' : 'Đang từ chối...');
+  try {
+    const { data, error } = await supabase.rpc('review_forum_comment', {
+      target_comment_id: comment.id,
+      review_action: action,
+      review_note: note || null
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Không tìm thấy bình luận cần duyệt.');
+    setInfo(
+      action === 'approve' ? 'Đã duyệt bình luận có âm thanh.' : 'Đã từ chối bình luận.',
+      'success'
+    );
+    await Promise.all([
+      loadComments(post, card),
+      refreshPostEngagement(post.id, true)
+    ]);
+  } catch (error) {
+    setBusy(button, false);
+    setInfo(`Không thể duyệt bình luận: ${humanizeAuthError(error)}`, 'error');
   }
 }
 
@@ -2152,8 +2201,31 @@ function renderComments(comments, post, card) {
     if (comment.moderation_status === 'pending_review') {
       const pending = document.createElement('span');
       pending.className = 'comment-pending';
-      pending.textContent = 'AI đang kiểm tra';
+      const audioPending = containsAudio(comment.mediaItems);
+      pending.textContent = audioPending
+        ? 'Chờ quản trị viên duyệt âm thanh'
+        : 'AI đang kiểm tra';
       footer.appendChild(pending);
+      if (audioPending && isForumAdmin()) {
+        const controls = document.createElement('div');
+        controls.className = 'moderation-actions comment-moderation-actions';
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.className = 'button button-small';
+        approve.textContent = 'Duyệt';
+        approve.addEventListener('click', () => {
+          void reviewComment(comment, post, card, 'approve', approve);
+        });
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'button button-small button-danger';
+        reject.textContent = 'Từ chối';
+        reject.addEventListener('click', () => {
+          void reviewComment(comment, post, card, 'reject', reject);
+        });
+        controls.append(approve, reject);
+        bubble.appendChild(controls);
+      }
     } else if (comment.moderation_status === 'rejected') {
       const rejected = document.createElement('span');
       rejected.className = 'comment-rejected';
@@ -2276,12 +2348,19 @@ async function addComment(event, post, card) {
     setReplyingTo(form);
     resetCommentMedia(form);
     commentCooldownUntil = Date.now() + 2 * 60 * 1000;
-    setInfo('Đã gửi bình luận. AI đang kiểm tra nội dung trong nền.', 'success');
+    setInfo(
+      containsAudio(uploaded)
+        ? 'Đã gửi bình luận. Âm thanh đang chờ quản trị viên xem xét.'
+        : 'Đã gửi bình luận. AI đang kiểm tra nội dung trong nền.',
+      'success'
+    );
     void loadComments(post, card);
     void runAutomaticModeration({ commentId: createdCommentId })
       .then(result => {
         if (result?.allowed === false) {
           setInfo('Bình luận không vượt qua kiểm duyệt và đã được ẩn.', 'info');
+        } else if (result?.manualReview) {
+          setInfo(result.reason || 'Âm thanh đang chờ quản trị viên xem xét.', 'info');
         }
         return refreshPostEngagement(post.id, true);
       })

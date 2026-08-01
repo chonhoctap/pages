@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/account.css?v=20260801-7">
-  <link rel="stylesheet" href="assets/forum.css?v=20260801-2">
+  <link rel="stylesheet" href="assets/forum.css?v=20260801-3">
 </head>
 <body>
   <header class="account-topbar" aria-label="Điều hướng chính">
@@ -34,7 +34,7 @@
             <span id="notificationBadge" class="notification-badge" hidden>0</span>
           </button>
           <section id="notificationPanel" class="notification-panel panel" hidden>
-            <header><strong>Thông báo</strong><button id="markAllReadButton" type="button">Đọc tất cả</button></header>
+            <header><strong>Hộp thư thông báo</strong><button id="markAllReadButton" type="button">Đọc tất cả</button></header>
             <div id="notificationList" class="notification-list"></div>
           </section>
         </div>
@@ -337,6 +337,20 @@
     </form>
   </dialog>
 
-  <script type="module" src="assets/forum-page.js?v=20260801-2"></script>
+  <dialog id="reactionListDialog" class="reaction-list-dialog">
+    <section class="panel reaction-list-panel">
+      <header>
+        <div>
+          <strong>Người đã thả cảm xúc</strong>
+          <span id="reactionListSummary">Đang tải...</span>
+        </div>
+        <button id="closeReactionList" class="dialog-close" type="button"
+          aria-label="Đóng danh sách cảm xúc">×</button>
+      </header>
+      <div id="reactionList" class="reaction-list"></div>
+    </section>
+  </dialog>
+
+  <script type="module" src="assets/forum-page.js?v=20260801-3"></script>
 </body>
 </html>

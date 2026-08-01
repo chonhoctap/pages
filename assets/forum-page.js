@@ -91,7 +91,11 @@ const elements = {
   notificationBadge: document.getElementById('notificationBadge'),
   notificationPanel: document.getElementById('notificationPanel'),
   notificationList: document.getElementById('notificationList'),
-  markAllRead: document.getElementById('markAllReadButton')
+  markAllRead: document.getElementById('markAllReadButton'),
+  reactionListDialog: document.getElementById('reactionListDialog'),
+  reactionListSummary: document.getElementById('reactionListSummary'),
+  reactionList: document.getElementById('reactionList'),
+  closeReactionList: document.getElementById('closeReactionList')
 };
 
 let session;
@@ -106,7 +110,12 @@ let selectedPostMedia = [];
 let reportingPost = null;
 let postCooldownUntil = 0;
 let postCooldownTimer = 0;
+let commentCooldownUntil = 0;
+let commentCooldownTimer = 0;
 let notificationTimer = 0;
+let notificationRealtimeTimer = 0;
+let realtimeChannel = null;
+let realtimeReloadTimer = 0;
 const commentPreviewUrls = new Map();
 const commentPreparedFiles = new Map();
 const commentPrepareSequences = new Map();
@@ -151,6 +160,46 @@ function updatePostCooldownUi() {
       ? `Đăng sau ${cooldownLabel(remaining)}`
       : 'Đăng bài';
   }
+}
+
+function commentCooldownSeconds() {
+  return Math.max(0, Math.ceil((commentCooldownUntil - Date.now()) / 1000));
+}
+
+function updateCommentCooldownUi() {
+  const remaining = commentCooldownSeconds();
+  document.querySelectorAll('.comment-submit').forEach(button => {
+    if (button.getAttribute('aria-busy') === 'true') return;
+    if (remaining > 0) {
+      if (!button.dataset.cooldownOriginalText) {
+        button.dataset.cooldownOriginalText = button.textContent;
+      }
+      button.textContent = `Gửi sau ${cooldownLabel(remaining)}`;
+      button.disabled = true;
+      button.dataset.cooldownDisabled = 'true';
+    } else if (button.dataset.cooldownDisabled === 'true') {
+      button.textContent = button.dataset.cooldownOriginalText || 'Gửi';
+      button.disabled = false;
+      delete button.dataset.cooldownDisabled;
+      delete button.dataset.cooldownOriginalText;
+    }
+  });
+}
+
+async function refreshCommentCooldown() {
+  if (!session?.user?.id || !canInteract()) return;
+  const { data, error } = await supabase
+    .from('forum_comments')
+    .select('created_at')
+    .eq('author_id', session.user.id)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const latestAt = data?.[0]?.created_at;
+  commentCooldownUntil = latestAt
+    ? new Date(latestAt).getTime() + 2 * 60 * 1000
+    : 0;
+  updateCommentCooldownUi();
 }
 
 async function refreshPostCooldown() {
@@ -930,9 +979,122 @@ async function loadPosts() {
   }
 }
 
+async function refreshPostEngagement(postId, refreshComments = false) {
+  if (!postId) return;
+  const post = posts.find(item => item.id === postId);
+  if (!post) return;
+  const [reactionsResult, metricsResult] = await Promise.all([
+    supabase
+      .from('forum_reactions')
+      .select('user_id, reaction_type')
+      .eq('post_id', postId),
+    supabase
+      .from('forum_post_metrics')
+      .select('view_count, reaction_count, comment_count, share_count, trending_score')
+      .eq('post_id', postId)
+      .maybeSingle()
+  ]);
+  if (reactionsResult.error) throw reactionsResult.error;
+  if (metricsResult.error) throw metricsResult.error;
+
+  const reactions = reactionsResult.data || [];
+  const metric = metricsResult.data || {};
+  post.reactionCounts = reactions.reduce((counts, reaction) => {
+    counts[reaction.reaction_type] = (counts[reaction.reaction_type] || 0) + 1;
+    return counts;
+  }, {});
+  post.myReaction = reactions.find(reaction => reaction.user_id === session.user.id)
+    ?.reaction_type || '';
+  post.reactionCount = Number(metric.reaction_count ?? reactions.length);
+  post.commentCount = Number(metric.comment_count ?? post.commentCount ?? 0);
+  post.shareCount = Number(metric.share_count ?? post.shareCount ?? 0);
+  post.viewCount = Number(metric.view_count ?? post.viewCount ?? 0);
+  post.trendingScore = Number(metric.trending_score ?? post.trendingScore ?? 0);
+
+  const card = elements.feed.querySelector(`[data-post-id="${CSS.escape(postId)}"]`);
+  if (!card) return;
+  updatePostStats(card, post);
+  const commentPanel = card.querySelector('.comment-panel');
+  if (refreshComments && commentPanel && !commentPanel.hidden) {
+    await loadComments(post, card);
+  }
+}
+
+function scheduleRealtimeFeedReload() {
+  window.clearTimeout(realtimeReloadTimer);
+  realtimeReloadTimer = window.setTimeout(() => {
+    loadPosts().catch(error => console.warn('Realtime feed refresh failed', error));
+  }, 180);
+}
+
+function postIdFromRealtime(payload) {
+  return payload?.new?.post_id || payload?.old?.post_id || '';
+}
+
+function handleEngagementRealtime(payload, refreshComments = false) {
+  const postId = postIdFromRealtime(payload);
+  if (!postId) return;
+  refreshPostEngagement(postId, refreshComments)
+    .catch(error => console.warn('Realtime engagement refresh failed', error));
+}
+
+function scheduleRealtimeNotifications() {
+  window.clearTimeout(notificationRealtimeTimer);
+  notificationRealtimeTimer = window.setTimeout(() => {
+    loadNotifications().catch(error => console.warn('Realtime notification refresh failed', error));
+  }, 120);
+}
+
+async function handleCommentMediaRealtime(payload) {
+  const commentId = payload?.new?.comment_id || payload?.old?.comment_id;
+  if (!commentId) return;
+  const { data, error } = await supabase
+    .from('forum_comments')
+    .select('post_id')
+    .eq('id', commentId)
+    .maybeSingle();
+  if (error || !data?.post_id) return;
+  await refreshPostEngagement(data.post_id, true);
+}
+
+function setupForumRealtime() {
+  if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+  realtimeChannel = supabase
+    .channel(`forum-v6-${session.user.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_posts' },
+      scheduleRealtimeFeedReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_post_media' },
+      scheduleRealtimeFeedReload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_comments' },
+      payload => handleEngagementRealtime(payload, true))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_comment_media' },
+      payload => handleCommentMediaRealtime(payload)
+        .catch(error => console.warn('Realtime comment media refresh failed', error)))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_reactions' },
+      payload => handleEngagementRealtime(payload))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'forum_shares' },
+      payload => handleEngagementRealtime(payload))
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'forum_notifications',
+      filter: `recipient_id=eq.${session.user.id}`
+    }, scheduleRealtimeNotifications)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'forum_reports' }, () => {
+      if (canModerate()) scheduleRealtimeNotifications();
+    })
+    .subscribe(status => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn(`Forum Realtime status: ${status}`);
+      }
+    });
+}
+
 function updatePostStats(card, post) {
   const stats = card.querySelector('.post-stats');
-  const left = document.createElement('span');
+  const left = document.createElement('button');
+  left.type = 'button';
+  left.className = 'reaction-summary-button';
   const popularReactions = Object.entries(post.reactionCounts || {})
     .filter(([, count]) => count > 0)
     .sort((first, second) => second[1] - first[1])
@@ -941,6 +1103,12 @@ function updatePostStats(card, post) {
     .join('');
   left.textContent = `${popularReactions ? `${popularReactions} ` : ''}`
     + `${post.reactionCount || 0} cảm xúc · ${post.viewCount || 0} lượt xem`;
+  left.disabled = !post.reactionCount;
+  left.title = post.reactionCount ? 'Xem những người đã thả cảm xúc' : '';
+  left.setAttribute('aria-label', post.reactionCount
+    ? `Xem ${post.reactionCount} người đã thả cảm xúc`
+    : 'Chưa có cảm xúc');
+  left.addEventListener('click', () => openReactionList(post));
   const right = document.createElement('span');
   right.textContent = `${post.commentCount || 0} bình luận · ${post.shareCount || 0} lượt chia sẻ`;
   stats.replaceChildren(left, right);
@@ -953,6 +1121,77 @@ function updatePostStats(card, post) {
     post.myReaction ? reaction.label : 'Cảm xúc';
   reactionButton.classList.toggle('reacted', Boolean(post.myReaction));
   reactionButton.dataset.reaction = post.myReaction || '';
+}
+
+async function openReactionList(post) {
+  if (!post?.id) return;
+  elements.reactionList.replaceChildren();
+  elements.reactionListSummary.textContent = 'Đang tải...';
+  const loading = document.createElement('p');
+  loading.className = 'reaction-list-empty';
+  loading.textContent = 'Đang tải danh sách...';
+  elements.reactionList.appendChild(loading);
+  elements.reactionListDialog.showModal();
+
+  try {
+    const { data, error } = await supabase
+      .from('forum_reactions')
+      .select(`
+        reaction_type,
+        created_at,
+        user:profiles!forum_reactions_user_id_fkey(
+          username,
+          display_name,
+          avatar_url,
+          role
+        )
+      `)
+      .eq('post_id', post.id)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    const reactions = data || [];
+    elements.reactionListSummary.textContent = `${reactions.length} người`;
+    elements.reactionList.replaceChildren();
+    if (!reactions.length) {
+      const empty = document.createElement('p');
+      empty.className = 'reaction-list-empty';
+      empty.textContent = 'Chưa có ai thả cảm xúc.';
+      elements.reactionList.appendChild(empty);
+      return;
+    }
+    reactions.forEach(item => {
+      const profile = Array.isArray(item.user) ? item.user[0] || {} : item.user || {};
+      const link = document.createElement('a');
+      link.className = 'reaction-list-item';
+      link.href = publicProfileUrl(profile);
+      const avatar = document.createElement('img');
+      avatar.src = profile.avatar_url || 'avatar.png';
+      avatar.alt = '';
+      const copy = document.createElement('span');
+      const name = document.createElement('strong');
+      name.textContent = profileName(profile);
+      const role = document.createElement('small');
+      role.textContent = roleLabel(profile.role || 'member');
+      copy.append(name, role);
+      const emoji = document.createElement('span');
+      emoji.className = 'reaction-list-emoji';
+      emoji.textContent = REACTIONS[item.reaction_type]?.emoji || '♡';
+      emoji.title = REACTIONS[item.reaction_type]?.label || 'Cảm xúc';
+      link.append(avatar, copy, emoji);
+      elements.reactionList.appendChild(link);
+    });
+  } catch (error) {
+    elements.reactionListSummary.textContent = 'Có lỗi';
+    elements.reactionList.replaceChildren();
+    const failed = document.createElement('p');
+    failed.className = 'reaction-list-empty';
+    failed.textContent = `Không thể tải danh sách: ${humanizeAuthError(error)}`;
+    elements.reactionList.appendChild(failed);
+  }
+}
+
+function closeReactionList() {
+  if (elements.reactionListDialog.open) elements.reactionListDialog.close();
 }
 
 function chip(text, className = '') {
@@ -1278,10 +1517,12 @@ function configurePostMenu(post, card) {
   if (staff && post.moderation_status !== 'published') {
     appendPostMenuItem(menu, 'Duyệt bài viết', () => reviewPost(post, 'approve', toggle));
   }
-  if (staff && post.visibility !== 'hidden') {
-    appendPostMenuItem(menu, 'Ẩn bài viết', () => setPostVisibility(post, true));
-  } else if (staff && !owner) {
-    appendPostMenuItem(menu, 'Hiện bài viết', () => setPostVisibility(post, false));
+  if (staff && !owner) {
+    appendPostMenuItem(
+      menu,
+      post.visibility === 'hidden' ? 'Hiện bài viết' : 'Ẩn bài viết',
+      () => setPostVisibility(post, post.visibility !== 'hidden')
+    );
   }
   appendPostMenuItem(menu, 'Xóa bài viết', () => deletePost(post, card, toggle), true);
 
@@ -1329,11 +1570,13 @@ function renderPosts() {
         ? 'Chưa có câu hỏi phù hợp. Hãy là người đăng bài đầu tiên.'
         : 'Bảng tin chưa có bài viết. Hãy chia sẻ điều thú vị đầu tiên.';
     elements.feed.appendChild(empty);
+    updateCommentCooldownUi();
     return;
   }
   const fragment = document.createDocumentFragment();
   visible.forEach(post => fragment.appendChild(renderPost(post)));
   elements.feed.appendChild(fragment);
+  updateCommentCooldownUi();
 
   const targetId = new URLSearchParams(window.location.search).get('post');
   if (targetId) {
@@ -1683,20 +1926,13 @@ function renderComments(comments, post, card) {
     if (comment.moderation_status === 'pending_review') {
       const pending = document.createElement('span');
       pending.className = 'comment-pending';
-      pending.textContent = 'Đang chờ duyệt';
+      pending.textContent = 'AI đang kiểm tra';
       footer.appendChild(pending);
-      if (canModerate()) {
-        const approve = document.createElement('button');
-        approve.type = 'button';
-        approve.textContent = 'Duyệt';
-        approve.addEventListener('click', () => reviewComment(comment, 'approve', post, card, approve));
-        const reject = document.createElement('button');
-        reject.type = 'button';
-        reject.className = 'danger';
-        reject.textContent = 'Từ chối';
-        reject.addEventListener('click', () => reviewComment(comment, 'reject', post, card, reject));
-        footer.append(approve, reject);
-      }
+    } else if (comment.moderation_status === 'rejected') {
+      const rejected = document.createElement('span');
+      rejected.className = 'comment-rejected';
+      rejected.textContent = 'Đã bị AI ẩn';
+      footer.appendChild(rejected);
     }
     bubble.appendChild(footer);
     item.append(avatarLink, bubble);
@@ -1735,24 +1971,6 @@ function renderComments(comments, post, card) {
   });
 }
 
-async function reviewComment(comment, action, post, card, button) {
-  setBusy(button, true, '...');
-  try {
-    const { data, error } = await supabase.rpc('review_forum_comment', {
-      target_comment_id: comment.id,
-      review_action: action,
-      review_note: action === 'approve' ? null : 'Không phù hợp quy tắc cộng đồng.'
-    });
-    if (error) throw error;
-    if (!data) throw new Error('Không thể cập nhật bình luận.');
-    await loadComments(post, card);
-    setInfo(action === 'approve' ? 'Đã duyệt bình luận.' : 'Đã từ chối bình luận.', 'success');
-  } catch (error) {
-    setBusy(button, false);
-    setInfo(`Không thể duyệt bình luận: ${humanizeAuthError(error)}`, 'error');
-  }
-}
-
 function setReplyingTo(form, comment = null, author = null) {
   const indicator = form.parentElement.querySelector('.replying-indicator');
   if (!comment) {
@@ -1773,6 +1991,11 @@ function setReplyingTo(form, comment = null, author = null) {
 async function addComment(event, post, card) {
   event.preventDefault();
   if (!canInteract()) return;
+  if (commentCooldownSeconds() > 0) {
+    setInfo(`Bạn có thể bình luận tiếp sau ${cooldownLabel(commentCooldownSeconds())}.`, 'info');
+    updateCommentCooldownUi();
+    return;
+  }
   const form = event.currentTarget;
   await commentPreparePromises.get(form);
   const input = form.querySelector('.comment-input');
@@ -1823,24 +2046,23 @@ async function addComment(event, post, card) {
       if (mediaError) throw mediaError;
     }
 
-    let moderationResult;
-    try {
-      moderationResult = await runAutomaticModeration({ commentId: createdCommentId });
-    } catch (moderationError) {
-      console.warn('Automatic comment moderation unavailable', moderationError);
-    }
-
     input.value = '';
     setReplyingTo(form);
     resetCommentMedia(form);
-    post.commentCount += 1;
-    updatePostStats(card, post);
-    await loadComments(post, card);
-    if (!moderationResult?.published) {
-      setInfo(moderationResult?.allowed === false
-        ? 'Bình luận không vượt qua kiểm duyệt.'
-        : 'Bình luận đang chờ kiểm duyệt.', 'info');
-    }
+    commentCooldownUntil = Date.now() + 2 * 60 * 1000;
+    setInfo('Đã gửi bình luận. AI đang kiểm tra nội dung trong nền.', 'success');
+    void loadComments(post, card);
+    void runAutomaticModeration({ commentId: createdCommentId })
+      .then(result => {
+        if (result?.allowed === false) {
+          setInfo('Bình luận không vượt qua kiểm duyệt và đã được ẩn.', 'info');
+        }
+        return refreshPostEngagement(post.id, true);
+      })
+      .catch(moderationError => {
+        console.warn('Automatic comment moderation unavailable', moderationError);
+        setInfo('Đã gửi bình luận. AI tạm thời chưa phản hồi nên nội dung vẫn được giữ an toàn.', 'info');
+      });
   } catch (error) {
     if (createdCommentId) {
       await supabase.from('forum_comments').delete().eq('id', createdCommentId);
@@ -1848,9 +2070,17 @@ async function addComment(event, post, card) {
     await Promise.allSettled(
       uploaded.map(item => removeStoredMedia(item.path, 'forum-comment-media'))
     );
-    setInfo(`Không thể gửi bình luận: ${humanizeAuthError(error)}`, 'error');
+    const rawMessage = String(error?.message || error || '');
+    const remaining = rawMessage.match(/sau\s+(\d+)\s+giây/iu)?.[1];
+    if (remaining) {
+      commentCooldownUntil = Date.now() + Number(remaining) * 1000;
+      setInfo(`Bạn có thể bình luận tiếp sau ${cooldownLabel(Number(remaining))}.`, 'info');
+    } else {
+      setInfo(`Không thể gửi bình luận: ${humanizeAuthError(error)}`, 'error');
+    }
   } finally {
     setBusy(button, false);
+    updateCommentCooldownUi();
   }
 }
 
@@ -2108,8 +2338,9 @@ async function init() {
     }
 
     configureAccount();
-    await refreshPostCooldown();
+    await Promise.all([refreshPostCooldown(), refreshCommentCooldown()]);
     postCooldownTimer = window.setInterval(updatePostCooldownUi, 1000);
+    commentCooldownTimer = window.setInterval(updateCommentCooldownUi, 1000);
     notificationTimer = window.setInterval(() => loadNotifications().catch(() => {}), 45000);
     const editId = new URLSearchParams(window.location.search).get('edit');
     if (editId) {
@@ -2120,6 +2351,7 @@ async function init() {
     updateCategoryUi();
     elements.app.hidden = false;
     await Promise.all([loadPosts(), loadNotifications()]);
+    setupForumRealtime();
     if (editId) {
       const post = posts.find(item => item.id === editId && item.author_id === session.user.id);
       if (post) openEditComposer(post);
@@ -2179,6 +2411,14 @@ elements.reportDialog.addEventListener('cancel', event => {
   event.preventDefault();
   closeReportDialog();
 });
+elements.closeReactionList.addEventListener('click', closeReactionList);
+elements.reactionListDialog.addEventListener('click', event => {
+  if (event.target === elements.reactionListDialog) closeReactionList();
+});
+elements.reactionListDialog.addEventListener('cancel', event => {
+  event.preventDefault();
+  closeReactionList();
+});
 elements.notificationButton.addEventListener('click', event => {
   event.stopPropagation();
   elements.notificationPanel.hidden = !elements.notificationPanel.hidden;
@@ -2203,7 +2443,11 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('beforeunload', () => {
   window.clearInterval(postCooldownTimer);
+  window.clearInterval(commentCooldownTimer);
   window.clearInterval(notificationTimer);
+  window.clearTimeout(realtimeReloadTimer);
+  window.clearTimeout(notificationRealtimeTimer);
+  if (realtimeChannel) supabase.removeChannel(realtimeChannel);
   releasePreparedItems(selectedPostMedia);
   commentPreviewUrls.forEach(urls => urls.forEach(url => URL.revokeObjectURL(url)));
 });

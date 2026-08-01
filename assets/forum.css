@@ -543,6 +543,17 @@
   color:var(--muted);
   font-size:9px;
 }
+.reaction-summary-button{
+  padding:0;
+  border:0;
+  color:inherit;
+  background:transparent;
+  cursor:pointer;
+  font:inherit;
+  text-align:left;
+}
+.reaction-summary-button:not(:disabled):hover{color:var(--blue);text-decoration:underline}
+.reaction-summary-button:disabled{cursor:default}
 .post-actions{
   padding:5px 10px;
   display:grid;
@@ -819,6 +830,50 @@
 .report-form .textarea{min-height:105px}
 .report-form>.button{justify-self:end}
 
+.reaction-list-dialog{
+  width:min(470px,calc(100% - 28px));
+  padding:0;
+  border:0;
+  border-radius:22px;
+  color:var(--text);
+  background:transparent;
+}
+.reaction-list-dialog::backdrop{
+  background:rgba(2,6,23,.68);
+  -webkit-backdrop-filter:blur(7px);
+  backdrop-filter:blur(7px);
+}
+.reaction-list-panel{padding:0;overflow:hidden;border-radius:22px}
+.reaction-list-panel>header{
+  padding:16px 18px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  border-bottom:1px solid var(--line);
+}
+.reaction-list-panel>header>div{display:grid;gap:4px}
+.reaction-list-panel>header strong{font-size:14px}
+.reaction-list-panel>header span{color:var(--muted);font-size:10px}
+.reaction-list{max-height:min(520px,70dvh);overflow:auto}
+.reaction-list-item{
+  padding:11px 16px;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:11px;
+  color:inherit;
+  text-decoration:none;
+  border-bottom:1px solid var(--line);
+}
+.reaction-list-item:hover{background:var(--surface-soft)}
+.reaction-list-item img{width:42px;height:42px;border-radius:13px;object-fit:cover}
+.reaction-list-item>span:nth-child(2){display:grid;gap:3px;min-width:0}
+.reaction-list-item strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.reaction-list-item small{color:var(--muted);font-size:9px}
+.reaction-list-emoji{font-size:22px}
+.reaction-list-empty{margin:0;padding:28px;text-align:center;color:var(--muted);font-size:11px}
+
 .forum-sidebar{position:sticky;top:86px;display:grid;gap:14px}
 .sidebar-card{padding:19px;border-radius:20px}
 .sidebar-icon{font-size:24px}
@@ -871,6 +926,7 @@
 .comment-footer button{padding:0;border:0;color:var(--blue);background:transparent;cursor:pointer;font-weight:700}
 .comment-footer button.danger{color:var(--danger)}
 .comment-pending{color:#a16207}
+.comment-rejected{color:var(--danger);font-size:11px;font-weight:700}
 .replying-indicator{
   margin:8px 0 0 41px;padding:7px 10px;display:flex;align-items:center;
   justify-content:space-between;border-radius:10px;color:var(--muted);background:var(--surface);font-size:11px;

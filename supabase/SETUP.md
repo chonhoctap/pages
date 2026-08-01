@@ -152,6 +152,18 @@ trong bình luận không qua hàng chờ thủ công, nhưng bản thân hai lo
 chưa được endpoint Moderations phân tích. Bài viết có video/âm thanh vẫn chờ
 moderator/admin duyệt như V5.
 
+## Nâng cấp diễn đàn V7
+
+Sau `forum_v6_migration.sql`, chạy tiếp toàn bộ `forum_v7_migration.sql`. V7
+đổi quy trình báo cáo: báo cáo chỉ tạo thư cho tài khoản admin, không tự ẩn hoặc
+đổi trạng thái bài viết. Admin mở bài từ hộp thư rồi tự quyết định duyệt, ẩn hay
+xóa. Migration cũng khôi phục các bài chưa được admin xem xét nhưng từng bị
+trigger báo cáo cũ tự động ẩn.
+
+V7 đồng thời sửa lỗi FileList làm media bình luận biến mất ngay sau khi chọn và
+nâng thao tác cảm xúc: bấm nhanh để Thích/bỏ cảm xúc, nhấn giữ trên màn hình cảm
+ứng hoặc rê chuột để chọn loại khác, đồng thời có bộ lọc người thả theo từng loại.
+
 ## 1. Tạo database và chính sách bảo mật
 
 Trong Supabase Dashboard:
@@ -261,3 +273,6 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
     báo cáo của moderator/admin.
 27. Gửi hai bình luận liên tiếp và xác nhận lần hai bị chặn đủ 2 phút; bình luận
     đầu xuất hiện ngay với trạng thái AI đang kiểm tra, không còn nút duyệt tay.
+28. Chạy `forum_v7_migration.sql`; thử ảnh/âm thanh/video trong bình luận theo
+    từng role, thao tác cảm xúc bằng chuột và cảm ứng, rồi gửi báo cáo để xác nhận
+    chỉ admin nhận thư còn bài viết vẫn công khai đến khi admin quyết định.

@@ -402,6 +402,7 @@
 .post-chip.unsolved{color:#b45309;background:rgba(245,158,11,.13)}
 .post-chip.pending{color:#a16207;background:rgba(245,158,11,.13)}
 .post-chip.rejected{color:#b91c1c;background:rgba(239,68,68,.12)}
+.post-chip.reported{color:#b91c1c;background:rgba(239,68,68,.12)}
 .post-chip.pinned{color:#6d28d9;background:rgba(124,58,237,.12)}
 .post-chip.expiry{color:var(--muted);background:var(--surface-soft)}
 [data-theme="dark"] .post-chip{color:#93c5fd}
@@ -422,6 +423,18 @@
   margin:0 18px 10px;
   display:flex;
   gap:8px;
+}
+.report-admin-note{
+  margin:0 18px 10px;
+  padding:11px 12px;
+  border:1px solid color-mix(in srgb,var(--danger) 30%,var(--line));
+  border-radius:12px;
+  color:var(--danger);
+  background:color-mix(in srgb,var(--danger) 7%,var(--surface));
+  font-size:10px;
+  font-weight:600;
+  line-height:1.6;
+  white-space:pre-wrap;
 }
 .solve-button{
   padding:5px 9px;
@@ -632,6 +645,11 @@
   background:var(--surface-soft);
   transform:translateY(-3px) scale(1.16);
 }
+.reaction-picker button.selected{
+  background:color-mix(in srgb,var(--blue) 14%,var(--surface));
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--blue) 30%,transparent);
+  transform:translateY(-2px) scale(1.08);
+}
 .comment-panel{padding:12px 18px 17px;border-top:1px solid var(--line);background:var(--surface-soft)}
 .comment-form{
   display:grid;
@@ -665,6 +683,11 @@
   font-size:13px;
 }
 .comment-attach:hover{color:var(--blue);background:var(--surface-hover)}
+.comment-attach.has-media{
+  color:white;
+  border-color:transparent;
+  background:linear-gradient(105deg,var(--blue),var(--violet));
+}
 .comment-attach input{position:absolute;width:1px;height:1px;opacity:0}
 .comment-submit{
   height:36px;
@@ -855,6 +878,26 @@
 .reaction-list-panel>header>div{display:grid;gap:4px}
 .reaction-list-panel>header strong{font-size:14px}
 .reaction-list-panel>header span{color:var(--muted);font-size:10px}
+.reaction-list-filters{
+  padding:9px 12px;
+  display:flex;
+  gap:7px;
+  overflow-x:auto;
+  border-bottom:1px solid var(--line);
+  scrollbar-width:thin;
+}
+.reaction-list-filters button{
+  flex:0 0 auto;
+  padding:7px 10px;
+  border:0;
+  border-radius:999px;
+  color:var(--muted);
+  background:var(--surface-soft);
+  cursor:pointer;
+  font-size:10px;
+  font-weight:800;
+}
+.reaction-list-filters button.active{color:white;background:var(--blue)}
 .reaction-list{max-height:min(520px,70dvh);overflow:auto}
 .reaction-list-item{
   padding:11px 16px;

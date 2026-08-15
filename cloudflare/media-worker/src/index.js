@@ -347,8 +347,8 @@ async function removeMedia(request, env, key) {
   if (!object) return errorResponse(request, env, 'Tệp không tồn tại.', 404);
 
   const ownerId = object.customMetadata?.ownerId || key.split('/')[1];
-  const staff = ['moderator', 'admin'].includes(profile.role);
-  if (ownerId !== user.id && !staff) {
+  const admin = profile.role === 'admin';
+  if (ownerId !== user.id && !admin) {
     return errorResponse(request, env, 'Bạn không có quyền xóa tệp này.', 403);
   }
   await env.MEDIA_BUCKET.delete(key);

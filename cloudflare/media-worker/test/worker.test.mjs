@@ -206,3 +206,89 @@ test('VIP audio is capped at 5 MB', async t => {
   assert.equal(response.status, 413);
   assert.match((await response.json()).error, /5 MB/iu);
 });
+
+test('moderator cannot delete media owned by another member', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) return Response.json({ id: 'moderator-id' });
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{
+        id: 'moderator-id',
+        role: 'moderator',
+        account_status: 'active'
+      }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+
+  let deleted = false;
+  const env = {
+    ...baseEnv,
+    MEDIA_BUCKET: {
+      async head() {
+        return { customMetadata: { ownerId: 'member-id' } };
+      },
+      async delete() {
+        deleted = true;
+      }
+    }
+  };
+  const response = await worker.fetch(new Request(
+    'https://media.example/api/media/post/member-id/file.jpg',
+    {
+      method: 'DELETE',
+      headers: {
+        Origin: baseEnv.ALLOWED_ORIGIN,
+        Authorization: 'Bearer valid-token'
+      }
+    }
+  ), env);
+
+  assert.equal(response.status, 403);
+  assert.equal(deleted, false);
+});
+
+test('admin can delete media owned by another member', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) return Response.json({ id: 'admin-id' });
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{
+        id: 'admin-id',
+        role: 'admin',
+        account_status: 'active'
+      }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+
+  let deletedKey = '';
+  const env = {
+    ...baseEnv,
+    MEDIA_BUCKET: {
+      async head() {
+        return { customMetadata: { ownerId: 'member-id' } };
+      },
+      async delete(key) {
+        deletedKey = key;
+      }
+    }
+  };
+  const response = await worker.fetch(new Request(
+    'https://media.example/api/media/post/member-id/file.jpg',
+    {
+      method: 'DELETE',
+      headers: {
+        Origin: baseEnv.ALLOWED_ORIGIN,
+        Authorization: 'Bearer valid-token'
+      }
+    }
+  ), env);
+
+  assert.equal(response.status, 204);
+  assert.equal(deletedKey, 'post/member-id/file.jpg');
+});

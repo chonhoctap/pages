@@ -10,9 +10,91 @@ import {
   setBusy,
   initThemeToggle,
   humanizeAuthError
-} from './supabase-client.js?v=20260730-6';
+} from './supabase-client.js?v=20260809-1';
 
 initThemeToggle();
+
+const ROLE_ORDER = ['member', 'vip', 'moderator', 'admin'];
+const ROLE_DESCRIPTIONS = {
+  member: 'Quyền cơ bản của thành viên thường',
+  vip: 'Quyền chức năng của thành viên VIP',
+  moderator: 'Staff hỗ trợ duyệt và ẩn bài viết',
+  admin: 'Quản trị viên cao nhất của hệ thống'
+};
+
+const PERMISSION_DEFINITIONS = [
+  {
+    key: 'forum.access',
+    title: 'Truy cập diễn đàn',
+    description: 'Được mở và đọc nội dung trong mục Diễn đàn.',
+    group: 'Diễn đàn'
+  },
+  {
+    key: 'forum.create_post',
+    title: 'Đăng bài viết',
+    description: 'Được tạo bài Hỏi đáp hoặc Giải trí mới.',
+    group: 'Diễn đàn'
+  },
+  {
+    key: 'forum.create_comment',
+    title: 'Gửi bình luận',
+    description: 'Được bình luận, trả lời và đính kèm media theo đặc quyền.',
+    group: 'Diễn đàn'
+  },
+  {
+    key: 'forum.react',
+    title: 'Thả cảm xúc',
+    description: 'Được thả hoặc đổi cảm xúc trên bài viết.',
+    group: 'Tương tác'
+  },
+  {
+    key: 'forum.share',
+    title: 'Chia sẻ bài viết',
+    description: 'Được chia sẻ hoặc sao chép liên kết bài viết.',
+    group: 'Tương tác'
+  },
+  {
+    key: 'forum.report',
+    title: 'Báo cáo bài viết',
+    description: 'Được gửi báo cáo bài viết đến hộp thư admin.',
+    group: 'Tương tác'
+  },
+  {
+    key: 'forum.moderate_posts',
+    title: 'Duyệt và ẩn bài viết',
+    description: 'Quyền Staff: duyệt, từ chối, ẩn hoặc hiện bài; không được xóa.',
+    group: 'Kiểm duyệt',
+    sensitive: true
+  },
+  {
+    key: 'forum.review_reports',
+    title: 'Xử lý báo cáo',
+    description: 'Xem và quyết định kết quả báo cáo. Luôn chỉ dành cho admin.',
+    group: 'Quản trị',
+    adminOnly: true
+  },
+  {
+    key: 'forum.delete_any_content',
+    title: 'Xóa nội dung người khác',
+    description: 'Xóa bài viết hoặc bình luận của tài khoản khác. Luôn chỉ dành cho admin.',
+    group: 'Quản trị',
+    adminOnly: true
+  },
+  {
+    key: 'admin.manage_users',
+    title: 'Quản lý tài khoản',
+    description: 'Đổi role, tạm khóa hoặc cấm tài khoản. Luôn chỉ dành cho admin.',
+    group: 'Quản trị',
+    adminOnly: true
+  },
+  {
+    key: 'admin.manage_role_permissions',
+    title: 'Cấu hình quyền role',
+    description: 'Bật hoặc tắt quyền trong trang này. Luôn chỉ dành cho admin.',
+    group: 'Quản trị',
+    adminOnly: true
+  }
+];
 
 const elements = {
   loading: document.getElementById('adminLoading'),
@@ -22,12 +104,18 @@ const elements = {
   search: document.getElementById('memberSearch'),
   message: document.getElementById('adminMessage'),
   counts: document.getElementById('roleCounts'),
-  logoutButton: document.getElementById('logoutButton')
+  logoutButton: document.getElementById('logoutButton'),
+  tabs: document.querySelectorAll('[data-admin-tab]'),
+  accountsPanel: document.getElementById('accountsPanel'),
+  permissionsPanel: document.getElementById('permissionsPanel'),
+  permissionLoading: document.getElementById('permissionLoading'),
+  permissionGrid: document.getElementById('permissionGrid')
 };
 
 let session;
 let currentProfile;
 let profiles = [];
+let permissionRows = [];
 
 function renderCounts() {
   const counts = profiles.reduce((result, item) => {
@@ -37,9 +125,8 @@ function renderCounts() {
   }, {});
   elements.counts.textContent =
     `${profiles.length} tài khoản · ${counts.admin || 0} quản trị · `
-    + `${counts.moderator || 0} điều hành · ${counts.vip || 0} VIP · `
-    + `${counts.suspended || 0} tạm khóa · `
-    + `${counts.banned || 0} bị cấm`;
+    + `${counts.moderator || 0} Staff · ${counts.vip || 0} VIP · `
+    + `${counts.suspended || 0} tạm khóa · ${counts.banned || 0} bị cấm`;
 }
 
 function createSelect(options, selectedValue, label) {
@@ -86,9 +173,9 @@ function createMemberCard(member) {
   const roleSelect = createSelect([
     ['member', 'Thành viên'],
     ['vip', 'Thành viên VIP'],
-    ['moderator', 'Điều hành viên'],
+    ['moderator', 'Staff'],
     ['admin', 'Quản trị viên']
-  ], member.role, `Quyền của ${member.username}`);
+  ], member.role, `Role của ${member.username}`);
   const statusSelect = createSelect([
     ['active', 'Hoạt động'],
     ['suspended', 'Tạm khóa'],
@@ -100,11 +187,8 @@ function createMemberCard(member) {
   save.className = 'button button-small';
   save.textContent = 'Cập nhật';
   save.addEventListener('click', async () => {
-    if (
-      roleSelect.value === member.role
-      && statusSelect.value === member.account_status
-    ) {
-      showMessage(elements.message, 'Quyền và trạng thái tài khoản này chưa thay đổi.', 'info');
+    if (roleSelect.value === member.role && statusSelect.value === member.account_status) {
+      showMessage(elements.message, 'Role và trạng thái tài khoản này chưa thay đổi.', 'info');
       return;
     }
     if (
@@ -195,7 +279,201 @@ function renderMembers() {
   }
 }
 
+function permissionRow(role, permissionKey) {
+  return permissionRows.find(item =>
+    item.role_name === role && item.permission_key === permissionKey
+  );
+}
+
+function refreshPermissionCount(role) {
+  const card = elements.permissionGrid.querySelector(
+    `.role-permission-card[data-role="${CSS.escape(role)}"]`
+  );
+  if (!card) return;
+  const enabledCount = PERMISSION_DEFINITIONS.filter(definition =>
+    permissionRow(role, definition.key)?.allowed
+  ).length;
+  card.querySelector('.permission-count').textContent =
+    `${enabledCount}/${PERMISSION_DEFINITIONS.length} quyền`;
+}
+
+function permissionIsLocked(role, definition) {
+  if (definition.adminOnly) return true;
+  if (definition.key === 'forum.moderate_posts') return role !== 'moderator';
+  return false;
+}
+
+function lockedPermissionLabel(role, definition) {
+  if (definition.key === 'forum.moderate_posts') {
+    if (role === 'admin') return 'Admin luôn có quyền';
+    if (role !== 'moderator') return 'Chỉ Staff hoặc admin';
+  }
+  if (definition.adminOnly) {
+    return role === 'admin' ? 'Quyền admin bắt buộc' : 'Chỉ dành cho admin';
+  }
+  return '';
+}
+
+async function updatePermission(role, definition, input, rowElement) {
+  const row = permissionRow(role, definition.key);
+  if (!row || permissionIsLocked(role, definition)) return;
+  const nextAllowed = input.checked;
+
+  const confirmation = definition.key === 'forum.access' && !nextAllowed
+    ? `Tắt quyền truy cập diễn đàn của role ${roleLabel(role)}? Các quyền diễn đàn khác sẽ không hoạt động.`
+    : definition.sensitive
+      ? `${nextAllowed ? 'Cấp' : 'Thu hồi'} quyền duyệt và ẩn bài của role ${roleLabel(role)}?`
+      : '';
+  if (confirmation && !window.confirm(confirmation)) {
+    input.checked = row.allowed;
+    return;
+  }
+
+  input.disabled = true;
+  rowElement.classList.add('saving');
+  try {
+    const { data, error } = await supabase.rpc('admin_update_role_permission', {
+      target_role_name: role,
+      target_permission_key: definition.key,
+      target_allowed: nextAllowed
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Database không xác nhận thay đổi quyền.');
+    row.allowed = nextAllowed;
+    rowElement.classList.toggle('enabled', nextAllowed);
+    rowElement.querySelector('.permission-state').textContent = nextAllowed ? 'Đang bật' : 'Đang tắt';
+    refreshPermissionCount(role);
+    showMessage(
+      elements.message,
+      `Đã ${nextAllowed ? 'bật' : 'tắt'} “${definition.title}” cho role ${roleLabel(role)}.`,
+      'success'
+    );
+  } catch (error) {
+    input.checked = row.allowed;
+    showMessage(elements.message, humanizeAuthError(error), 'error');
+  } finally {
+    input.disabled = false;
+    rowElement.classList.remove('saving');
+  }
+}
+
+function createPermissionItem(role, definition) {
+  const row = permissionRow(role, definition.key) || { allowed: false };
+  const locked = permissionIsLocked(role, definition);
+  const item = document.createElement('div');
+  item.className = 'permission-item';
+  item.classList.toggle('enabled', row.allowed);
+  item.classList.toggle('locked', locked);
+
+  const copy = document.createElement('div');
+  copy.className = 'permission-copy';
+  const titleLine = document.createElement('div');
+  titleLine.className = 'permission-title-line';
+  const title = document.createElement('strong');
+  title.textContent = definition.title;
+  const group = document.createElement('span');
+  group.textContent = definition.group;
+  titleLine.append(title, group);
+  const description = document.createElement('p');
+  description.textContent = definition.description;
+  copy.append(titleLine, description);
+
+  const control = document.createElement('div');
+  control.className = 'permission-control';
+  const state = document.createElement('span');
+  state.className = 'permission-state';
+  state.textContent = locked
+    ? lockedPermissionLabel(role, definition)
+    : row.allowed ? 'Đang bật' : 'Đang tắt';
+  const label = document.createElement('label');
+  label.className = 'permission-switch';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.checked = Boolean(row.allowed);
+  input.disabled = locked;
+  input.setAttribute('aria-label', `${definition.title} của ${roleLabel(role)}`);
+  const slider = document.createElement('span');
+  slider.setAttribute('aria-hidden', 'true');
+  label.append(input, slider);
+  control.append(state, label);
+  item.append(copy, control);
+
+  input.addEventListener('change', () => updatePermission(role, definition, input, item));
+  return item;
+}
+
+function renderPermissions() {
+  const fragment = document.createDocumentFragment();
+  ROLE_ORDER.forEach(role => {
+    const card = document.createElement('article');
+    card.className = 'role-permission-card';
+    card.dataset.role = role;
+
+    const header = document.createElement('header');
+    const heading = document.createElement('div');
+    const badge = document.createElement('span');
+    badge.className = 'role-permission-badge';
+    badge.textContent = roleLabel(role);
+    const description = document.createElement('p');
+    description.textContent = ROLE_DESCRIPTIONS[role];
+    heading.append(badge, description);
+    const enabledCount = PERMISSION_DEFINITIONS.filter(definition =>
+      permissionRow(role, definition.key)?.allowed
+    ).length;
+    const count = document.createElement('span');
+    count.className = 'permission-count';
+    count.textContent = `${enabledCount}/${PERMISSION_DEFINITIONS.length} quyền`;
+    header.append(heading, count);
+
+    const list = document.createElement('div');
+    list.className = 'permission-list';
+    PERMISSION_DEFINITIONS.forEach(definition => {
+      list.appendChild(createPermissionItem(role, definition));
+    });
+    card.append(header, list);
+    fragment.appendChild(card);
+  });
+  elements.permissionGrid.replaceChildren(fragment);
+  elements.permissionLoading.hidden = true;
+  elements.permissionGrid.hidden = false;
+}
+
+function switchAdminTab(tabName) {
+  const showPermissions = tabName === 'permissions';
+  elements.accountsPanel.hidden = showPermissions;
+  elements.permissionsPanel.hidden = !showPermissions;
+  elements.tabs.forEach(tab => {
+    const active = tab.dataset.adminTab === tabName;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+    tab.tabIndex = active ? 0 : -1;
+  });
+  window.history.replaceState(null, '', showPermissions ? '#permissions' : '#accounts');
+}
+
+async function loadMembers() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_url, role, account_status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(300);
+  if (error) throw error;
+  profiles = data || [];
+  renderCounts();
+  renderMembers();
+}
+
+async function loadPermissions() {
+  const { data, error } = await supabase.rpc('admin_list_role_permissions');
+  if (error) throw error;
+  permissionRows = data || [];
+  renderPermissions();
+}
+
 elements.search.addEventListener('input', renderMembers);
+elements.tabs.forEach(tab => {
+  tab.addEventListener('click', () => switchAdminTab(tab.dataset.adminTab));
+});
 
 elements.logoutButton.addEventListener('click', async () => {
   setBusy(elements.logoutButton, true, 'Đang đăng xuất...');
@@ -215,19 +493,24 @@ async function init() {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url, role, account_status, created_at')
-      .order('created_at', { ascending: false })
-      .limit(300);
-    if (error) throw error;
-    profiles = data || [];
-    renderCounts();
-    renderMembers();
+    await loadMembers();
+    try {
+      await loadPermissions();
+    } catch (permissionError) {
+      elements.permissionLoading.textContent =
+        `Chưa tải được quyền theo role: ${humanizeAuthError(permissionError)}. `
+        + 'Hãy chạy role_permissions_migration.sql trong Supabase.';
+      elements.permissionLoading.classList.add('permission-load-error');
+    }
     elements.content.hidden = false;
+    switchAdminTab(window.location.hash === '#permissions' ? 'permissions' : 'accounts');
   } catch (error) {
     elements.loading.hidden = true;
-    showMessage(elements.message, `Không thể tải trang quản trị: ${humanizeAuthError(error)}`, 'error');
+    showMessage(
+      elements.message,
+      `Không thể tải trang quản trị: ${humanizeAuthError(error)}`,
+      'error'
+    );
   }
 }
 

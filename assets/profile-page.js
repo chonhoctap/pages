@@ -293,10 +293,16 @@ async function loadOwnPosts() {
 }
 
 async function removeOwnPostMedia(postId) {
-  const [{ data: postMedia, error: postError }, { data: comments, error: commentError }] = await Promise.all([
+  const [
+    { data: postRow, error: postRowError },
+    { data: postMedia, error: postError },
+    { data: comments, error: commentError }
+  ] = await Promise.all([
+    supabase.from('forum_posts').select('media_path').eq('id', postId).single(),
     supabase.from('forum_post_media').select('media_path').eq('post_id', postId),
     supabase.from('forum_comments').select('id, media_path').eq('post_id', postId)
   ]);
+  if (postRowError) throw postRowError;
   if (postError) throw postError;
   if (commentError) throw commentError;
   const commentIds = (comments || []).map(item => item.id);
@@ -308,11 +314,12 @@ async function removeOwnPostMedia(postId) {
     commentMedia = data || [];
   }
   const paths = new Set([
+    postRow?.media_path,
     ...(postMedia || []).map(item => item.media_path),
     ...(comments || []).map(item => item.media_path),
     ...commentMedia.map(item => item.media_path)
   ].filter(Boolean));
-  await Promise.allSettled([...paths].map(async path => {
+  await Promise.all([...paths].map(async path => {
     if (/^(post|comment)\//u.test(path) && r2Enabled()) {
       await deleteFromR2(session, path);
       return;
@@ -320,7 +327,8 @@ async function removeOwnPostMedia(postId) {
     const bucket = path.startsWith(`${session.user.id}/`) && path.includes(`/${postId}/`)
       ? 'forum-comment-media'
       : 'forum-media';
-    await supabase.storage.from(bucket).remove([path]);
+    const { error } = await supabase.storage.from(bucket).remove([path]);
+    if (error) throw error;
   }));
 }
 

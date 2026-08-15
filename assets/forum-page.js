@@ -2289,24 +2289,25 @@ function renderComments(comments, post, card) {
       remove.addEventListener('click', async () => {
         if (!window.confirm('Xóa bình luận này?')) return;
         remove.disabled = true;
-        const { error } = await supabase.from('forum_comments').delete().eq('id', comment.id);
-        if (error) {
-          remove.disabled = false;
-          setInfo(`Không thể xóa bình luận: ${humanizeAuthError(error)}`, 'error');
-          return;
-        }
         const paths = new Set(
           [
             comment.media_path,
             ...(comment.mediaItems || []).map(item => item.media_path)
           ].filter(Boolean)
         );
-        await Promise.allSettled(
-          [...paths].map(path => removeStoredMedia(path, 'forum-comment-media'))
-        );
-        post.commentCount = Math.max(0, post.commentCount - 1);
-        updatePostStats(card, post);
-        await loadComments(post, card);
+        try {
+          await Promise.all(
+            [...paths].map(path => removeStoredMedia(path, 'forum-comment-media'))
+          );
+          const { error } = await supabase.from('forum_comments').delete().eq('id', comment.id);
+          if (error) throw error;
+          post.commentCount = Math.max(0, post.commentCount - 1);
+          updatePostStats(card, post);
+          await loadComments(post, card);
+        } catch (error) {
+          remove.disabled = false;
+          setInfo(`Không thể xóa bình luận: ${humanizeAuthError(error)}`, 'error');
+        }
       });
       item.appendChild(remove);
     }
@@ -2553,7 +2554,7 @@ async function deletePost(post, card, button) {
       ...(postMediaRows || []).map(item => item.media_path)
     ].filter(Boolean));
 
-    await Promise.allSettled([
+    await Promise.all([
       ...[...commentPaths].map(path => removeStoredMedia(path, 'forum-comment-media')),
       ...[...postPaths].map(path => removeStoredMedia(path, 'forum-media'))
     ]);

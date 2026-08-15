@@ -10,6 +10,8 @@ Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải l�
 - Mỗi lượt tải lên/xóa đều xác minh access token Supabase.
 - Chỉ tài khoản `active` được tải tệp.
 - Chủ tệp hoặc admin mới được xóa; moderator không thể xóa tệp của người khác.
+- Tác vụ dọn bài hết hạn chỉ được xóa hàng loạt qua `R2_CLEANUP_SECRET` dùng
+  riêng giữa GitHub Actions và Worker.
 - Mỗi tài khoản tối đa 12 lượt tải lên trong một phút để hạn chế lạm dụng.
 - Thành viên: ảnh tối đa 5 MB/tệp, không video, âm thanh 2 MB.
 - VIP/moderator: ảnh 5 MB, video 50 MB, âm thanh 5 MB.
@@ -27,11 +29,17 @@ Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải l�
    npx wrangler login
    ```
 
-3. Lưu Supabase publishable key dưới dạng Worker secret:
+3. Lưu Supabase publishable key và một chuỗi dọn dẹp ngẫu nhiên tối thiểu
+   40 ký tự dưới dạng Worker secrets:
 
    ```bash
    npx wrangler secret put SUPABASE_ANON_KEY
+   npx wrangler secret put R2_CLEANUP_SECRET
    ```
+
+   Giá trị `R2_CLEANUP_SECRET` phải được lưu thêm bằng đúng chuỗi đó tại
+   GitHub repository > Settings > Secrets and variables > Actions. Không đặt
+   chuỗi này trong mã nguồn hoặc gửi qua cuộc trò chuyện.
 
 4. Triển khai:
 
@@ -51,3 +59,7 @@ Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải l�
 
 Không cần bật Public Development URL cho bucket. Người xem nhận tệp qua
 `/media/...` của Worker; bucket vẫn ở chế độ riêng tư.
+
+Endpoint `POST /api/cleanup` chỉ nhận tối đa 500 object key bắt đầu bằng
+`post/` hoặc `comment/`. Tác vụ sẽ thử lại khi Worker lỗi và không xóa dòng bài
+viết khỏi Supabase nếu R2 chưa xác nhận xóa đủ media.

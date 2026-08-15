@@ -5,7 +5,8 @@ import worker from '../src/index.js';
 const baseEnv = {
   ALLOWED_ORIGIN: 'https://chonhoctap.github.io',
   SUPABASE_URL: 'https://project.supabase.co',
-  SUPABASE_ANON_KEY: 'publishable-test-key'
+  SUPABASE_ANON_KEY: 'publishable-test-key',
+  R2_CLEANUP_SECRET: 'cleanup-test-secret'
 };
 
 test('health endpoint reports R2 service', async () => {
@@ -291,4 +292,86 @@ test('admin can delete media owned by another member', async t => {
 
   assert.equal(response.status, 204);
   assert.equal(deletedKey, 'post/member-id/file.jpg');
+});
+
+test('cleanup endpoint rejects requests without the server secret', async () => {
+  let deleted = false;
+  const response = await worker.fetch(new Request(
+    'https://media.example/api/cleanup',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys: ['post/member-id/file.jpg'] })
+    }
+  ), {
+    ...baseEnv,
+    MEDIA_BUCKET: {
+      async delete() {
+        deleted = true;
+      }
+    }
+  });
+
+  assert.equal(response.status, 401);
+  assert.equal(deleted, false);
+});
+
+test('cleanup endpoint deletes unique post and comment media keys', async () => {
+  let deletedKeys = [];
+  const response = await worker.fetch(new Request(
+    'https://media.example/api/cleanup',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cleanup-Secret': baseEnv.R2_CLEANUP_SECRET
+      },
+      body: JSON.stringify({
+        keys: [
+          'post/member-id/file.jpg',
+          'comment/member-id/post-id/file.mp4',
+          'post/member-id/file.jpg'
+        ]
+      })
+    }
+  ), {
+    ...baseEnv,
+    MEDIA_BUCKET: {
+      async delete(keys) {
+        deletedKeys = keys;
+      }
+    }
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(deletedKeys, [
+    'post/member-id/file.jpg',
+    'comment/member-id/post-id/file.mp4'
+  ]);
+  assert.deepEqual(await response.json(), { ok: true, deleted: 2 });
+});
+
+test('cleanup endpoint refuses paths outside forum R2 prefixes', async () => {
+  let deleted = false;
+  const response = await worker.fetch(new Request(
+    'https://media.example/api/cleanup',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Cleanup-Secret': baseEnv.R2_CLEANUP_SECRET
+      },
+      body: JSON.stringify({ keys: ['avatars/member-id/avatar.jpg'] })
+    }
+  ), {
+    ...baseEnv,
+    MEDIA_BUCKET: {
+      async delete() {
+        deleted = true;
+      }
+    }
+  });
+
+  assert.equal(response.status, 400);
+  assert.equal(deleted, false);
 });

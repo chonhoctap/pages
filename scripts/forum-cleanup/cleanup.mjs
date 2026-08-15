@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MAX_POSTS = 500;
+const R2_DELETE_BATCH_SIZE = 500;
+const DEFAULT_R2_RETRY_DELAYS = [0, 500, 1500, 3000];
 
 export function isSupabaseMediaPath(path) {
   return typeof path === 'string'
@@ -15,6 +17,21 @@ export function uniqueSupabasePaths(rows) {
     rows
       .map(row => row?.media_path)
       .filter(isSupabaseMediaPath)
+  )];
+}
+
+export function isR2MediaPath(path) {
+  return typeof path === 'string'
+    && /^(post|comment)\//u.test(path)
+    && !path.includes('\0')
+    && path.split('/').every(part => part && part !== '.' && part !== '..');
+}
+
+export function uniqueR2Paths(rows) {
+  return [...new Set(
+    rows
+      .map(row => row?.media_path)
+      .filter(isR2MediaPath)
   )];
 }
 
@@ -117,6 +134,73 @@ async function removeStoragePaths(supabase, bucket, paths) {
   }
 }
 
+function normalizedMediaApiUrl(value) {
+  const url = value?.trim().replace(/\/+$/u, '');
+  return /^https:\/\/[a-z0-9.-]+(?:\/.*)?$/iu.test(url || '') ? url : '';
+}
+
+function delay(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+async function cleanupApiError(response) {
+  try {
+    const payload = await response.json();
+    return payload?.error || `HTTP ${response.status}`;
+  } catch {
+    return `HTTP ${response.status}`;
+  }
+}
+
+export async function removeR2Paths({
+  paths,
+  mediaApiUrl,
+  cleanupSecret,
+  fetchImpl = globalThis.fetch,
+  sleep = delay,
+  retryDelays = DEFAULT_R2_RETRY_DELAYS
+}) {
+  if (!paths.length) return 0;
+  const apiUrl = normalizedMediaApiUrl(mediaApiUrl);
+  if (!apiUrl) throw new Error('Thiếu hoặc sai cấu hình MEDIA_API_URL.');
+  if (!cleanupSecret?.trim()) {
+    throw new Error('Thiếu GitHub Actions Secret: R2_CLEANUP_SECRET.');
+  }
+  if (typeof fetchImpl !== 'function') throw new Error('Môi trường không hỗ trợ gọi R2 Worker.');
+
+  let removed = 0;
+  for (const group of chunk(paths, R2_DELETE_BATCH_SIZE)) {
+    let lastError;
+    for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
+      if (retryDelays[attempt] > 0) await sleep(retryDelays[attempt]);
+      try {
+        const response = await fetchImpl(`${apiUrl}/api/cleanup`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Cleanup-Secret': cleanupSecret.trim()
+          },
+          body: JSON.stringify({ keys: group })
+        });
+        if (!response.ok) throw new Error(await cleanupApiError(response));
+        const payload = await response.json();
+        if (payload?.deleted !== group.length) {
+          throw new Error('R2 Worker không xác nhận đủ số media cần xóa.');
+        }
+        removed += group.length;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError) {
+      throw new Error(`Không thể xóa media R2: ${lastError.message}`);
+    }
+  }
+  return removed;
+}
+
 async function deletePosts(supabase, ids) {
   for (const group of chunk(ids)) {
     const { error } = await supabase.from('forum_posts').delete().in('id', group);
@@ -130,11 +214,17 @@ export async function cleanupForum({
   dryRun = false,
   batchSize = DEFAULT_BATCH_SIZE,
   maxPosts = DEFAULT_MAX_POSTS,
+  mediaApiUrl = '',
+  cleanupSecret = '',
+  fetchImpl = globalThis.fetch,
+  sleep = delay,
+  r2RetryDelays = DEFAULT_R2_RETRY_DELAYS,
   logger = console
 }) {
   let deletedPosts = 0;
   let deletedPostMedia = 0;
   let deletedCommentMedia = 0;
+  let deletedR2Media = 0;
 
   while (deletedPosts < maxPosts) {
     const remaining = Math.min(batchSize, maxPosts - deletedPosts);
@@ -156,10 +246,17 @@ export async function cleanupForum({
       ...legacyCommentRows,
       ...commentMediaRows
     ]);
+    const r2Paths = uniqueR2Paths([
+      ...posts,
+      ...legacyCommentRows,
+      ...postMediaRows,
+      ...commentMediaRows
+    ]);
 
     logger.info(
       `${dryRun ? '[DRY RUN] ' : ''}Tìm thấy ${posts.length} bài, `
-      + `${postPaths.length} media bài và ${commentPaths.length} media bình luận.`
+      + `${postPaths.length} media bài Supabase, `
+      + `${commentPaths.length} media bình luận Supabase và ${r2Paths.length} media R2.`
     );
 
     if (dryRun) {
@@ -167,11 +264,20 @@ export async function cleanupForum({
         dryRun: true,
         candidatePosts: posts.length,
         candidatePostMedia: postPaths.length,
-        candidateCommentMedia: commentPaths.length
+        candidateCommentMedia: commentPaths.length,
+        candidateR2Media: r2Paths.length
       };
     }
 
     // Xóa object trước để không để lại file mồ côi chiếm dung lượng.
+    deletedR2Media += await removeR2Paths({
+      paths: r2Paths,
+      mediaApiUrl,
+      cleanupSecret,
+      fetchImpl,
+      sleep,
+      retryDelays: r2RetryDelays
+    });
     await removeStoragePaths(supabase, 'forum-comment-media', commentPaths);
     await removeStoragePaths(supabase, 'forum-media', postPaths);
     await deletePosts(supabase, postIds);
@@ -186,6 +292,7 @@ export async function cleanupForum({
     deletedPosts,
     deletedPostMedia,
     deletedCommentMedia,
+    deletedR2Media,
     reachedRunLimit: deletedPosts >= maxPosts
   };
 }
@@ -193,7 +300,9 @@ export async function cleanupForum({
 async function main() {
   const result = await cleanupForum({
     supabase: createAdminClient(),
-    dryRun: process.env.DRY_RUN === 'true'
+    dryRun: process.env.DRY_RUN === 'true',
+    mediaApiUrl: process.env.MEDIA_API_URL,
+    cleanupSecret: process.env.R2_CLEANUP_SECRET
   });
   console.info(JSON.stringify(result, null, 2));
 }

@@ -10,7 +10,7 @@
   try{document.documentElement.dataset.theme=localStorage.getItem('chonhoctap-theme')||'light'}
   catch{document.documentElement.dataset.theme='light'}
   </script>
-  <link rel="icon" href="avatar.png">
+  <link rel="icon" href="avatar.webp" type="image/webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -20,7 +20,7 @@
   <header class="account-topbar">
     <div class="account-topbar-inner">
       <a class="brand-link" href="./">
-        <img src="avatar.png" alt="">
+        <img src="avatar.webp" alt="" decoding="async">
         <span class="brand-copy"><strong>CHỐN HỌC TẬP</strong><span>Hồ sơ thành viên</span></span>
       </a>
       <div class="topbar-actions">
@@ -49,7 +49,7 @@
     <div id="profileContent" class="profile-layout" hidden>
       <aside class="panel profile-summary">
         <div class="avatar-shell">
-          <img id="profileAvatar" class="profile-avatar" src="avatar.png" alt="Ảnh đại diện">
+          <img id="profileAvatar" class="profile-avatar" src="avatar.webp" alt="Ảnh đại diện" decoding="async">
           <label id="avatarUploadLabel" class="avatar-upload" title="Chọn ảnh đại diện">
             <span aria-hidden="true">✎</span>
             <input id="avatarInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif">
@@ -171,6 +171,6 @@
     </div>
   </main>
 
-  <script type="module" src="assets/profile-page.js?v=20260815-2"></script>
+  <script type="module" src="assets/profile-page.js?v=20260815-3"></script>
 </body>
 </html>

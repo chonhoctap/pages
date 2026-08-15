@@ -10,18 +10,18 @@
   try{document.documentElement.dataset.theme=localStorage.getItem('chonhoctap-theme')||'light'}
   catch{document.documentElement.dataset.theme='light'}
   </script>
-  <link rel="icon" href="avatar.png">
+  <link rel="icon" href="avatar.webp" type="image/webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/account.css?v=20260801-7">
-  <link rel="stylesheet" href="assets/forum.css?v=20260815-2">
+  <link rel="stylesheet" href="assets/forum.css?v=20260815-3">
 </head>
 <body>
   <header class="account-topbar" aria-label="Điều hướng chính">
     <div class="account-topbar-inner">
       <a class="brand-link" href="./">
-        <img src="avatar.png" alt="">
+        <img src="avatar.webp" alt="" decoding="async">
         <span class="brand-copy"><strong>CHỐN HỌC TẬP</strong><span>Diễn đàn học sinh</span></span>
       </a>
       <div class="topbar-actions">
@@ -159,7 +159,7 @@
         <section id="composer" class="panel composer">
           <header class="composer-heading">
             <div class="composer-profile">
-              <img id="composerAvatar" src="avatar.png" alt="">
+              <img id="composerAvatar" src="avatar.webp" alt="" decoding="async">
               <div>
                 <strong id="composerName">Thành viên</strong>
                 <span id="composerPrompt">Bạn đang cần giải bài nào?</span>
@@ -237,7 +237,7 @@
     <article class="panel post-card">
       <header class="post-header">
         <a class="post-avatar-link" href="profile.html" aria-label="Xem hồ sơ thành viên">
-          <img class="post-avatar" src="avatar.png" alt="">
+          <img class="post-avatar" src="avatar.webp" alt="" loading="lazy" decoding="async">
         </a>
         <div class="post-author">
           <div class="post-author-line">
@@ -284,7 +284,7 @@
       </div>
       <div class="comment-panel" hidden>
         <form class="comment-form">
-          <img src="avatar.png" alt="">
+          <img src="avatar.webp" alt="" loading="lazy" decoding="async">
           <div class="comment-compose">
             <input class="comment-input" type="text" maxlength="1200" placeholder="Viết bình luận...">
             <div class="comment-media-preview" hidden></div>
@@ -358,6 +358,6 @@
     </section>
   </dialog>
 
-  <script type="module" src="assets/forum-page.js?v=20260815-3"></script>
+  <script type="module" src="assets/forum-page.js?v=20260815-4"></script>
 </body>
 </html>

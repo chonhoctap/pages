@@ -76,7 +76,7 @@ function fillProfile() {
   elements.form.elements.instagram_url.value = profile.instagram_url || '';
   elements.role.textContent = roleLabel(profile.role);
   elements.role.dataset.role = profile.role;
-  elements.avatar.src = profile.avatar_url || user.user_metadata?.avatar_url || 'avatar.png';
+  elements.avatar.src = profile.avatar_url || user.user_metadata?.avatar_url || 'avatar.webp';
   elements.adminLink.hidden = profile.role !== 'admin';
 }
 
@@ -86,7 +86,7 @@ function fillPublicProfile() {
   elements.pageTitle.textContent = 'Hồ sơ thành viên';
   elements.pageIntro.textContent = 'Thông tin công khai của thành viên trong cộng đồng Chốn Học Tập.';
   elements.heading.textContent = name;
-  elements.avatar.src = profile.avatar_url || 'avatar.png';
+  elements.avatar.src = profile.avatar_url || 'avatar.webp';
   elements.role.textContent = roleLabel(profile.role);
   elements.role.dataset.role = profile.role;
   elements.photoHint.textContent = `@${profile.username}`;

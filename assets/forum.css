@@ -336,6 +336,12 @@
 .feed-loading,.feed-empty{padding:38px;text-align:center;color:var(--muted);font-size:11px}
 
 .post-card{padding:0;overflow:hidden}
+@supports (content-visibility:auto){
+  .post-card{
+    content-visibility:auto;
+    contain-intrinsic-size:auto 560px;
+  }
+}
 .post-header{
   padding:17px 18px 11px;
   display:grid;

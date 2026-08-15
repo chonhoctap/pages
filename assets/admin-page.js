@@ -148,8 +148,10 @@ function createMemberCard(member) {
 
   const avatar = document.createElement('img');
   avatar.className = 'member-avatar';
-  avatar.src = member.avatar_url || 'avatar.png';
+  avatar.src = member.avatar_url || 'avatar.webp';
   avatar.alt = '';
+  avatar.loading = 'lazy';
+  avatar.decoding = 'async';
 
   const info = document.createElement('div');
   info.className = 'member-info';

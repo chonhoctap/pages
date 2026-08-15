@@ -28,8 +28,9 @@ function accountLink(profile, user) {
   link.title = `${profileName(profile, user)} · ${roleLabel(profile?.role)}`;
 
   const avatar = document.createElement('img');
-  avatar.src = profile?.avatar_url || user?.user_metadata?.avatar_url || 'avatar.png';
+  avatar.src = profile?.avatar_url || user?.user_metadata?.avatar_url || 'avatar.webp';
   avatar.alt = '';
+  avatar.decoding = 'async';
 
   const text = document.createElement('span');
   text.textContent = profileName(profile, user);

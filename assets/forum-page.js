@@ -19,7 +19,7 @@ import {
   uploadToR2,
   uploadToSupabaseResumable,
   deleteFromR2
-} from './media-storage.js?v=20260815-1';
+} from './media-storage.js?v=20260815-2';
 
 initThemeToggle();
 
@@ -889,13 +889,6 @@ async function publishPost(event) {
   }
 }
 
-function countByPost(rows) {
-  return (rows || []).reduce((map, row) => {
-    map.set(row.post_id, (map.get(row.post_id) || 0) + 1);
-    return map;
-  }, new Map());
-}
-
 function groupByPost(rows) {
   return (rows || []).reduce((map, row) => {
     const values = map.get(row.post_id) || [];
@@ -1000,8 +993,6 @@ async function loadPosts() {
       const ids = posts.map(post => post.id);
       const [
         reactionsResult,
-        commentsResult,
-        sharesResult,
         mediaResult,
         metricsResult,
         reportsResult
@@ -1010,8 +1001,6 @@ async function loadPosts() {
           .from('forum_reactions')
           .select('post_id, user_id, reaction_type')
           .in('post_id', ids),
-        supabase.from('forum_comments').select('post_id').in('post_id', ids),
-        supabase.from('forum_shares').select('post_id').in('post_id', ids),
         supabase
           .from('forum_post_media')
           .select(`
@@ -1041,15 +1030,11 @@ async function loadPosts() {
           : Promise.resolve({ data: [], error: null })
       ]);
       if (reactionsResult.error) throw reactionsResult.error;
-      if (commentsResult.error) throw commentsResult.error;
-      if (sharesResult.error) throw sharesResult.error;
       if (mediaResult.error) throw mediaResult.error;
       if (metricsResult.error) throw metricsResult.error;
       if (reportsResult.error) throw reportsResult.error;
       if (sequence !== loadSequence) return;
 
-      const commentCounts = countByPost(commentsResult.data);
-      const shareCounts = countByPost(sharesResult.data);
       const reactionsByPost = groupByPost(reactionsResult.data);
       const mediaByPost = groupByPost(mediaResult.data);
       const metricsByPost = new Map(
@@ -1067,8 +1052,8 @@ async function loadPosts() {
           reaction => reaction.user_id === session.user.id
         )?.reaction_type || '';
         post.reactionCount = Number(metric.reaction_count ?? postReactions.length);
-        post.commentCount = Number(metric.comment_count ?? commentCounts.get(post.id) ?? 0);
-        post.shareCount = Number(metric.share_count ?? shareCounts.get(post.id) ?? 0);
+        post.commentCount = Number(metric.comment_count || 0);
+        post.shareCount = Number(metric.share_count || 0);
         post.viewCount = Number(metric.view_count || 0);
         post.trendingScore = Number(metric.trending_score || 0);
         post.openReports = reportsByPost.get(post.id) || [];
@@ -1279,8 +1264,10 @@ function renderReactionList(filter = activeReactionListFilter) {
     link.className = 'reaction-list-item';
     link.href = publicProfileUrl(profile);
     const avatar = document.createElement('img');
-    avatar.src = profile.avatar_url || 'avatar.png';
+    avatar.src = profile.avatar_url || 'avatar.webp';
     avatar.alt = '';
+    avatar.loading = 'lazy';
+    avatar.decoding = 'async';
     const copy = document.createElement('span');
     const name = document.createElement('strong');
     name.textContent = profileName(profile);
@@ -1643,6 +1630,8 @@ function renderMediaGallery(container, items, label, compact = false) {
     } else {
       content.alt = `Ảnh ${index + 1} của ${label}`;
       content.loading = 'lazy';
+      content.decoding = 'async';
+      content.fetchPriority = 'low';
       tile.appendChild(content);
     }
     if (index === 4 && items.length > 5) {
@@ -1670,7 +1659,7 @@ function renderPost(post) {
   const author = authorOf(post) || {};
   const authorUrl = publicProfileUrl(author);
   const avatar = card.querySelector('.post-avatar');
-  avatar.src = author.avatar_url || 'avatar.png';
+  avatar.src = author.avatar_url || 'avatar.webp';
   avatar.alt = `Hồ sơ của ${profileName(author)}`;
   const avatarLink = card.querySelector('.post-avatar-link');
   const authorLink = card.querySelector('.post-author-link');
@@ -1820,7 +1809,7 @@ function renderPost(post) {
   configurePostMenu(post, card);
 
   const commentForm = card.querySelector('.comment-form');
-  commentForm.querySelector('img').src = currentProfile.avatar_url || 'avatar.png';
+  commentForm.querySelector('img').src = currentProfile.avatar_url || 'avatar.webp';
   commentForm.hidden = !canInteract() || !hasForumPermission('forum.create_comment');
   const commentMediaInput = commentForm.querySelector('.comment-media-input');
   commentMediaInput.addEventListener('change', () => {
@@ -2359,8 +2348,10 @@ function renderComments(comments, post, card) {
     item.className = 'comment-item';
     item.classList.toggle('comment-reply', Boolean(comment.parent_comment_id));
     const avatar = document.createElement('img');
-    avatar.src = author.avatar_url || 'avatar.png';
+    avatar.src = author.avatar_url || 'avatar.webp';
     avatar.alt = `Hồ sơ của ${profileName(author)}`;
+    avatar.loading = 'lazy';
+    avatar.decoding = 'async';
     const avatarLink = document.createElement('a');
     avatarLink.className = 'comment-profile-link';
     avatarLink.href = publicProfileUrl(author);
@@ -2775,8 +2766,10 @@ async function loadNotifications() {
       ? `forum.html?post=${encodeURIComponent(item.post_id)}`
       : 'forum.html';
     const avatar = document.createElement('img');
-    avatar.src = actor.avatar_url || 'avatar.png';
+    avatar.src = actor.avatar_url || 'avatar.webp';
     avatar.alt = '';
+    avatar.loading = 'lazy';
+    avatar.decoding = 'async';
     const copy = document.createElement('span');
     const message = document.createElement('strong');
     message.textContent = item.message;
@@ -2810,7 +2803,7 @@ function configureAccount() {
     `${name} · ${roleLabel(currentProfile.role)} · ${statusLabel(currentProfile.account_status)}`;
   elements.composerName.textContent = name;
   elements.composerAvatar.src =
-    currentProfile.avatar_url || session.user.user_metadata?.avatar_url || 'avatar.png';
+    currentProfile.avatar_url || session.user.user_metadata?.avatar_url || 'avatar.webp';
   const mayCreatePost = canInteract() && hasForumPermission('forum.create_post');
   const standardInteractionPermissions = [
     'forum.create_comment', 'forum.react', 'forum.share', 'forum.report'

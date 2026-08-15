@@ -19,7 +19,7 @@ import {
   uploadToR2,
   uploadToSupabaseResumable,
   deleteFromR2
-} from './media-storage.js?v=20260801-2';
+} from './media-storage.js?v=20260815-1';
 
 initThemeToggle();
 

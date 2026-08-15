@@ -45,7 +45,7 @@ function corsHeaders(request, env) {
     'Access-Control-Allow-Origin': allowed ? origin : env.ALLOWED_ORIGIN,
     'Access-Control-Allow-Methods': 'GET, HEAD, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers':
-      'Authorization, Content-Type, X-Media-Scope, X-Post-Id, X-File-Name',
+      'Authorization, Content-Type, X-Media-Scope, X-Post-Id, X-File-Name, X-Cleanup-Secret',
     'Access-Control-Max-Age': '86400',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range, ETag',
     Vary: 'Origin'
@@ -70,6 +70,23 @@ function errorResponse(request, env, message, status = 400) {
 function bearerToken(request) {
   const authorization = request.headers.get('Authorization') || '';
   return authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+}
+
+function secretMatches(provided, expected) {
+  if (typeof provided !== 'string' || typeof expected !== 'string') return false;
+  if (!provided.length || provided.length !== expected.length) return false;
+  let mismatch = 0;
+  for (let index = 0; index < provided.length; index += 1) {
+    mismatch |= provided.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return mismatch === 0;
+}
+
+function cleanupAuthorized(request, env) {
+  return secretMatches(
+    request.headers.get('X-Cleanup-Secret'),
+    env.R2_CLEANUP_SECRET
+  );
 }
 
 async function authenticate(request, env) {
@@ -270,6 +287,38 @@ function keyFromPath(pathname, prefix) {
   return key;
 }
 
+function cleanR2Key(value) {
+  if (typeof value !== 'string' || !/^(post|comment)\//u.test(value)) return '';
+  if (value.includes('\0')) return '';
+  const parts = value.split('/');
+  if (parts.some(part => !part || part === '.' || part === '..')) return '';
+  return value;
+}
+
+async function cleanupMedia(request, env) {
+  if (!cleanupAuthorized(request, env)) {
+    return errorResponse(request, env, 'Không có quyền dọn media R2.', 401);
+  }
+
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return errorResponse(request, env, 'Dữ liệu dọn media không hợp lệ.');
+  }
+  if (!Array.isArray(payload?.keys) || payload.keys.length > 500) {
+    return errorResponse(request, env, 'Danh sách media phải có tối đa 500 đường dẫn.');
+  }
+
+  const cleaned = payload.keys.map(cleanR2Key);
+  if (cleaned.some(key => !key)) {
+    return errorResponse(request, env, 'Danh sách chứa đường dẫn R2 không hợp lệ.');
+  }
+  const keys = [...new Set(cleaned)];
+  if (keys.length) await env.MEDIA_BUCKET.delete(keys);
+  return json(request, env, { ok: true, deleted: keys.length });
+}
+
 function parseRange(value, size) {
   const match = /^bytes=(\d*)-(\d*)$/i.exec(value || '');
   if (!match) return null;
@@ -371,6 +420,9 @@ export default {
     try {
       if (request.method === 'POST' && url.pathname === '/api/media') {
         return await upload(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/cleanup') {
+        return await cleanupMedia(request, env);
       }
       if (['GET', 'HEAD'].includes(request.method) && url.pathname.startsWith('/media/')) {
         const key = keyFromPath(url.pathname, '/media/');

@@ -48,4 +48,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          MEDIA_API_URL: https://chonhoctap-media.chonhoctap-vn.workers.dev
+          R2_CLEANUP_SECRET: ${{ secrets.R2_CLEANUP_SECRET }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}

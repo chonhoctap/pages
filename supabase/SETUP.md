@@ -95,17 +95,21 @@ nhân, liên kết hoặc nội dung media. Mọi bài viết mới và bài v�
 chuyển cho Staff/admin duyệt; bình luận văn bản/ảnh công khai ngay, còn bình
 luận có âm thanh/video tiếp tục chờ riêng admin.
 
-### Tự dọn bài và Supabase Storage
+### Tự dọn bài, Supabase Storage và Cloudflare R2
 
 Workflow `.github/workflows/cleanup-forum.yml` chạy vào phút 17 mỗi giờ. Nó xóa
-ảnh/video/âm thanh trong `forum-comment-media` và `forum-media` trước,
-sau đó mới xóa bài cùng dữ liệu liên quan.
+ảnh/video/âm thanh cũ trong `forum-comment-media`, `forum-media` và media mới
+trên Cloudflare R2 trước, sau đó mới xóa bài cùng dữ liệu liên quan. Nếu Worker
+không xác nhận xóa R2, workflow thử lại rồi dừng, không xóa bài và không để lại
+object mồ côi.
 
 Vào GitHub repository > **Settings > Secrets and variables > Actions** và tạo:
 
 1. `SUPABASE_URL`: URL project Supabase.
 2. `SUPABASE_SECRET_KEY`: secret key chỉ dùng cho tác vụ backend, tạo trong
    Supabase Dashboard > Settings > API Keys.
+3. `R2_CLEANUP_SECRET`: chuỗi ngẫu nhiên tối thiểu 40 ký tự, phải giống hoàn
+   toàn Secret cùng tên trong Cloudflare Worker `chonhoctap-media`.
 
 Không dùng publishable key cho tác vụ dọn dẹp và không dán secret key vào mã
 nguồn, ảnh chụp hay cuộc trò chuyện. Lần chạy thủ công đầu tiên phải để

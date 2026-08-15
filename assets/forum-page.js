@@ -101,6 +101,7 @@ const elements = {
 
 let session;
 let currentProfile;
+let forumPermissions = new Set();
 let currentCategory = 'question';
 let posts = [];
 let previewPrepareSequence = 0;
@@ -139,6 +140,44 @@ const REACTIONS = {
 };
 
 const POST_COOLDOWN_STORAGE_PREFIX = 'chonhoctap-forum-post-cooldown:';
+
+const FALLBACK_ROLE_PERMISSIONS = {
+  member: [
+    'forum.access', 'forum.create_post', 'forum.create_comment',
+    'forum.react', 'forum.share', 'forum.report'
+  ],
+  vip: [
+    'forum.access', 'forum.create_post', 'forum.create_comment',
+    'forum.react', 'forum.share', 'forum.report'
+  ],
+  moderator: [
+    'forum.access', 'forum.create_post', 'forum.create_comment',
+    'forum.react', 'forum.share', 'forum.report', 'forum.moderate_posts'
+  ],
+  admin: [
+    'forum.access', 'forum.create_post', 'forum.create_comment',
+    'forum.react', 'forum.share', 'forum.report', 'forum.moderate_posts',
+    'forum.review_reports', 'forum.delete_any_content'
+  ]
+};
+
+function hasForumPermission(permissionKey) {
+  return forumPermissions.has(permissionKey);
+}
+
+async function loadForumPermissions() {
+  const { data, error } = await supabase.rpc('get_my_role_permissions');
+  if (error) {
+    // Giữ website tương thích trong khoảng thời gian code mới vừa lên nhưng
+    // migration quyền chưa được chạy. Database vẫn là lớp bảo vệ chính.
+    console.warn('Dynamic role permissions unavailable; using role defaults', error);
+    forumPermissions = new Set(FALLBACK_ROLE_PERMISSIONS[currentProfile?.role] || []);
+    return;
+  }
+  forumPermissions = new Set(
+    (data || []).filter(item => item.allowed).map(item => item.permission_key)
+  );
+}
 
 function canInteract() {
   return currentProfile?.account_status === 'active';
@@ -283,7 +322,31 @@ function toggleReactionPicker(action) {
 }
 
 function canModerate() {
-  return canInteract() && ['moderator', 'admin'].includes(currentProfile?.role);
+  return canInteract() && hasForumPermission('forum.moderate_posts');
+}
+
+function isForumAdmin() {
+  return canInteract() && currentProfile?.role === 'admin';
+}
+
+function adminMediaTypes(mediaItems = []) {
+  return [...new Set(mediaItems
+    .map(item => item?.media_type || item?.type)
+    .filter(type => ['audio', 'video'].includes(type)))];
+}
+
+function containsAdminMedia(mediaItems = []) {
+  return adminMediaTypes(mediaItems).length > 0;
+}
+
+function adminMediaLabel(mediaItems = []) {
+  return adminMediaTypes(mediaItems)
+    .map(type => type === 'audio' ? 'âm thanh' : 'video')
+    .join(' và ');
+}
+
+function canReviewContent() {
+  return canModerate();
 }
 
 function authorOf(record) {
@@ -355,12 +418,6 @@ function renderTextWithMentions(element, value) {
     cursor = match.index + match[0].length;
   }
   element.append(document.createTextNode(text.slice(cursor)));
-}
-
-async function runAutomaticModeration(payload) {
-  const { data, error } = await supabase.functions.invoke('moderate-forum', { body: payload });
-  if (error) throw error;
-  return data;
 }
 
 function mediaKind(file) {
@@ -559,8 +616,8 @@ async function showMediaPreview(fileList) {
 }
 
 function openComposer() {
-  if (!canInteract()) {
-    setInfo('Tài khoản đang bị hạn chế nên chưa thể đăng bài.', 'error');
+  if (!canInteract() || !hasForumPermission('forum.create_post')) {
+    setInfo('Role của bạn hiện không có quyền đăng bài.', 'error');
     return;
   }
   const remaining = editingPost ? 0 : cooldownSeconds();
@@ -580,7 +637,11 @@ function openComposer() {
 }
 
 function openEditComposer(post) {
-  if (post.author_id !== session.user.id || !canInteract()) return;
+  if (
+    post.author_id !== session.user.id
+    || !canInteract()
+    || !hasForumPermission('forum.create_post')
+  ) return;
   editingPost = post;
   currentCategory = post.category;
   updateCategoryUi();
@@ -713,8 +774,8 @@ async function uploadPreparedMediaList(items, options) {
 
 async function publishPost(event) {
   event.preventDefault();
-  if (!canInteract()) {
-    setInfo('Tài khoản đang bị hạn chế nên chưa thể đăng bài.', 'error');
+  if (!canInteract() || !hasForumPermission('forum.create_post')) {
+    setInfo('Role của bạn hiện không có quyền đăng bài.', 'error');
     return;
   }
   const editing = editingPost;
@@ -786,12 +847,6 @@ async function publishPost(event) {
       if (mediaError) throw mediaError;
     }
 
-    let moderationResult;
-    try {
-      moderationResult = await runAutomaticModeration({ postId: createdPostId });
-    } catch (moderationError) {
-      console.warn('Automatic moderation unavailable', moderationError);
-    }
     const mentions = parseMentions(title, elements.body.value);
     const { error: mentionError } = await supabase.rpc('sync_forum_post_mentions', {
       target_post_id: createdPostId,
@@ -802,12 +857,12 @@ async function publishPost(event) {
     elements.form.reset();
     resetPreview();
     closeComposer();
-    setInfo(moderationResult?.published
-      ? (editing ? 'Đã lưu và AI đã duyệt bài viết.' : 'Đã đăng bài thành công.')
-      : moderationResult?.allowed === false
-        ? 'Nội dung không vượt qua kiểm duyệt nên không được công khai.'
-        : 'Nội dung đang chờ kiểm duyệt hoặc quản trị viên duyệt media.',
-    moderationResult?.published ? 'success' : 'info');
+    setInfo(
+      editing
+        ? 'Đã lưu thay đổi. Bài viết đang chờ Staff hoặc quản trị viên duyệt lại.'
+        : 'Đã gửi bài viết. Bài đang chờ Staff hoặc quản trị viên duyệt.',
+      'info'
+    );
     if (!editing) {
       postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
       rememberPostCooldown(postCooldownUntil);
@@ -905,7 +960,6 @@ async function loadPosts() {
       moderation_reason,
       visibility,
       edited_at,
-      ai_moderation_status,
       is_pinned,
       expires_at,
       created_at,
@@ -1495,7 +1549,7 @@ function renderPost(post) {
     if (
       !post.is_solved
       && canInteract()
-      && (post.author_id === session.user.id || canModerate())
+      && (post.author_id === session.user.id || isForumAdmin())
     ) {
       const solve = document.createElement('button');
       solve.type = 'button';
@@ -1518,9 +1572,9 @@ function renderPost(post) {
     const moderationNote = document.createElement('div');
     moderationNote.className = 'moderation-note';
     moderationNote.textContent = post.moderation_reason
-      || 'Bài viết đang chờ quản trị viên xem xét.';
+      || 'Bài viết đang chờ Staff hoặc quản trị viên xem xét.';
     card.querySelector('.post-header').after(moderationNote);
-    if (canModerate()) {
+    if (canReviewContent(post.mediaItems)) {
       const controls = document.createElement('div');
       controls.className = 'moderation-actions';
       const approve = document.createElement('button');
@@ -1580,28 +1634,32 @@ function renderPost(post) {
   updatePostStats(card, post);
   const reactionAction = card.querySelector('.reaction-action');
   const reactionButton = card.querySelector('.reaction-main');
+  reactionAction.hidden = !canInteract() || !hasForumPermission('forum.react');
   configureReactionInteraction(post, card, reactionAction, reactionButton);
   card.querySelectorAll('.reaction-picker [data-reaction]').forEach(button => {
     button.addEventListener('click', async event => {
       event.preventDefault();
       event.stopPropagation();
-      await setReaction(post, button.dataset.reaction, card, button);
+      await setReaction(post, button.dataset.reaction, card);
       closeReactionPicker(reactionAction);
     });
   });
   card.querySelector('[data-action="comment"]')
     .addEventListener('click', () => toggleComments(post, card));
-  card.querySelector('[data-action="share"]')
-    .addEventListener('click', () => sharePost(post, card));
+  const shareButton = card.querySelector('[data-action="share"]');
+  shareButton.hidden = !canInteract() || !hasForumPermission('forum.share');
+  shareButton.addEventListener('click', () => sharePost(post, card));
   const reportButton = card.querySelector('[data-action="report"]');
-  reportButton.hidden = !canInteract() || post.author_id === session.user.id;
+  reportButton.hidden = !canInteract()
+    || !hasForumPermission('forum.report')
+    || post.author_id === session.user.id;
   reportButton.addEventListener('click', () => openReportDialog(post));
 
   configurePostMenu(post, card);
 
   const commentForm = card.querySelector('.comment-form');
   commentForm.querySelector('img').src = currentProfile.avatar_url || 'avatar.png';
-  commentForm.hidden = !canInteract();
+  commentForm.hidden = !canInteract() || !hasForumPermission('forum.create_comment');
   const commentMediaInput = commentForm.querySelector('.comment-media-input');
   commentMediaInput.addEventListener('change', () => {
     const task = showCommentMediaPreview(commentForm, commentMediaInput.files);
@@ -1644,7 +1702,7 @@ function configurePostMenu(post, card) {
       () => setPostVisibility(post, post.visibility !== 'hidden')
     );
   }
-  if (staff && post.moderation_status !== 'published') {
+  if (staff && post.moderation_status !== 'published' && canReviewContent(post.mediaItems)) {
     appendPostMenuItem(menu, 'Duyệt bài viết', () => reviewPost(post, 'approve', toggle));
   }
   if (currentProfile?.role === 'admin' && post.openReports?.length) {
@@ -1657,7 +1715,9 @@ function configurePostMenu(post, card) {
       () => setPostVisibility(post, post.visibility !== 'hidden')
     );
   }
-  appendPostMenuItem(menu, 'Xóa bài viết', () => deletePost(post, card, toggle), true);
+  if (owner || isForumAdmin()) {
+    appendPostMenuItem(menu, 'Xóa bài viết', () => deletePost(post, card, toggle), true);
+  }
 
   toggle.addEventListener('click', event => {
     event.stopPropagation();
@@ -1748,7 +1808,7 @@ function renderPosts() {
 
 async function markSolved(post, card, button) {
   const maySolve = canInteract()
-    && (post.author_id === session.user.id || canModerate());
+    && (post.author_id === session.user.id || isForumAdmin());
   if (!maySolve) {
     setInfo('Chỉ chủ bài viết hoặc quản trị viên mới được đánh dấu đã giải.', 'error');
     return;
@@ -1771,7 +1831,7 @@ async function markSolved(post, card, button) {
 
 async function reviewPost(post, action, button) {
   if (!canModerate()) {
-    setInfo('Chỉ điều hành viên hoặc quản trị viên được duyệt bài.', 'error');
+    setInfo('Chỉ Staff hoặc quản trị viên được duyệt bài.', 'error');
     return;
   }
   const note = action === 'reject'
@@ -1798,9 +1858,43 @@ async function reviewPost(post, action, button) {
   }
 }
 
-async function setReaction(post, type, card, button) {
-  if (!canInteract()) {
-    setInfo('Tài khoản đang tạm khóa nên chưa thể bày tỏ cảm xúc.', 'error');
+async function reviewComment(comment, post, card, action, button) {
+  if (!isForumAdmin()) {
+    setInfo('Bình luận có âm thanh hoặc video chỉ quản trị viên được duyệt.', 'error');
+    return;
+  }
+  const note = action === 'reject'
+    ? window.prompt('Lý do từ chối bình luận:', comment.moderation_reason || '')
+    : '';
+  if (action === 'reject' && note === null) return;
+  setBusy(button, true, action === 'approve' ? 'Đang duyệt...' : 'Đang từ chối...');
+  try {
+    const { data, error } = await supabase.rpc('review_forum_comment', {
+      target_comment_id: comment.id,
+      review_action: action,
+      review_note: note || null
+    });
+    if (error) throw error;
+    if (!data) throw new Error('Không tìm thấy bình luận cần duyệt.');
+    setInfo(
+      action === 'approve'
+        ? `Đã duyệt bình luận có ${adminMediaLabel(comment.mediaItems) || 'âm thanh/video'}.`
+        : 'Đã từ chối bình luận.',
+      'success'
+    );
+    await Promise.all([
+      loadComments(post, card),
+      refreshPostEngagement(post.id, true)
+    ]);
+  } catch (error) {
+    setBusy(button, false);
+    setInfo(`Không thể duyệt bình luận: ${humanizeAuthError(error)}`, 'error');
+  }
+}
+
+async function setReaction(post, type, card) {
+  if (!canInteract() || !hasForumPermission('forum.react')) {
+    setInfo('Role của bạn hiện không có quyền thả cảm xúc.', 'error');
     return;
   }
   if (!REACTIONS[type] || reactionPendingPosts.has(post.id)) return;
@@ -1887,7 +1981,7 @@ function configureReactionInteraction(post, card, action, mainButton) {
     const target = document.elementFromPoint(event.clientX, event.clientY)
       ?.closest?.('.reaction-picker [data-reaction]');
     if (target && action.contains(target)) {
-      void setReaction(post, target.dataset.reaction, card, target);
+      void setReaction(post, target.dataset.reaction, card);
       closeReactionPicker(action);
       heldOpen = false;
     }
@@ -1905,7 +1999,7 @@ function configureReactionInteraction(post, card, action, mainButton) {
       return;
     }
     closeReactionPicker(action);
-    void setReaction(post, post.myReaction || 'like', card, mainButton);
+    void setReaction(post, post.myReaction || 'like', card);
   });
 }
 
@@ -2139,7 +2233,7 @@ function renderComments(comments, post, card) {
     const footer = document.createElement('div');
     footer.className = 'comment-footer';
     footer.appendChild(time);
-    if (canInteract()) {
+    if (canInteract() && hasForumPermission('forum.create_comment')) {
       const reply = document.createElement('button');
       reply.type = 'button';
       reply.textContent = 'Trả lời';
@@ -2152,18 +2246,41 @@ function renderComments(comments, post, card) {
     if (comment.moderation_status === 'pending_review') {
       const pending = document.createElement('span');
       pending.className = 'comment-pending';
-      pending.textContent = 'AI đang kiểm tra';
+      const adminMediaPending = containsAdminMedia(comment.mediaItems);
+      pending.textContent = adminMediaPending
+        ? `Chờ quản trị viên duyệt ${adminMediaLabel(comment.mediaItems)}`
+        : 'Đang chờ quản trị viên xem xét';
       footer.appendChild(pending);
+      if (adminMediaPending && isForumAdmin()) {
+        const controls = document.createElement('div');
+        controls.className = 'moderation-actions comment-moderation-actions';
+        const approve = document.createElement('button');
+        approve.type = 'button';
+        approve.className = 'button button-small';
+        approve.textContent = 'Duyệt';
+        approve.addEventListener('click', () => {
+          void reviewComment(comment, post, card, 'approve', approve);
+        });
+        const reject = document.createElement('button');
+        reject.type = 'button';
+        reject.className = 'button button-small button-danger';
+        reject.textContent = 'Từ chối';
+        reject.addEventListener('click', () => {
+          void reviewComment(comment, post, card, 'reject', reject);
+        });
+        controls.append(approve, reject);
+        bubble.appendChild(controls);
+      }
     } else if (comment.moderation_status === 'rejected') {
       const rejected = document.createElement('span');
       rejected.className = 'comment-rejected';
-      rejected.textContent = 'Đã bị AI ẩn';
+      rejected.textContent = 'Đã bị ẩn';
       footer.appendChild(rejected);
     }
     bubble.appendChild(footer);
     item.append(avatarLink, bubble);
 
-    if (canInteract() && (comment.author_id === session.user.id || canModerate())) {
+    if (canInteract() && (comment.author_id === session.user.id || isForumAdmin())) {
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'comment-delete';
@@ -2216,7 +2333,10 @@ function setReplyingTo(form, comment = null, author = null) {
 
 async function addComment(event, post, card) {
   event.preventDefault();
-  if (!canInteract()) return;
+  if (!canInteract() || !hasForumPermission('forum.create_comment')) {
+    setInfo('Role của bạn hiện không có quyền gửi bình luận.', 'error');
+    return;
+  }
   if (commentCooldownSeconds() > 0) {
     setInfo(`Bạn có thể bình luận tiếp sau ${cooldownLabel(commentCooldownSeconds())}.`, 'info');
     updateCommentCooldownUi();
@@ -2276,19 +2396,15 @@ async function addComment(event, post, card) {
     setReplyingTo(form);
     resetCommentMedia(form);
     commentCooldownUntil = Date.now() + 2 * 60 * 1000;
-    setInfo('Đã gửi bình luận. AI đang kiểm tra nội dung trong nền.', 'success');
+    const waitingForAdmin = containsAdminMedia(uploaded);
+    setInfo(
+      waitingForAdmin
+        ? `Đã gửi bình luận. ${adminMediaLabel(uploaded)} đang chờ quản trị viên xem xét.`
+        : 'Đã gửi bình luận.',
+      waitingForAdmin ? 'info' : 'success'
+    );
     void loadComments(post, card);
-    void runAutomaticModeration({ commentId: createdCommentId })
-      .then(result => {
-        if (result?.allowed === false) {
-          setInfo('Bình luận không vượt qua kiểm duyệt và đã được ẩn.', 'info');
-        }
-        return refreshPostEngagement(post.id, true);
-      })
-      .catch(moderationError => {
-        console.warn('Automatic comment moderation unavailable', moderationError);
-        setInfo('Đã gửi bình luận. AI tạm thời chưa phản hồi nên nội dung vẫn được giữ an toàn.', 'info');
-      });
+    void refreshPostEngagement(post.id, true);
   } catch (error) {
     if (createdCommentId) {
       await supabase.from('forum_comments').delete().eq('id', createdCommentId);
@@ -2324,8 +2440,8 @@ async function registerShare(post, card) {
 }
 
 async function sharePost(post, card) {
-  if (!canInteract()) {
-    setInfo('Tài khoản đang tạm khóa nên chưa thể chia sẻ bài viết.', 'error');
+  if (!canInteract() || !hasForumPermission('forum.share')) {
+    setInfo('Role của bạn hiện không có quyền chia sẻ bài viết.', 'error');
     return;
   }
   const url = `${pageUrl('forum.html')}?post=${encodeURIComponent(post.id)}`;
@@ -2347,7 +2463,11 @@ async function sharePost(post, card) {
 }
 
 function openReportDialog(post) {
-  if (!canInteract() || post.author_id === session.user.id) return;
+  if (
+    !canInteract()
+    || !hasForumPermission('forum.report')
+    || post.author_id === session.user.id
+  ) return;
   reportingPost = post;
   elements.reportForm.reset();
   if (typeof elements.reportDialog.showModal === 'function') {
@@ -2369,7 +2489,7 @@ function closeReportDialog() {
 
 async function submitReport(event) {
   event.preventDefault();
-  if (!reportingPost) return;
+  if (!reportingPost || !hasForumPermission('forum.report')) return;
   setBusy(elements.submitReport, true, 'Đang gửi...');
   try {
     const { error } = await supabase.from('forum_reports').insert({
@@ -2528,8 +2648,19 @@ function configureAccount() {
   elements.composerName.textContent = name;
   elements.composerAvatar.src =
     currentProfile.avatar_url || session.user.user_metadata?.avatar_url || 'avatar.png';
-  elements.readonly.hidden = canInteract();
-  elements.openComposer.hidden = !canInteract();
+  const mayCreatePost = canInteract() && hasForumPermission('forum.create_post');
+  const standardInteractionPermissions = [
+    'forum.create_comment', 'forum.react', 'forum.share', 'forum.report'
+  ];
+  const hasEveryStandardPermission = [
+    'forum.create_post', ...standardInteractionPermissions
+  ].every(permission => hasForumPermission(permission));
+  elements.readonly.hidden = canInteract() && hasEveryStandardPermission;
+  const readonlyCopy = elements.readonly.querySelector('span:last-child');
+  if (readonlyCopy && canInteract()) {
+    readonlyCopy.textContent = 'Role của bạn đang bị giới hạn một số hoạt động trên diễn đàn.';
+  }
+  elements.openComposer.hidden = !mayCreatePost;
   elements.moderationFilter.hidden = !canModerate();
   elements.mediaLimitNote.textContent = mediaLimitDescription(limits);
   if (limits.maxVideos === 0) {
@@ -2556,8 +2687,18 @@ async function init() {
     session = await requireSession();
     if (!session) return;
     currentProfile = await getProfile(session.user.id);
+    await loadForumPermissions();
     if (currentProfile.account_status === 'banned') {
       elements.viewer.querySelector('span:last-child').textContent = 'Tài khoản bị cấm';
+      elements.denied.hidden = false;
+      return;
+    }
+    if (!hasForumPermission('forum.access')) {
+      elements.viewer.querySelector('span:last-child').textContent =
+        `${profileName(currentProfile, session.user)} · Không có quyền diễn đàn`;
+      elements.denied.querySelector('h2').textContent = 'Role chưa được phép truy cập diễn đàn';
+      elements.denied.querySelector('p').textContent =
+        'Quản trị viên đã tắt quyền truy cập diễn đàn đối với role hiện tại của bạn.';
       elements.denied.hidden = false;
       return;
     }

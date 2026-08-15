@@ -10,7 +10,7 @@ import {
   initThemeToggle,
   humanizeAuthError
 } from './supabase-client.js?v=20260801-7';
-import { r2Enabled, deleteFromR2 } from './media-storage.js?v=20260801-2';
+import { r2Enabled, deleteFromR2 } from './media-storage.js?v=20260815-1';
 
 initThemeToggle();
 

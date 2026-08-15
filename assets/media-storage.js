@@ -1,4 +1,4 @@
-import { MEDIA_API_URL } from './media-config.js?v=20260730-1';
+import { MEDIA_API_URL } from './media-config.js?v=20260815-1';
 import { Upload } from 'https://cdn.jsdelivr.net/npm/tus-js-client@4/+esm';
 
 const MB = 1024 * 1024;

@@ -553,13 +553,27 @@ main.section,
   transition:transform .65s ease;
   pointer-events:none;
 }
-.card:hover{
-  transform:translateY(-6px) scale(1.012);
-  border-color:rgba(125,211,252,.26);
-  background:var(--surface-hover);
-  box-shadow:0 23px 55px rgba(0,0,0,.27),0 0 0 1px rgba(139,92,246,.04);
+.card::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  opacity:0;
+  background:
+    radial-gradient(circle at 88% 8%,rgba(34,211,238,.16),transparent 34%),
+    linear-gradient(135deg,rgba(56,189,248,.08),transparent 44%,rgba(139,92,246,.08));
+  box-shadow:inset 0 0 0 1px rgba(125,211,252,.12);
+  transition:opacity .28s ease;
+  pointer-events:none;
 }
-.card:hover::before{transform:rotate(18deg) translateX(480%)}
+.card:hover,.card:focus-within{
+  transform:translateY(-7px) scale(1.012);
+  border-color:rgba(125,211,252,.34);
+  background:var(--surface-hover);
+  box-shadow:0 24px 58px rgba(0,0,0,.27),0 0 0 1px rgba(56,189,248,.06);
+}
+.card:hover::before,.card:focus-within::before{transform:rotate(18deg) translateX(480%)}
+.card:hover::after,.card:focus-within::after{opacity:1}
 @keyframes cardEnter{
   from{opacity:0;transform:translateY(15px) scale(.98)}
   to{opacity:1;transform:translateY(0) scale(1)}
@@ -577,6 +591,7 @@ main.section,
   background:linear-gradient(145deg,rgba(56,189,248,.15),rgba(139,92,246,.13));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
   font-size:25px;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s ease;
 }
 .file-icon::after{
   content:"";
@@ -601,7 +616,7 @@ main.section,
 .file-icon-glyph--book{width:24px;height:24px}
 .file-icon-glyph--book svg{width:24px;height:24px;display:block}
 .file-info{min-width:0;flex:1}
-.name{font-size:14px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.name{font-size:14px;font-weight:700;line-height:1.35;overflow-wrap:anywhere;transition:color .22s ease,transform .22s ease}
 .sub{margin-top:5px;color:var(--muted);font-size:11.5px;line-height:1.45}
 .desc-ellipsis{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2}
 .file-meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}
@@ -616,9 +631,17 @@ main.section,
   color:#aebdd5;
   font-size:9.5px;
   font-weight:600;
+  transition:transform .22s ease,border-color .22s ease,background .22s ease;
 }
 .meta-pill.grade{color:#c4b5fd;background:rgba(139,92,246,.09);border-color:rgba(139,92,246,.2)}
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px;transition:transform .24s ease}
+.card:hover .file-icon,.card:focus-within .file-icon{
+  transform:translateY(-3px) rotate(-2deg) scale(1.055);
+  box-shadow:0 12px 28px rgba(56,189,248,.18),inset 0 1px 0 rgba(255,255,255,.10);
+}
+.card:hover .name,.card:focus-within .name{transform:translateX(2px);color:#7dd3fc}
+.card:hover .meta-pill,.card:focus-within .meta-pill{transform:translateY(-1px)}
+.card:hover .actions,.card:focus-within .actions{transform:translateY(2px)}
 .btn-view,.btn-dl{
   min-height:41px;
   padding:9px 10px;
@@ -797,7 +820,8 @@ main.section,
 :root:not([data-theme="dark"]) .card::before{
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.80),transparent);
 }
-:root:not([data-theme="dark"]) .card:hover{
+:root:not([data-theme="dark"]) .card:hover,
+:root:not([data-theme="dark"]) .card:focus-within{
   border-color:rgba(21,151,238,.22);
   background:
     radial-gradient(circle at 100% 0,rgba(34,211,238,.15),transparent 14rem),
@@ -912,11 +936,14 @@ main.section,
   background:#ffffff;
   box-shadow:0 12px 30px rgba(39,74,116,.14),inset 0 1px 0 #fff;
 }
-:root:not([data-theme="dark"]) .card:hover{
+:root:not([data-theme="dark"]) .card:hover,
+:root:not([data-theme="dark"]) .card:focus-within{
   border-color:rgba(14,116,214,.40);
   background:#ffffff;
   box-shadow:0 20px 42px rgba(39,74,116,.20),0 0 0 1px rgba(14,116,214,.06);
 }
+:root:not([data-theme="dark"]) .card:hover .name,
+:root:not([data-theme="dark"]) .card:focus-within .name{color:#0b67be}
 :root:not([data-theme="dark"]) .file-icon{
   border-color:rgba(255,255,255,.55);
   box-shadow:0 9px 20px rgba(14,116,214,.22),inset 0 1px 0 rgba(255,255,255,.35);
@@ -991,7 +1018,8 @@ main.section,
     rgba(10,22,39,.73);
   box-shadow:0 15px 42px rgba(0,0,0,.19),inset 0 1px 0 rgba(255,255,255,.04);
 }
-[data-theme="dark"] .card:hover{
+[data-theme="dark"] .card:hover,
+[data-theme="dark"] .card:focus-within{
   background:var(--surface-hover);
   box-shadow:0 23px 55px rgba(0,0,0,.27),0 0 0 1px rgba(139,92,246,.04);
 }
@@ -1039,6 +1067,8 @@ main.section,
 @media (hover:none){
   .card:hover{transform:none}
   .card::before{display:none}
+  .card:hover::after{opacity:0}
+  .card:hover .file-icon,.card:hover .name,.card:hover .meta-pill,.card:hover .actions{transform:none}
 }
 
 @media (prefers-reduced-motion:reduce){
@@ -1396,8 +1426,9 @@ function getPreferredTheme(){
 }
 
 function applyTheme(theme){
-  document.documentElement.setAttribute('data-theme', theme);
-  const isDark = theme === 'dark';
+  const normalized = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', normalized);
+  const isDark = normalized === 'dark';
   const themeMeta = document.querySelector('meta[name="theme-color"]');
   if(themeMeta) themeMeta.setAttribute('content',isDark ? '#07111f' : '#f4f8ff');
   if(elements.themeToggle){
@@ -1655,7 +1686,14 @@ document.addEventListener('keydown',event => {
 initTheme();
 initBrowserNotice();
 window.addEventListener('pageshow',() => {
+  applyTheme(getPreferredTheme());
   if(!elements.browserNotice.classList.contains('show')) initBrowserNotice();
+});
+window.addEventListener('storage',event => {
+  if(event.key === THEME_KEY) applyTheme(event.newValue || 'light');
+});
+document.addEventListener('visibilitychange',() => {
+  if(!document.hidden) applyTheme(getPreferredTheme());
 });
 loadFiles();
 </script>

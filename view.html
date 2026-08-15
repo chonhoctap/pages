@@ -1,14 +1,21 @@
 <!doctype html>
-<html lang="vi" data-theme="light">
+<html lang="vi">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#eef6ff">
+<meta name="theme-color" content="#f4f8ff">
 <meta name="color-scheme" content="light dark">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Xem tài liệu — Chốn Học Tập</title>
+<script id="themeBootstrap">
+try{
+  document.documentElement.dataset.theme = localStorage.getItem('chonhoctap-theme') || 'light';
+}catch{
+  document.documentElement.dataset.theme = 'light';
+}
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -781,7 +788,7 @@ function applyTheme(theme){
   elements.themeToggle.setAttribute('aria-label',isDark ? 'Chuyển sang giao diện sáng' : 'Chuyển sang chế độ tối');
   elements.themeIcon.textContent = isDark ? '☀️' : '🌙';
   elements.themeText.textContent = isDark ? 'Light mode' : 'Dark mode';
-  document.querySelector('meta[name="theme-color"]').setAttribute('content',isDark ? '#06101f' : '#eef6ff');
+  document.querySelector('meta[name="theme-color"]').setAttribute('content',isDark ? '#07111f' : '#f4f8ff');
 }
 
 function toggleTheme(){
@@ -831,7 +838,16 @@ elements.download.addEventListener('click',event => {
 scheduleViewportLayout();
 window.addEventListener('resize',scheduleViewportLayout,{passive:true});
 window.addEventListener('orientationchange',scheduleViewportLayout,{passive:true});
-window.addEventListener('pageshow',scheduleViewportLayout,{passive:true});
+window.addEventListener('pageshow',() => {
+  applyTheme(getStoredTheme());
+  scheduleViewportLayout();
+},{passive:true});
+window.addEventListener('storage',event => {
+  if(event.key === THEME_KEY) applyTheme(event.newValue || 'light');
+});
+document.addEventListener('visibilitychange',() => {
+  if(!document.hidden) applyTheme(getStoredTheme());
+});
 window.visualViewport?.addEventListener('resize',scheduleViewportLayout,{passive:true});
 window.visualViewport?.addEventListener('scroll',scheduleViewportLayout,{passive:true});
 document.fonts?.ready?.then(scheduleViewportLayout);

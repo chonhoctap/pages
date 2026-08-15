@@ -129,6 +129,10 @@ const replyingToByForm = new Map();
 const reactionPendingPosts = new Set();
 let reactionListRows = [];
 let activeReactionListFilter = 'all';
+let activeLightboxItems = [];
+let activeLightboxIndex = 0;
+let activeLightboxZoomControls = null;
+let activeLightboxCleanup = null;
 
 const REACTIONS = {
   like: { emoji: '👍', label: 'Thích' },
@@ -1373,24 +1377,177 @@ function mediaUrl(item) {
   return item?.media_url || item?.url || '';
 }
 
+function lightboxControl(label, text, className = '') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = text;
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  return button;
+}
+
+function createImageLightbox(item, positionLabel) {
+  const stage = document.createElement('div');
+  stage.className = 'lightbox-image-stage';
+  stage.tabIndex = 0;
+  stage.setAttribute('aria-label', `${positionLabel}. Cuộn để phóng to, kéo để xem vùng khác.`);
+
+  const canvas = document.createElement('div');
+  canvas.className = 'lightbox-image-canvas';
+  const image = document.createElement('img');
+  image.className = 'lightbox-image';
+  image.src = mediaUrl(item);
+  image.alt = positionLabel;
+  image.draggable = false;
+  canvas.appendChild(image);
+  stage.appendChild(canvas);
+
+  const tools = document.createElement('div');
+  tools.className = 'lightbox-tools';
+  tools.setAttribute('role', 'toolbar');
+  tools.setAttribute('aria-label', 'Điều khiển ảnh');
+  const zoomOut = lightboxControl('Thu nhỏ ảnh', '−');
+  const zoomLevel = document.createElement('output');
+  zoomLevel.setAttribute('aria-live', 'polite');
+  zoomLevel.textContent = '100%';
+  const zoomIn = lightboxControl('Phóng to ảnh', '+');
+  const fitImage = lightboxControl('Hiện toàn bộ ảnh', 'Vừa ảnh', 'fit-image');
+  tools.append(zoomOut, zoomLevel, zoomIn, fitImage);
+
+  let zoom = 1;
+  let dragging = null;
+  let resizeObserver = null;
+
+  const renderZoom = (preserveCenter = true) => {
+    if (!image.naturalWidth || !image.naturalHeight || !stage.clientWidth || !stage.clientHeight) return;
+    const previousCenterX = stage.scrollLeft + stage.clientWidth / 2;
+    const previousCenterY = stage.scrollTop + stage.clientHeight / 2;
+    const previousWidth = Math.max(1, stage.scrollWidth);
+    const previousHeight = Math.max(1, stage.scrollHeight);
+    const availableWidth = Math.max(1, stage.clientWidth - 20);
+    const availableHeight = Math.max(1, stage.clientHeight - 20);
+    const fitScale = Math.min(
+      availableWidth / image.naturalWidth,
+      availableHeight / image.naturalHeight,
+      1
+    );
+    const width = Math.max(1, Math.round(image.naturalWidth * fitScale * zoom));
+    const height = Math.max(1, Math.round(image.naturalHeight * fitScale * zoom));
+    canvas.style.width = `${Math.max(stage.clientWidth, width + 20)}px`;
+    canvas.style.height = `${Math.max(stage.clientHeight, height + 20)}px`;
+    image.style.width = `${width}px`;
+    image.style.height = `${height}px`;
+    stage.classList.toggle('can-pan', zoom > 1);
+    zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
+    zoomOut.disabled = zoom <= 1;
+    zoomIn.disabled = zoom >= 5;
+
+    window.requestAnimationFrame(() => {
+      const targetCenterX = preserveCenter
+        ? previousCenterX / previousWidth * stage.scrollWidth
+        : stage.scrollWidth / 2;
+      const targetCenterY = preserveCenter
+        ? previousCenterY / previousHeight * stage.scrollHeight
+        : stage.scrollHeight / 2;
+      stage.scrollLeft = Math.max(0, targetCenterX - stage.clientWidth / 2);
+      stage.scrollTop = Math.max(0, targetCenterY - stage.clientHeight / 2);
+    });
+  };
+
+  const setZoom = value => {
+    zoom = Math.min(5, Math.max(1, Math.round(value * 100) / 100));
+    renderZoom();
+  };
+  const zoomInImage = () => setZoom(zoom * 1.25);
+  const zoomOutImage = () => setZoom(zoom / 1.25);
+  const resetImage = () => {
+    zoom = 1;
+    renderZoom(false);
+  };
+
+  zoomIn.addEventListener('click', zoomInImage);
+  zoomOut.addEventListener('click', zoomOutImage);
+  fitImage.addEventListener('click', resetImage);
+  stage.addEventListener('wheel', event => {
+    event.preventDefault();
+    setZoom(zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12));
+  }, { passive: false });
+  stage.addEventListener('dblclick', () => {
+    if (zoom > 1) resetImage();
+    else setZoom(2);
+  });
+  stage.addEventListener('pointerdown', event => {
+    if (event.pointerType !== 'mouse' || event.button !== 0 || zoom <= 1) return;
+    event.preventDefault();
+    dragging = {
+      x: event.clientX,
+      y: event.clientY,
+      scrollLeft: stage.scrollLeft,
+      scrollTop: stage.scrollTop
+    };
+    stage.classList.add('dragging');
+    stage.setPointerCapture(event.pointerId);
+  });
+  stage.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    stage.scrollLeft = dragging.scrollLeft - (event.clientX - dragging.x);
+    stage.scrollTop = dragging.scrollTop - (event.clientY - dragging.y);
+  });
+  const stopDragging = event => {
+    if (!dragging) return;
+    dragging = null;
+    stage.classList.remove('dragging');
+    if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
+  };
+  stage.addEventListener('pointerup', stopDragging);
+  stage.addEventListener('pointercancel', stopDragging);
+  image.addEventListener('load', () => renderZoom(false), { once: true });
+
+  if ('ResizeObserver' in window) {
+    resizeObserver = new ResizeObserver(() => renderZoom());
+    resizeObserver.observe(stage);
+  } else {
+    window.addEventListener('resize', renderZoom);
+  }
+
+  activeLightboxZoomControls = {
+    zoomIn: zoomInImage,
+    zoomOut: zoomOutImage,
+    reset: resetImage
+  };
+  activeLightboxCleanup = () => {
+    resizeObserver?.disconnect();
+    if (!resizeObserver) window.removeEventListener('resize', renderZoom);
+  };
+  return { stage, tools };
+}
+
 function openMediaLightbox(items, startIndex = 0) {
   const item = items[startIndex];
   if (!item) return;
+  activeLightboxCleanup?.();
+  activeLightboxCleanup = null;
+  activeLightboxZoomControls = null;
+  activeLightboxItems = items;
+  activeLightboxIndex = startIndex;
   elements.mediaLightboxContent.replaceChildren();
   const contentTag = item.media_type === 'video'
     ? 'video'
     : item.media_type === 'audio'
       ? 'audio'
       : 'img';
-  const content = document.createElement(contentTag);
-  content.src = mediaUrl(item);
-  if (item.media_type === 'video' || item.media_type === 'audio') {
+  if (contentTag === 'img') {
+    const viewer = createImageLightbox(item, `Ảnh ${startIndex + 1} trên ${items.length}`);
+    elements.mediaLightboxContent.append(viewer.stage, viewer.tools);
+  } else {
+    const content = document.createElement(contentTag);
+    content.className = 'lightbox-media';
+    content.src = mediaUrl(item);
     content.controls = true;
     content.autoplay = true;
-  } else {
-    content.alt = `Ảnh ${startIndex + 1} trên ${items.length}`;
+    elements.mediaLightboxContent.appendChild(content);
   }
-  elements.mediaLightboxContent.appendChild(content);
 
   if (items.length > 1) {
     const navigation = document.createElement('div');
@@ -1425,6 +1582,11 @@ function openMediaLightbox(items, startIndex = 0) {
 }
 
 function closeMediaLightbox() {
+  activeLightboxCleanup?.();
+  activeLightboxCleanup = null;
+  activeLightboxZoomControls = null;
+  activeLightboxItems = [];
+  activeLightboxIndex = 0;
   elements.mediaLightboxContent
     .querySelectorAll('video,audio')
     .forEach(media => media.pause());
@@ -2806,6 +2968,36 @@ document.addEventListener('click', event => {
   }
 });
 document.addEventListener('keydown', event => {
+  if (elements.mediaLightbox.open) {
+    if (event.key === 'ArrowLeft' && activeLightboxItems.length > 1) {
+      event.preventDefault();
+      openMediaLightbox(
+        activeLightboxItems,
+        (activeLightboxIndex - 1 + activeLightboxItems.length) % activeLightboxItems.length
+      );
+      return;
+    }
+    if (event.key === 'ArrowRight' && activeLightboxItems.length > 1) {
+      event.preventDefault();
+      openMediaLightbox(activeLightboxItems, (activeLightboxIndex + 1) % activeLightboxItems.length);
+      return;
+    }
+    if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      activeLightboxZoomControls?.zoomIn();
+      return;
+    }
+    if (event.key === '-') {
+      event.preventDefault();
+      activeLightboxZoomControls?.zoomOut();
+      return;
+    }
+    if (event.key === '0') {
+      event.preventDefault();
+      activeLightboxZoomControls?.reset();
+      return;
+    }
+  }
   if (event.key === 'Escape') closeReactionPicker();
 });
 window.addEventListener('beforeunload', () => {

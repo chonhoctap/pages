@@ -35,7 +35,8 @@ Sau khi đã chạy `forum_migration.sql`, chạy tiếp toàn bộ file
 
 - ảnh tối đa 2 MB hoặc video tối đa 8 MB trong bình luận;
 - bucket riêng `forum-comment-media` để kiểm soát dung lượng;
-- RPC bảo mật để chỉ chủ bài, moderator hoặc admin được đánh dấu đã giải;
+- RPC bảo mật để chủ bài hoặc admin được đánh dấu đã giải (V12 thu hồi quyền này
+  khỏi Staff);
 - thu hồi quyền sửa trực tiếp cột `is_solved` từ trình duyệt.
 
 ## Nâng cấp diễn đàn V3
@@ -69,9 +70,9 @@ Supabase Free giới hạn mỗi file tối đa 50 MB. Website dùng TUS resumab
 cho tệp lớn hơn 6 MB để đường truyền không ổn định có thể tải đáng tin cậy hơn.
 Khi chuyển sang R2 có thể nâng giới hạn VIP nếu backend R2 cũng được cập nhật.
 
-Bộ lọc database chỉ tự nhận diện được một phần từ ngữ đáng ngờ. Ảnh/video nhạy
-cảm và hành vi nói xấu vẫn phải dùng báo cáo cộng đồng hoặc dịch vụ kiểm duyệt
-media ở backend; không nên coi bộ lọc từ khóa là chính xác tuyệt đối.
+Từ V12 không còn bộ phát hiện vi phạm tự động. Staff và admin chịu trách nhiệm
+duyệt mọi bài viết trước khi công khai; báo cáo cộng đồng vẫn chỉ gửi admin để
+quyết định giữ, ẩn hoặc xóa nội dung đã được duyệt nhưng phát sinh vấn đề.
 
 ## Nâng cấp diễn đàn V5
 
@@ -86,20 +87,13 @@ Hạn mức mới áp dụng giống nhau cho bài viết và bình luận:
 - VIP và moderator: 5 ảnh 720p, 1 video 720p/1 phút, 1 âm thanh 2 phút/5 MB;
 - admin: không giới hạn nghiệp vụ; hạ tầng hiện vẫn chặn ở 50 MB mỗi tệp.
 
-### Triển khai kiểm duyệt AI
+### Kiểm duyệt hiện hành
 
-Edge Function giữ nội dung ở trạng thái chờ đến khi AI trả kết quả, nên khóa
-OpenAI không xuất hiện trong GitHub Pages:
-
-```bash
-supabase functions deploy moderate-forum
-supabase secrets set OPENAI_API_KEY=...
-```
-
-Mô hình `omni-moderation-latest` tự kiểm tra văn bản và ảnh. Vì endpoint này
-không nhận video/âm thanh, nội dung có hai loại media đó được giữ trong hàng chờ
-để moderator/admin duyệt thủ công. Nếu Edge Function hoặc API tạm lỗi, hệ thống
-đóng an toàn: nội dung vẫn ở hàng chờ, không tự công khai.
+Từ V12, diễn đàn không gọi API kiểm duyệt bên ngoài và không cần Edge Function
+hay secret của nhà cung cấp AI. Website cũng không tự dò từ cấm, thông tin cá
+nhân, liên kết hoặc nội dung media. Mọi bài viết mới và bài vừa chỉnh sửa đều
+chuyển cho Staff/admin duyệt; bình luận văn bản/ảnh công khai ngay, còn bình
+luận có âm thanh/video tiếp tục chờ riêng admin.
 
 ### Tự dọn bài và Supabase Storage
 
@@ -145,12 +139,8 @@ SQL Editor. V6 bổ sung:
   hộp thư thông báo;
 - báo cáo mới xuất hiện ngay trong hộp thư của moderator và admin.
 
-Sau đó deploy lại Edge Function `moderate-forum` bằng mã V6. Bình luận được lưu
-ngay và AI kiểm tra trong nền; bình luận sạch tự công khai, bình luận vi phạm bị
-ẩn mà không cần moderator duyệt. AI hiện kiểm tra văn bản và ảnh. Video/âm thanh
-trong bình luận không qua hàng chờ thủ công, nhưng bản thân hai loại tệp này
-chưa được endpoint Moderations phân tích. Bài viết có video/âm thanh vẫn chờ
-moderator/admin duyệt như V5.
+V12 bên dưới thay thế quy trình kiểm duyệt tự động của phiên bản này. Bình luận
+văn bản/ảnh sẽ công khai ngay; âm thanh/video chờ admin.
 
 ## Nâng cấp diễn đàn V7
 
@@ -171,6 +161,49 @@ lưu mốc chống spam đăng bài trong bảng riêng thay vì suy ra từ bà
 tồn tại. Do đó, tác giả xóa bài vừa đăng vẫn phải chờ đủ 15 phút mới được đăng
 bài tiếp theo. Frontend đọc mốc này từ RPC bảo mật và giữ thêm bản tạm trên
 trình duyệt để đồng hồ không biến mất khi chuyển trang hoặc tải lại trang.
+
+## Nâng cấp diễn đàn V9–V11
+
+Chạy lần lượt `forum_v9_migration.sql`, `forum_v10_migration.sql` và
+`forum_v11_migration.sql` để giữ đúng lịch sử schema. V9 bổ sung bộ lọc từ cấm
+ngay trong database; V10 bổ sung hàng chờ admin cho âm thanh/video. Phần gọi
+dịch vụ kiểm duyệt tự động của các phiên bản này đã được V12 gỡ bỏ hoàn toàn.
+
+## Nâng cấp diễn đàn V12
+
+Sau `forum_v11_migration.sql`, chạy toàn bộ `forum_v12_migration.sql`. V12:
+
+- xóa lịch, trigger và thời hạn chờ dành cho kiểm duyệt tự động;
+- xóa bộ từ cấm, dò dữ liệu cá nhân, chặn liên kết, dấu vân tay nội dung và dấu
+  vân tay media;
+- đưa mọi bài viết mới hoặc vừa chỉnh sửa vào hàng chờ;
+- Staff và admin đang hoạt động có thể duyệt, ẩn hoặc hiện bài;
+- Staff không thể xóa bài của người khác, quản lý role, kick, khóa hoặc cấm;
+- chỉ admin có các quyền quản lý tài khoản và xóa nội dung của người khác;
+- gửi thông báo bài chờ duyệt tới hộp thư của tất cả Staff và admin;
+- công khai bình luận văn bản/ảnh ngay, vẫn giữ giới hạn 2 phút giữa hai lần
+  bình luận;
+- giữ bình luận có âm thanh/video trong hàng chờ admin;
+- không cần secret hoặc Edge Function kiểm duyệt nào.
+
+## Ma trận quyền theo role
+
+Sau `forum_v12_migration.sql`, chạy toàn bộ `role_permissions_migration.sql`
+trước khi cập nhật website. Migration này tạo phần thứ hai trong trang
+`admin.html`:
+
+- tab **Tài khoản** để admin set role và trạng thái hoạt động / tạm khóa / cấm;
+- tab **Quyền theo role** để bật hoặc tắt quyền truy cập, đăng bài, bình luận,
+  cảm xúc, chia sẻ, báo cáo và kiểm duyệt;
+- RLS và RPC kiểm tra quyền trực tiếp trong database, không tin dữ liệu role từ
+  giao diện;
+- nhật ký `role_permission_audit_log` cho mọi lần thay đổi quyền;
+- đồng bộ hộp thư bài chờ duyệt khi quyền Staff hoặc trạng thái tài khoản đổi.
+
+Theo ranh giới an toàn của hệ thống, quyền duyệt/ẩn chỉ thuộc Staff hoặc admin.
+Xử lý báo cáo, xóa nội dung người khác, quản lý tài khoản và thay đổi ma trận
+quyền luôn bị khóa cho admin; không thể cấp các quyền này cho member, VIP hoặc
+Staff. Hạn mức media vẫn cố định theo đặc quyền role và không nằm trong ma trận.
 
 ## 1. Tạo database và chính sách bảo mật
 
@@ -272,17 +305,26 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
     5 ngày, chưa có bình luận là 7 ngày; bài Giải trí là 14 ngày.
 23. Chạy workflow dọn dẹp thủ công với `dry_run = true`, đối chiếu số bài hết
     hạn rồi mới cho phép lần chạy thật.
-24. Chạy `forum_v5_migration.sql`, deploy `moderate-forum`, rồi thử đủ member,
-    VIP, moderator và admin ở cả bài viết lẫn bình luận.
-25. Thử tag, trả lời, báo cáo, ẩn/hiện và kiểm tra chuông thông báo; bài có
-    video/âm thanh phải ở hàng chờ cho đến khi staff duyệt.
-26. Chạy `forum_v6_migration.sql`, deploy lại `moderate-forum`, rồi mở diễn đàn
-    trên hai cửa sổ để kiểm tra Realtime, danh sách người thả cảm xúc và hộp thư
-    báo cáo của moderator/admin.
-27. Gửi hai bình luận liên tiếp và xác nhận lần hai bị chặn đủ 2 phút; bình luận
-    đầu xuất hiện ngay với trạng thái AI đang kiểm tra, không còn nút duyệt tay.
+24. Chạy `forum_v5_migration.sql`, rồi thử đủ member, VIP, moderator và admin ở
+    cả bài viết lẫn bình luận.
+25. Thử tag, trả lời, báo cáo, ẩn/hiện và kiểm tra chuông thông báo; mọi bài
+    phải ở hàng chờ cho đến khi Staff hoặc admin duyệt.
+26. Chạy `forum_v6_migration.sql`, rồi mở diễn đàn trên hai cửa sổ để kiểm tra
+    Realtime, danh sách người thả cảm xúc và hộp thư báo cáo của moderator/admin.
+27. Gửi hai bình luận liên tiếp và xác nhận lần hai bị chặn đủ 2 phút.
 28. Chạy `forum_v7_migration.sql`; thử ảnh/âm thanh/video trong bình luận theo
     từng role, thao tác cảm xúc bằng chuột và cảm ứng, rồi gửi báo cáo để xác nhận
     chỉ admin nhận thư còn bài viết vẫn công khai đến khi admin quyết định.
 29. Chạy `forum_v8_migration.sql`, đăng một bài rồi xóa ngay; tải lại diễn đàn
     và xác nhận nút đăng bài vẫn đếm ngược cho đến khi đủ 15 phút.
+30. Chạy `forum_v9_migration.sql`; thử từ cấm viết chèn dấu/số và xác nhận
+    database từ chối, còn âm thanh chỉ admin có thể duyệt.
+31. Chạy lần lượt `forum_v10_migration.sql`, `forum_v11_migration.sql` và
+    `forum_v12_migration.sql`.
+32. Chạy `role_permissions_migration.sql`, mở `admin.html`, thử cả hai tab và
+    tắt/bật một quyền không khóa của Staff; xác nhận thay đổi có hiệu lực ở một
+    tài khoản Staff đang hoạt động.
+32. Đăng bài bất kỳ và xác nhận bài nằm trong hàng chờ, Staff/admin nhận thông
+    báo và đều có nút Duyệt/Từ chối. Staff được ẩn/hiện nhưng không được xóa bài
+    của người khác hoặc quản lý tài khoản. Bình luận văn bản/ảnh công khai ngay;
+    âm thanh/video trong bình luận vẫn chờ riêng admin.

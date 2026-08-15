@@ -9,7 +9,7 @@ Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải l�
 - Worker dùng R2 binding nên không cần khóa R2 trong mã nguồn.
 - Mỗi lượt tải lên/xóa đều xác minh access token Supabase.
 - Chỉ tài khoản `active` được tải tệp.
-- Chủ tệp, moderator hoặc admin mới được xóa.
+- Chủ tệp hoặc admin mới được xóa; moderator không thể xóa tệp của người khác.
 - Mỗi tài khoản tối đa 12 lượt tải lên trong một phút để hạn chế lạm dụng.
 - Thành viên: ảnh tối đa 5 MB/tệp, không video, âm thanh 2 MB.
 - VIP/moderator: ảnh 5 MB, video 50 MB, âm thanh 5 MB.

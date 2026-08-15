@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f4f8ff">
   <meta name="color-scheme" content="light dark">
-  <title>Quản lý thành viên · Chốn Học Tập</title>
+  <title>Quản trị · Chốn Học Tập</title>
   <script>
   try{document.documentElement.dataset.theme=localStorage.getItem('chonhoctap-theme')||'light'}
   catch{document.documentElement.dataset.theme='light'}
@@ -14,14 +14,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260730-4">
+  <link rel="stylesheet" href="assets/account.css?v=20260809-1">
 </head>
 <body>
   <header class="account-topbar">
     <div class="account-topbar-inner">
       <a class="brand-link" href="./">
         <img src="avatar.png" alt="">
-        <span class="brand-copy"><strong>CHỐN HỌC TẬP</strong><span>Quản trị thành viên</span></span>
+        <span class="brand-copy"><strong>CHỐN HỌC TẬP</strong><span>Trung tâm quản trị</span></span>
       </a>
       <div class="topbar-actions">
         <a class="topbar-link" href="profile.html">Hồ sơ</a>
@@ -37,8 +37,8 @@
     <div class="page-heading">
       <div>
         <div class="eyebrow">Quản trị</div>
-        <h1>Thành viên và phân quyền</h1>
-        <p>Cấp vai trò, tạm khóa hoặc cấm tài khoản. Mọi thay đổi đều được ghi nhật ký.</p>
+        <h1>Tài khoản và phân quyền</h1>
+        <p>Quản lý trạng thái tài khoản, role và các quyền được phép sử dụng trên diễn đàn.</p>
       </div>
       <button id="logoutButton" class="button button-danger" type="button">Đăng xuất</button>
     </div>
@@ -53,15 +53,59 @@
       <a class="button" href="./">Về trang chủ</a>
     </section>
 
-    <section id="adminContent" class="panel admin-panel" hidden>
-      <div class="admin-toolbar">
-        <input id="memberSearch" class="input" type="search" placeholder="Tìm tên, quyền hoặc trạng thái..." autocomplete="off">
-        <span id="roleCounts" class="role-counts"></span>
-      </div>
-      <div id="memberList" class="member-list"></div>
+    <section id="adminContent" class="admin-workspace" hidden>
+      <nav class="admin-tabs panel" role="tablist" aria-label="Khu vực quản trị">
+        <button id="accountsTab" class="admin-tab active" type="button" role="tab"
+          aria-selected="true" aria-controls="accountsPanel" data-admin-tab="accounts">
+          <span aria-hidden="true">👥</span>
+          <span><strong>Tài khoản</strong><small>Role và trạng thái hoạt động</small></span>
+        </button>
+        <button id="permissionsTab" class="admin-tab" type="button" role="tab"
+          aria-selected="false" aria-controls="permissionsPanel" data-admin-tab="permissions">
+          <span aria-hidden="true">🛡️</span>
+          <span><strong>Quyền theo role</strong><small>Bật hoặc tắt từng chức năng</small></span>
+        </button>
+      </nav>
+
+      <section id="accountsPanel" class="panel admin-panel" role="tabpanel"
+        aria-labelledby="accountsTab">
+        <header class="admin-section-heading">
+          <div>
+            <span class="admin-section-kicker">Phần 1</span>
+            <h2>Role và hoạt động tài khoản</h2>
+            <p>Chọn role, đặt tài khoản hoạt động, tạm khóa hoặc cấm. Chỉ admin được thao tác.</p>
+          </div>
+        </header>
+        <div class="admin-toolbar">
+          <input id="memberSearch" class="input" type="search"
+            placeholder="Tìm tên, role hoặc trạng thái..." autocomplete="off">
+          <span id="roleCounts" class="role-counts"></span>
+        </div>
+        <div id="memberList" class="member-list"></div>
+      </section>
+
+      <section id="permissionsPanel" class="panel admin-panel" role="tabpanel"
+        aria-labelledby="permissionsTab" hidden>
+        <header class="admin-section-heading permissions-heading">
+          <div>
+            <span class="admin-section-kicker">Phần 2</span>
+            <h2>Quyền sử dụng theo role</h2>
+            <p>Mọi thay đổi được kiểm tra ở database và áp dụng cho toàn bộ tài khoản thuộc role đó.</p>
+          </div>
+          <span class="permission-save-hint">Tự lưu từng thay đổi</span>
+        </header>
+        <div class="permission-safety-note">
+          <span aria-hidden="true">🔒</span>
+          <p><strong>Ranh giới an toàn:</strong> Staff chỉ có thể duyệt hoặc ẩn bài. Xử lý báo cáo,
+            xóa nội dung người khác, quản lý tài khoản và cấu hình quyền luôn chỉ dành cho admin.
+            Hạn mức ảnh, video và âm thanh vẫn cố định theo đặc quyền của từng role.</p>
+        </div>
+        <div id="permissionLoading" class="loading-card">Đang tải ma trận quyền...</div>
+        <div id="permissionGrid" class="permission-grid" hidden></div>
+      </section>
     </section>
   </main>
 
-  <script type="module" src="assets/admin-page.js?v=20260730-5"></script>
+  <script type="module" src="assets/admin-page.js?v=20260809-1"></script>
 </body>
 </html>

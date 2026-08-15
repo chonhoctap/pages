@@ -1,5 +1,4 @@
 import { MEDIA_API_URL } from './media-config.js?v=20260815-1';
-import { Upload } from 'https://cdn.jsdelivr.net/npm/tus-js-client@4/+esm';
 
 const MB = 1024 * 1024;
 const SUPABASE_TUS_URL =
@@ -333,7 +332,8 @@ export async function deleteFromR2(session, key) {
   }
 }
 
-export function uploadToSupabaseResumable(session, bucket, path, file) {
+export async function uploadToSupabaseResumable(session, bucket, path, file) {
+  const { Upload } = await import('https://cdn.jsdelivr.net/npm/tus-js-client@4/+esm');
   return new Promise((resolve, reject) => {
     const upload = new Upload(file, {
       endpoint: SUPABASE_TUS_URL,

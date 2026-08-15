@@ -539,8 +539,8 @@ main.section,
     linear-gradient(145deg,rgba(255,255,255,.055),transparent 42%),
     rgba(10,22,39,.73);
   box-shadow:0 15px 42px rgba(0,0,0,.19),inset 0 1px 0 rgba(255,255,255,.04);
-  transition:transform .24s cubic-bezier(.2,.8,.2,1),border-color .24s ease,background .24s ease,box-shadow .24s ease;
-  animation:cardEnter .52s var(--delay) cubic-bezier(.2,.8,.2,1) both;
+  transition:transform .32s cubic-bezier(.2,.75,.2,1),border-color .28s ease,background .28s ease,box-shadow .32s ease;
+  animation:cardEnter .52s var(--delay) cubic-bezier(.2,.8,.2,1) backwards;
 }
 .card::before{
   content:"";
@@ -567,7 +567,7 @@ main.section,
   pointer-events:none;
 }
 .card:hover,.card:focus-within{
-  transform:translateY(-7px) scale(1.012);
+  transform:translate3d(0,-9px,0);
   border-color:rgba(125,211,252,.34);
   background:var(--surface-hover);
   box-shadow:0 24px 58px rgba(0,0,0,.27),0 0 0 1px rgba(56,189,248,.06);
@@ -636,12 +636,10 @@ main.section,
 .meta-pill.grade{color:#c4b5fd;background:rgba(139,92,246,.09);border-color:rgba(139,92,246,.2)}
 .actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px;transition:transform .24s ease}
 .card:hover .file-icon,.card:focus-within .file-icon{
-  transform:translateY(-3px) rotate(-2deg) scale(1.055);
+  transform:translateY(-1px) scale(1.025);
   box-shadow:0 12px 28px rgba(56,189,248,.18),inset 0 1px 0 rgba(255,255,255,.10);
 }
-.card:hover .name,.card:focus-within .name{transform:translateX(2px);color:#7dd3fc}
-.card:hover .meta-pill,.card:focus-within .meta-pill{transform:translateY(-1px)}
-.card:hover .actions,.card:focus-within .actions{transform:translateY(2px)}
+.card:hover .name,.card:focus-within .name{color:#7dd3fc}
 .btn-view,.btn-dl{
   min-height:41px;
   padding:9px 10px;

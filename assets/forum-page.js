@@ -1399,10 +1399,13 @@ function createImageLightbox(item, positionLabel) {
   zoomLevel.setAttribute('aria-live', 'polite');
   zoomLevel.textContent = '100%';
   const zoomIn = lightboxControl('Phóng to ảnh', '+');
+  const rotateLeft = lightboxControl('Xoay ảnh sang trái 90 độ', '↶', 'rotate-image');
+  const rotateRight = lightboxControl('Xoay ảnh sang phải 90 độ', '↷', 'rotate-image');
   const fitImage = lightboxControl('Hiện toàn bộ ảnh', 'Vừa ảnh', 'fit-image');
-  tools.append(zoomOut, zoomLevel, zoomIn, fitImage);
+  tools.append(zoomOut, zoomLevel, zoomIn, rotateLeft, rotateRight, fitImage);
 
   let zoom = 1;
+  let rotation = 0;
   let dragging = null;
   let resizeObserver = null;
 
@@ -1414,17 +1417,23 @@ function createImageLightbox(item, positionLabel) {
     const previousHeight = Math.max(1, stage.scrollHeight);
     const availableWidth = Math.max(1, stage.clientWidth - 20);
     const availableHeight = Math.max(1, stage.clientHeight - 20);
+    const sideways = Math.abs(rotation % 180) === 90;
+    const fittedWidth = sideways ? image.naturalHeight : image.naturalWidth;
+    const fittedHeight = sideways ? image.naturalWidth : image.naturalHeight;
     const fitScale = Math.min(
-      availableWidth / image.naturalWidth,
-      availableHeight / image.naturalHeight,
+      availableWidth / fittedWidth,
+      availableHeight / fittedHeight,
       1
     );
     const width = Math.max(1, Math.round(image.naturalWidth * fitScale * zoom));
     const height = Math.max(1, Math.round(image.naturalHeight * fitScale * zoom));
-    canvas.style.width = `${Math.max(stage.clientWidth, width + 20)}px`;
-    canvas.style.height = `${Math.max(stage.clientHeight, height + 20)}px`;
+    const visualWidth = sideways ? height : width;
+    const visualHeight = sideways ? width : height;
+    canvas.style.width = `${Math.max(stage.clientWidth, visualWidth + 20)}px`;
+    canvas.style.height = `${Math.max(stage.clientHeight, visualHeight + 20)}px`;
     image.style.width = `${width}px`;
     image.style.height = `${height}px`;
+    image.style.transform = `translate(-50%,-50%) rotate(${rotation}deg)`;
     stage.classList.toggle('can-pan', zoom > 1);
     zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
     zoomOut.disabled = zoom <= 1;
@@ -1448,6 +1457,10 @@ function createImageLightbox(item, positionLabel) {
   };
   const zoomInImage = () => setZoom(zoom * 1.25);
   const zoomOutImage = () => setZoom(zoom / 1.25);
+  const rotateImage = direction => {
+    rotation = (rotation + direction * 90 + 360) % 360;
+    renderZoom(false);
+  };
   const resetImage = () => {
     zoom = 1;
     renderZoom(false);
@@ -1455,6 +1468,8 @@ function createImageLightbox(item, positionLabel) {
 
   zoomIn.addEventListener('click', zoomInImage);
   zoomOut.addEventListener('click', zoomOutImage);
+  rotateLeft.addEventListener('click', () => rotateImage(-1));
+  rotateRight.addEventListener('click', () => rotateImage(1));
   fitImage.addEventListener('click', resetImage);
   stage.addEventListener('wheel', event => {
     event.preventDefault();
@@ -1501,6 +1516,8 @@ function createImageLightbox(item, positionLabel) {
   activeLightboxZoomControls = {
     zoomIn: zoomInImage,
     zoomOut: zoomOutImage,
+    rotateLeft: () => rotateImage(-1),
+    rotateRight: () => rotateImage(1),
     reset: resetImage
   };
   activeLightboxCleanup = () => {
@@ -2988,6 +3005,12 @@ document.addEventListener('keydown', event => {
     if (event.key === '0') {
       event.preventDefault();
       activeLightboxZoomControls?.reset();
+      return;
+    }
+    if (event.key.toLowerCase() === 'r') {
+      event.preventDefault();
+      if (event.shiftKey) activeLightboxZoomControls?.rotateLeft();
+      else activeLightboxZoomControls?.rotateRight();
       return;
     }
   }

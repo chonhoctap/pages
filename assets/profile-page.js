@@ -8,11 +8,15 @@ import {
   showMessage,
   setBusy,
   initThemeToggle,
-  humanizeAuthError
-} from './supabase-client.js?v=20260801-7';
+  humanizeAuthError,
+  PASSWORD_POLICY_MESSAGE,
+  isStrongPassword,
+  initPasswordStrength
+} from './supabase-client.js?v=20260823-2';
 import { r2Enabled, deleteFromR2 } from './media-storage.js?v=20260815-1';
 
 initThemeToggle();
+initPasswordStrength('profileNewPassword');
 
 const elements = {
   loading: document.getElementById('profileLoading'),
@@ -343,11 +347,16 @@ elements.changePasswordForm.addEventListener('submit', async event => {
   if (!viewingOwnProfile) return;
   const button = elements.changePasswordForm.querySelector('button[type="submit"]');
   const form = new FormData(elements.changePasswordForm);
+  const currentPassword = String(form.get('current_password') || '');
   const password = String(form.get('password') || '');
   const confirmPassword = String(form.get('confirm_password') || '');
 
-  if (password.length < 8) {
-    showMessage(elements.passwordMessage, 'Mật khẩu cần ít nhất 8 ký tự.', 'error');
+  if (!currentPassword) {
+    showMessage(elements.passwordMessage, 'Vui lòng nhập mật khẩu hiện tại.', 'error');
+    return;
+  }
+  if (!isStrongPassword(password)) {
+    showMessage(elements.passwordMessage, PASSWORD_POLICY_MESSAGE, 'error');
     return;
   }
   if (password !== confirmPassword) {
@@ -358,6 +367,17 @@ elements.changePasswordForm.addEventListener('submit', async event => {
   setBusy(button, true, 'Đang cập nhật...');
   showMessage(elements.passwordMessage, '');
   try {
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: session.user.email,
+      password: currentPassword
+    });
+    if (verifyError) {
+      if (/invalid login credentials/i.test(String(verifyError.message || ''))) {
+        throw new Error('Mật khẩu hiện tại chưa đúng.');
+      }
+      throw verifyError;
+    }
+
     const { error } = await supabase.auth.updateUser({ password });
     if (error) throw error;
     elements.changePasswordForm.reset();

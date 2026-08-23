@@ -159,6 +159,7 @@ export function humanizeAuthError(error) {
   if (/only active administrators|quản trị viên đang hoạt động/i.test(message)) {
     return 'Chỉ quản trị viên đang hoạt động mới được thay đổi quyền.';
   }
+  if (/captcha|turnstile|challenge verification/i.test(message)) return 'Xác minh bảo mật chưa hợp lệ hoặc đã hết hạn. Vui lòng xác minh lại.';
   if (/rate limit/i.test(message)) return 'Bạn thao tác quá nhanh. Vui lòng đợi một chút rồi thử lại.';
   if (/một bài sau mỗi 15 phút|one post.*15 minutes/i.test(message)) {
     return 'Bạn chỉ có thể đăng một bài sau mỗi 15 phút.';

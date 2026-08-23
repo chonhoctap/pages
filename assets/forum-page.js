@@ -1378,7 +1378,7 @@ function createImageLightbox(item, positionLabel) {
   const stage = document.createElement('div');
   stage.className = 'lightbox-image-stage';
   stage.tabIndex = 0;
-  stage.setAttribute('aria-label', `${positionLabel}. Cuộn để phóng to, kéo để xem vùng khác.`);
+  stage.setAttribute('aria-label', `${positionLabel}. Cuộn để phóng to, kéo để xem vùng khác, dùng nút xoay để đổi hướng ảnh.`);
 
   const canvas = document.createElement('div');
   canvas.className = 'lightbox-image-canvas';
@@ -1399,8 +1399,8 @@ function createImageLightbox(item, positionLabel) {
   zoomLevel.setAttribute('aria-live', 'polite');
   zoomLevel.textContent = '100%';
   const zoomIn = lightboxControl('Phóng to ảnh', '+');
-  const rotateLeft = lightboxControl('Xoay ảnh sang trái 90 độ', '↶', 'rotate-image');
-  const rotateRight = lightboxControl('Xoay ảnh sang phải 90 độ', '↷', 'rotate-image');
+  const rotateLeft = lightboxControl('Xoay ảnh sang trái 90 độ', '↶90°', 'rotate-image');
+  const rotateRight = lightboxControl('Xoay ảnh sang phải 90 độ', '90°↷', 'rotate-image');
   const fitImage = lightboxControl('Hiện toàn bộ ảnh', 'Vừa ảnh', 'fit-image');
   tools.append(zoomOut, zoomLevel, zoomIn, rotateLeft, rotateRight, fitImage);
 

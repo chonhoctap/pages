@@ -5,10 +5,15 @@ import {
   showMessage,
   setBusy,
   initThemeToggle,
-  humanizeAuthError
-} from './supabase-client.js';
+  humanizeAuthError,
+  PASSWORD_POLICY_MESSAGE,
+  isStrongPassword,
+  initPasswordStrength
+} from './supabase-client.js?v=20260823-2';
 
 initThemeToggle();
+initPasswordStrength('signupPassword');
+initPasswordStrength('newPassword');
 
 const elements = {
   tabs: document.querySelectorAll('[data-auth-tab]'),
@@ -275,8 +280,8 @@ elements.signupForm.addEventListener('submit', async event => {
     showMessage(elements.message, 'Tên hiển thị cần từ 2 đến 60 ký tự.', 'error');
     return;
   }
-  if (password.length < 8) {
-    showMessage(elements.message, 'Mật khẩu cần ít nhất 8 ký tự.', 'error');
+  if (!isStrongPassword(password)) {
+    showMessage(elements.message, PASSWORD_POLICY_MESSAGE, 'error');
     return;
   }
   if (password !== confirmPassword) {
@@ -311,7 +316,7 @@ elements.signupForm.addEventListener('submit', async event => {
       elements.signupForm.reset();
       showMessage(
         elements.message,
-        'Đã tạo tài khoản. Hãy mở email và nhấn liên kết xác nhận trước khi đăng nhập.',
+        'Đã tạo tài khoản. Hãy mở email và nhấn nút “Xác minh email” trước khi đăng nhập.',
         'success'
       );
     }
@@ -422,8 +427,8 @@ elements.updatePasswordForm.addEventListener('submit', async event => {
   const password = String(form.get('password') || '');
   const confirmPassword = String(form.get('confirm_password') || '');
 
-  if (password.length < 8) {
-    showMessage(elements.message, 'Mật khẩu cần ít nhất 8 ký tự.', 'error');
+  if (!isStrongPassword(password)) {
+    showMessage(elements.message, PASSWORD_POLICY_MESSAGE, 'error');
     return;
   }
   if (password !== confirmPassword) {

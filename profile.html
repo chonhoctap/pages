@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260801-7">
+  <link rel="stylesheet" href="assets/account.css?v=20260823-2">
 </head>
 <body>
   <header class="account-topbar">
@@ -148,15 +148,20 @@
         <div class="security-heading">
           <div>
             <h2 id="securityTitle">Bảo mật tài khoản</h2>
-            <p>Đổi mật khẩu hiện tại hoặc đặt mật khẩu lần đầu nếu bạn đăng nhập bằng Google.</p>
+            <p>Xác nhận mật khẩu hiện tại trước khi đặt mật khẩu mới để bảo vệ tài khoản.</p>
           </div>
           <a class="link-button" href="auth.html?forgot=1&amp;v=20260730-2">Quên mật khẩu?</a>
         </div>
         <form id="changePasswordForm" class="form-columns">
+          <div class="field field-full">
+            <label for="profileCurrentPassword">Mật khẩu hiện tại</label>
+            <input id="profileCurrentPassword" class="input" name="current_password" type="password" autocomplete="current-password" required>
+            <span class="field-hint">Mật khẩu hiện tại được xác minh an toàn trước khi cập nhật.</span>
+          </div>
           <div class="field">
             <label for="profileNewPassword">Mật khẩu mới</label>
             <input id="profileNewPassword" class="input" name="password" type="password" minlength="8" autocomplete="new-password" required>
-            <span class="field-hint">Tối thiểu 8 ký tự.</span>
+            <div class="password-strength" data-password-strength-for="profileNewPassword" aria-live="polite"></div>
           </div>
           <div class="field">
             <label for="profileConfirmPassword">Nhập lại mật khẩu</label>
@@ -171,6 +176,6 @@
     </div>
   </main>
 
-  <script type="module" src="assets/profile-page.js?v=20260815-3"></script>
+  <script type="module" src="assets/profile-page.js?v=20260823-2"></script>
 </body>
 </html>

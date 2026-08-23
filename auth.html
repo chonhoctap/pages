@@ -11,11 +11,10 @@
   catch{document.documentElement.dataset.theme='light'}
   </script>
   <link rel="icon" href="avatar.webp" type="image/webp">
-  <link rel="preconnect" href="https://challenges.cloudflare.com">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260823-1">
+  <link rel="stylesheet" href="assets/account.css">
 </head>
 <body>
   <header class="account-topbar">
@@ -148,18 +147,6 @@
           <button class="button" type="submit">Cập nhật mật khẩu</button>
         </form>
 
-        <div id="captchaShell" class="turnstile-shell" hidden>
-          <div
-            id="turnstileWidget"
-            class="turnstile-widget"
-            data-sitekey="0x4AAAAAAAEY9b0oLo8bj1eyr"
-            aria-label="Xác minh bạn không phải rô-bốt"
-          ></div>
-          <p id="captchaStatus" class="turnstile-status" aria-live="polite">
-            Vui lòng hoàn thành bước xác minh bảo mật.
-          </p>
-        </div>
-
         <div id="oauthDivider" class="divider">hoặc</div>
         <button id="googleButton" class="google-button" type="button">
           <span class="google-mark" aria-hidden="true">G</span>
@@ -170,7 +157,6 @@
     </div>
   </main>
 
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
-  <script type="module" src="assets/auth-page.js?v=20260823-1"></script>
+  <script type="module" src="assets/auth-page.js?v=20260730-2"></script>
 </body>
 </html>

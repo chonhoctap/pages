@@ -243,7 +243,21 @@ Sau đó mở **Supabase → Authentication → Sign In / Providers → Google**
 bật Google và nhập Client ID cùng Client Secret. Client Secret chỉ nhập trong
 Supabase Dashboard, không đưa vào GitHub hoặc mã frontend.
 
-## 4. Cấu hình email quên mật khẩu bằng mã 6 số
+## 4. Cấu hình email xác minh và quên mật khẩu
+
+### Email xác minh tài khoản
+
+Mở **Authentication → Emails → Templates → Confirm signup**:
+
+1. Đặt tiêu đề: `Xác minh tài khoản Chốn Học Tập`.
+2. Dán nội dung file `CONFIRM_SIGNUP_EMAIL_TEMPLATE.html`.
+3. Chọn **Save changes**.
+
+Mẫu dùng nút **Xác minh email**, kèm liên kết dự phòng và avatar chính thức của
+Chốn Học Tập. Biến `{{ .ConfirmationURL }}` được Supabase thay bằng liên kết
+xác minh an toàn cho từng lượt đăng ký.
+
+### Email quên mật khẩu bằng mã 6 số
 
 Mở **Authentication → Emails → Templates → Reset password**:
 
@@ -254,6 +268,11 @@ Mở **Authentication → Emails → Templates → Reset password**:
 Biến `{{ .Token }}` trong mẫu email sẽ được Supabase thay bằng mã OTP 6 số.
 Trang `auth.html` dùng email và mã này để xác minh, sau đó mới cho phép đặt
 mật khẩu mới.
+
+Tất cả mật khẩu mới trên website phải có tối thiểu 8 ký tự và đủ chữ hoa, chữ
+thường, chữ số, ký tự đặc biệt. Thanh độ mạnh chỉ chuyển xanh khi đáp ứng đủ
+toàn bộ điều kiện. Khi đổi mật khẩu trong hồ sơ, website đăng nhập lại bằng mật
+khẩu hiện tại trước khi gửi yêu cầu cập nhật mật khẩu mới.
 
 Email mặc định của Supabase chỉ phù hợp để thử nghiệm và có giới hạn gửi thấp.
 Khi website có người dùng thật, nên cấu hình **Authentication → SMTP Settings**

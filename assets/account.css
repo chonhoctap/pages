@@ -226,6 +226,32 @@ a{color:inherit}
 .field{display:grid;gap:7px}
 .field label{font-size:11px;font-weight:800}
 .field-hint{color:var(--muted);font-size:9.5px;line-height:1.45}
+
+.password-strength{
+  display:grid;
+  gap:8px;
+  margin-top:2px;
+  padding:10px 11px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface-soft);
+}
+.password-strength-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:9.5px}
+.password-strength-head strong{color:var(--muted);font-size:10px}
+.password-strength-head span{color:var(--muted);font-weight:800}
+.password-strength-bars{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.password-strength-bars span{height:5px;border-radius:999px;background:var(--line);transition:background .2s ease,transform .2s ease}
+.password-strength[data-level="weak"] .password-strength-bars span:first-child{background:#ef4444}
+.password-strength[data-level="medium"] .password-strength-bars span:nth-child(-n+2){background:#f59e0b}
+.password-strength[data-level="strong"] .password-strength-bars span{background:var(--green);transform:scaleY(1.12)}
+.password-strength[data-level="weak"] .password-strength-head strong{color:#ef4444}
+.password-strength[data-level="medium"] .password-strength-head strong{color:#d97706}
+.password-strength[data-level="strong"] .password-strength-head strong{color:var(--green)}
+.password-rules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 8px;margin:0;padding:0;list-style:none}
+.password-rules li{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:9px;line-height:1.35}
+.password-rules li span{width:12px;color:var(--muted);font-weight:900;text-align:center}
+.password-rules li.met,.password-rules li.met span{color:var(--green)}
+
 .input,.select,.textarea{
   width:100%;
   border:1px solid var(--line);
@@ -745,6 +771,7 @@ a{color:inherit}
   .auth-panel,.profile-form-panel,.admin-panel{padding:17px;border-radius:20px}
   .form-columns{grid-template-columns:1fr}
   .field-full{grid-column:auto}
+  .password-rules{grid-template-columns:1fr}
   .page-heading{align-items:flex-start;flex-direction:column}
   .profile-summary{display:block;text-align:center}
   .security-heading{align-items:flex-start;flex-direction:column;gap:8px}

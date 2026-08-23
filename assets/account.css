@@ -793,6 +793,20 @@ a{color:inherit}
   .own-post-item{align-items:stretch;flex-direction:column}
   .own-post-actions{flex-wrap:wrap}
 }
+
+.resend-confirmation{
+  display:grid;
+  gap:11px;
+  padding:14px;
+  border:1px solid rgba(37,99,235,.24);
+  border-radius:14px;
+  background:var(--surface-soft);
+}
+.resend-confirmation>div{display:grid;gap:4px}
+.resend-confirmation strong{font-size:11px}
+.resend-confirmation span{color:var(--muted);font-size:9.5px;line-height:1.55}
+.resend-confirmation b{color:var(--text);overflow-wrap:anywhere}
+.resend-confirmation .button{width:100%;min-height:42px}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
 }

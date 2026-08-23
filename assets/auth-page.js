@@ -31,7 +31,10 @@ const elements = {
   oauthDivider: document.getElementById('oauthDivider'),
   captchaShell: document.getElementById('captchaShell'),
   captchaWidget: document.getElementById('turnstileWidget'),
-  captchaStatus: document.getElementById('captchaStatus')
+  captchaStatus: document.getElementById('captchaStatus'),
+  resendShell: document.getElementById('resendConfirmationShell'),
+  resendButton: document.getElementById('resendConfirmationButton'),
+  resendEmail: document.getElementById('resendConfirmationEmail')
 };
 
 const initialParams = new URLSearchParams(window.location.search);
@@ -39,12 +42,16 @@ let recoveryMode = initialParams.get('mode') === 'reset';
 let passwordResetFlow = recoveryMode || initialParams.get('forgot') === '1';
 let redirecting = false;
 const recoveryEmailKey = 'chonhoctap-recovery-email';
+const pendingConfirmationEmailKey = 'chonhoctap-pending-confirmation-email';
+const resendConfirmationAtKey = 'chonhoctap-resend-confirmation-at';
+const resendCooldownMs = 60_000;
 const captchaViews = new Set(['login', 'signup', 'reset']);
 let currentView = '';
 let captchaToken = '';
 let captchaWidgetId = null;
 let captchaRenderPromise = null;
 let captchaSize = '';
+let resendTimer = 0;
 
 function currentCaptchaTheme() {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
@@ -198,6 +205,86 @@ function forgetRecoveryEmail() {
   }
 }
 
+function getPendingConfirmationEmail() {
+  try {
+    return sessionStorage.getItem(pendingConfirmationEmailKey) || '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberPendingConfirmationEmail(email) {
+  try {
+    sessionStorage.setItem(pendingConfirmationEmailKey, email);
+  } catch {
+    // Storage can be unavailable in strict privacy mode.
+  }
+}
+
+function forgetPendingConfirmationEmail() {
+  try {
+    sessionStorage.removeItem(pendingConfirmationEmailKey);
+  } catch {
+    // Storage can be unavailable in strict privacy mode.
+  }
+}
+
+function getResendAvailableAt() {
+  try {
+    return Number(localStorage.getItem(resendConfirmationAtKey)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setResendAvailableAt(value) {
+  try {
+    localStorage.setItem(resendConfirmationAtKey, String(value));
+  } catch {
+    // The server still enforces its own rate limit.
+  }
+}
+
+function stopResendTimer() {
+  if (resendTimer) window.clearInterval(resendTimer);
+  resendTimer = 0;
+}
+
+function renderResendCooldown() {
+  const remaining = Math.max(0, Math.ceil((getResendAvailableAt() - Date.now()) / 1000));
+  if (elements.resendButton.getAttribute('aria-busy') === 'true') return;
+
+  elements.resendButton.disabled = remaining > 0;
+  elements.resendButton.textContent = remaining > 0
+    ? `Gửi lại sau ${remaining} giây`
+    : 'Gửi lại email xác minh';
+
+  if (remaining <= 0) stopResendTimer();
+}
+
+function startResendCooldown() {
+  setResendAvailableAt(Date.now() + resendCooldownMs);
+  stopResendTimer();
+  renderResendCooldown();
+  resendTimer = window.setInterval(renderResendCooldown, 1000);
+}
+
+function showResendConfirmation(email) {
+  elements.resendEmail.textContent = email;
+  elements.resendShell.hidden = false;
+  stopResendTimer();
+  renderResendCooldown();
+
+  if (getResendAvailableAt() > Date.now()) {
+    resendTimer = window.setInterval(renderResendCooldown, 1000);
+  }
+}
+
+function hideResendConfirmation() {
+  elements.resendShell.hidden = true;
+  stopResendTimer();
+}
+
 function showView(view) {
   currentView = view;
   const views = {
@@ -223,6 +310,12 @@ function showView(view) {
     tab.setAttribute('aria-selected', String(active));
   });
   mountCaptcha(view, views[view]);
+  const pendingEmail = getPendingConfirmationEmail();
+  if (view === 'signup' && pendingEmail) {
+    showResendConfirmation(pendingEmail);
+  } else {
+    hideResendConfirmation();
+  }
   showMessage(elements.message, '');
 }
 
@@ -310,10 +403,15 @@ elements.signupForm.addEventListener('submit', async event => {
     if (error) throw error;
 
     if (data.session) {
+      forgetPendingConfirmationEmail();
       showMessage(elements.message, 'Tạo tài khoản thành công. Đang chuyển trang...', 'success');
       goAfterAuth();
     } else {
       elements.signupForm.reset();
+      document.getElementById('signupPassword')?.dispatchEvent(new Event('input'));
+      rememberPendingConfirmationEmail(email);
+      startResendCooldown();
+      showResendConfirmation(email);
       showMessage(
         elements.message,
         'Đã tạo tài khoản. Hãy mở email và nhấn nút “Xác minh email” trước khi đăng nhập.',
@@ -325,6 +423,52 @@ elements.signupForm.addEventListener('submit', async event => {
   } finally {
     resetCaptcha();
     setBusy(button, false);
+  }
+});
+
+elements.resendButton.addEventListener('click', async () => {
+  const email = getPendingConfirmationEmail();
+  if (!email) {
+    hideResendConfirmation();
+    showMessage(elements.message, 'Không tìm thấy email cần xác minh. Vui lòng đăng ký lại.', 'error');
+    return;
+  }
+
+  if (getResendAvailableAt() > Date.now()) {
+    renderResendCooldown();
+    return;
+  }
+
+  setBusy(elements.resendButton, true, 'Đang gửi lại...');
+  showMessage(elements.message, '');
+
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+      options: {
+        emailRedirectTo: `${pageUrl('auth.html')}?confirmed=1`
+      }
+    });
+    if (error) throw error;
+
+    startResendCooldown();
+    showMessage(
+      elements.message,
+      'Đã gửi lại email xác minh. Hãy kiểm tra hộp thư đến và cả thư rác.',
+      'success'
+    );
+  } catch (error) {
+    const detail = String(error?.message || error);
+    if (/security purposes|60 seconds|rate limit|too many requests/i.test(detail)) {
+      if (getResendAvailableAt() <= Date.now()) startResendCooldown();
+      showMessage(elements.message, 'Bạn chỉ có thể gửi lại email sau 60 giây.', 'error');
+    } else {
+      showMessage(elements.message, humanizeAuthError(error), 'error');
+    }
+  } finally {
+    setBusy(elements.resendButton, false);
+    renderResendCooldown();
   }
 });
 
@@ -490,6 +634,7 @@ async function init() {
 
   const { data } = await supabase.auth.getSession();
   if (data.session) {
+    forgetPendingConfirmationEmail();
     goAfterAuth();
     return;
   }

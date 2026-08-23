@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260823-2">
+  <link rel="stylesheet" href="assets/account.css?v=20260823-3">
 </head>
 <body>
   <header class="account-topbar">
@@ -167,12 +167,24 @@
           <span class="google-mark" aria-hidden="true">G</span>
           Tiếp tục bằng Google
         </button>
+        <div id="resendConfirmationShell" class="resend-confirmation" hidden>
+          <div>
+            <strong>Chưa nhận được email?</strong>
+            <span>
+              Email xác minh đã gửi tới <b id="resendConfirmationEmail"></b>.
+              Hãy kiểm tra cả thư rác.
+            </span>
+          </div>
+          <button id="resendConfirmationButton" class="button button-secondary" type="button">
+            Gửi lại email xác minh
+          </button>
+        </div>
         <div id="authMessage" class="message" role="status" aria-live="polite" hidden></div>
       </section>
     </div>
   </main>
 
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
-  <script type="module" src="assets/auth-page.js?v=20260823-2"></script>
+  <script type="module" src="assets/auth-page.js?v=20260823-3"></script>
 </body>
 </html>

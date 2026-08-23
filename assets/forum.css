@@ -905,7 +905,14 @@
   padding:0 11px;
   font-size:10px;
 }
-.lightbox-tools .rotate-image{font-size:20px}
+.lightbox-tools .rotate-image{
+  min-width:52px;
+  padding:0 8px;
+  color:#fff;
+  background:rgba(255,255,255,.07);
+  font-size:11px;
+  letter-spacing:.01em;
+}
 .lightbox-navigation{
   position:fixed;
   left:50%;
@@ -1154,9 +1161,10 @@
     justify-content:center;
     gap:2px;
   }
-  .lightbox-tools button{min-width:30px;padding-left:6px;padding-right:6px}
-  .lightbox-tools output{min-width:40px}
-  .lightbox-tools .fit-image{padding-left:8px;padding-right:8px}
+  .lightbox-tools button{min-width:28px;padding-left:5px;padding-right:5px}
+  .lightbox-tools output{min-width:36px}
+  .lightbox-tools .rotate-image{min-width:38px;padding-left:2px;padding-right:2px;font-size:10px}
+  .lightbox-tools .fit-image{padding-left:5px;padding-right:5px}
   .forum-sidebar{grid-template-columns:1fr}
   .comment-reply{margin-left:24px}
   .notification-panel{position:fixed;top:65px;right:12px}

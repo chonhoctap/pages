@@ -140,6 +140,73 @@ export function initThemeToggle() {
   });
 }
 
+
+export const PASSWORD_POLICY_MESSAGE = 'Mật khẩu phải có ít nhất 8 ký tự, gồm chữ hoa, chữ thường, số và ký tự đặc biệt.';
+
+const PASSWORD_RULES = [
+  { key: 'length', label: 'Ít nhất 8 ký tự', test: value => value.length >= 8 },
+  { key: 'lower', label: 'Có chữ thường', test: value => /[a-z]/.test(value) },
+  { key: 'upper', label: 'Có chữ in hoa', test: value => /[A-Z]/.test(value) },
+  { key: 'number', label: 'Có chữ số', test: value => /\d/.test(value) },
+  { key: 'special', label: 'Có ký tự đặc biệt', test: value => /[^A-Za-z0-9\s]/.test(value) }
+];
+
+export function assessPassword(password = '') {
+  const value = String(password);
+  const rules = Object.fromEntries(PASSWORD_RULES.map(rule => [rule.key, rule.test(value)]));
+  const score = Object.values(rules).filter(Boolean).length;
+  const valid = score === PASSWORD_RULES.length;
+  const level = !value ? 'empty' : valid ? 'strong' : score >= 3 ? 'medium' : 'weak';
+  const label = {
+    empty: 'Chưa nhập mật khẩu',
+    weak: 'Yếu',
+    medium: 'Trung bình',
+    strong: 'Mạnh · Đủ điều kiện'
+  }[level];
+
+  return { rules, score, valid, level, label };
+}
+
+export function isStrongPassword(password) {
+  return assessPassword(password).valid;
+}
+
+export function initPasswordStrength(inputId) {
+  const input = document.getElementById(inputId);
+  const container = document.querySelector(`[data-password-strength-for="${inputId}"]`);
+  if (!input || !container) return;
+
+  const statusId = `${inputId}StrengthStatus`;
+  container.id = `${inputId}Strength`;
+  container.innerHTML = `
+    <div class="password-strength-head">
+      <strong id="${statusId}" data-password-strength-label>Chưa nhập mật khẩu</strong>
+      <span data-password-strength-score>0/5</span>
+    </div>
+    <div class="password-strength-bars" aria-hidden="true"><span></span><span></span><span></span></div>
+    <ul class="password-rules">
+      ${PASSWORD_RULES.map(rule => `<li data-password-rule="${rule.key}"><span aria-hidden="true">○</span>${rule.label}</li>`).join('')}
+    </ul>
+  `;
+  input.setAttribute('aria-describedby', statusId);
+
+  const render = () => {
+    const result = assessPassword(input.value);
+    container.dataset.level = result.level;
+    container.querySelector('[data-password-strength-label]').textContent = result.label;
+    container.querySelector('[data-password-strength-score]').textContent = `${result.score}/5`;
+    PASSWORD_RULES.forEach(rule => {
+      const item = container.querySelector(`[data-password-rule="${rule.key}"]`);
+      const met = result.rules[rule.key];
+      item.classList.toggle('met', met);
+      item.querySelector('span').textContent = met ? '✓' : '○';
+    });
+  };
+
+  input.addEventListener('input', render);
+  render();
+}
+
 export function humanizeAuthError(error) {
   const message = String(error?.message || error || '');
   if (/invalid login credentials/i.test(message)) return 'Email hoặc mật khẩu chưa đúng.';

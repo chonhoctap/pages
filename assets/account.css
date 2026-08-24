@@ -505,7 +505,7 @@ a{color:inherit}
 .admin-panel{padding:21px}
 .admin-tabs{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:repeat(3,minmax(0,1fr));
   gap:8px;
   padding:8px;
 }
@@ -742,6 +742,182 @@ a{color:inherit}
   background:var(--surface);
   font-size:10.5px;
 }
+
+.console-secure-badge{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:7px 10px;
+  border:1px solid rgba(16,185,129,.2);
+  border-radius:999px;
+  color:#047857;
+  background:rgba(16,185,129,.09);
+  font-size:8.5px;
+  font-weight:800;
+}
+[data-theme="dark"] .console-secure-badge{color:#6ee7b7}
+.console-safety-note{
+  display:flex;
+  align-items:flex-start;
+  gap:10px;
+  padding:12px 13px;
+  margin-bottom:16px;
+  border:1px solid rgba(245,158,11,.22);
+  border-radius:14px;
+  color:#92400e;
+  background:rgba(245,158,11,.08);
+}
+.console-safety-note>span{font-size:15px}
+.console-safety-note p{margin:0;font-size:9.5px;line-height:1.65}
+[data-theme="dark"] .console-safety-note{color:#fcd34d}
+.console-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1.6fr) minmax(280px,.75fr);
+  gap:14px;
+  align-items:start;
+}
+.console-main{display:grid;gap:11px;min-width:0}
+.console-window{
+  overflow:hidden;
+  border:1px solid rgba(37,99,235,.24);
+  border-radius:17px;
+  background:#071222;
+  box-shadow:0 18px 45px rgba(15,23,42,.14);
+}
+.console-titlebar{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:12px;
+  min-height:42px;
+  padding:0 13px;
+  border-bottom:1px solid rgba(148,163,184,.16);
+  color:#cbd5e1;
+  background:#0c1a2d;
+}
+.console-titlebar>span{display:flex;gap:5px}
+.console-titlebar i{width:8px;height:8px;border-radius:50%;background:#fb7185}
+.console-titlebar i:nth-child(2){background:#fbbf24}
+.console-titlebar i:nth-child(3){background:#34d399}
+.console-titlebar strong{font-size:9.5px;letter-spacing:.02em}
+.console-titlebar small{color:#64748b;font-size:8px;font-weight:700;text-transform:uppercase}
+.console-output{
+  min-height:250px;
+  max-height:420px;
+  overflow:auto;
+  padding:15px;
+  color:#94a3b8;
+  font:500 10px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  white-space:pre-wrap;
+  scrollbar-color:#334155 transparent;
+}
+.console-output-block{display:grid;gap:5px;padding:0 0 13px;margin:0 0 13px;border-bottom:1px dashed rgba(148,163,184,.14)}
+.console-output-block:last-child{padding-bottom:0;margin-bottom:0;border-bottom:0}
+.console-output-block strong{color:#93c5fd;font-size:9px}
+.console-output-block.pending strong{color:#fcd34d}
+.console-output-block.success strong{color:#6ee7b7}
+.console-output-block.error strong{color:#fda4af}
+.console-output-block pre{max-width:100%;margin:0;color:#dbeafe;font:inherit;white-space:pre-wrap;overflow-wrap:anywhere}
+.console-command-row{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:9px;
+  padding:10px;
+  border-top:1px solid rgba(148,163,184,.16);
+  background:#0c1a2d;
+}
+.console-command-row label{color:#6ee7b7;font:700 10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.console-command-row input{
+  min-width:0;
+  height:38px;
+  padding:0 11px;
+  border:1px solid rgba(148,163,184,.2);
+  border-radius:10px;
+  outline:0;
+  color:#f8fafc;
+  background:#071222;
+  font:600 10px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.console-command-row input:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(59,130,246,.14)}
+.console-command-row input::placeholder{color:#64748b}
+.console-command-row .button{min-height:38px;padding:0 13px;font-size:9px}
+.console-examples{display:flex;flex-wrap:wrap;gap:7px}
+.console-examples button{
+  padding:7px 9px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  color:var(--blue);
+  background:var(--surface-soft);
+  cursor:pointer;
+  font:700 8.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  transition:transform .18s ease,border-color .18s ease,background .18s ease;
+}
+.console-examples button:hover{transform:translateY(-1px);border-color:var(--blue);background:var(--surface)}
+.console-confirm-card{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:13px;
+  border:1px solid rgba(239,68,68,.25);
+  border-radius:14px;
+  background:rgba(239,68,68,.075);
+}
+.console-confirm-card[hidden]{display:none}
+.console-confirm-card>div:first-child{min-width:0;display:grid;gap:4px}
+.console-confirm-card strong{color:var(--danger);font-size:10.5px}
+.console-confirm-card p{margin:0;color:var(--muted);font:600 9px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.console-confirm-card>div:last-child{display:flex;gap:7px;flex:0 0 auto}
+.console-confirm-card .button{min-height:36px;padding:0 11px;font-size:8.5px}
+.console-history-panel{
+  overflow:hidden;
+  border:1px solid var(--line);
+  border-radius:17px;
+  background:var(--surface-soft);
+}
+.console-history-heading{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:13px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+.console-history-heading>div{display:grid;gap:3px}
+.console-history-heading strong{font-size:10.5px}
+.console-history-heading small{color:var(--muted);font-size:8px}
+.console-history-heading button{
+  width:31px;
+  height:31px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  color:var(--blue);
+  background:var(--surface-soft);
+  cursor:pointer;
+  font:inherit;
+  font-size:15px;
+  font-weight:800;
+  line-height:1;
+}
+.console-history-heading button:disabled{opacity:.45;cursor:wait}
+.console-history-list{max-height:475px;overflow:auto}
+.console-history-item{display:grid;gap:6px;padding:11px 13px;border-bottom:1px solid var(--line)}
+.console-history-item:last-child{border-bottom:0}
+.console-history-item>div{display:flex;align-items:flex-start;justify-content:space-between;gap:9px}
+.console-history-item code{min-width:0;color:var(--text);font:700 8.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.console-history-item span{flex:0 0 auto;padding:3px 6px;border-radius:999px;color:#047857;background:rgba(16,185,129,.11);font-size:7px;font-weight:800}
+.console-history-item[data-status="failed"] span{color:#b91c1c;background:rgba(239,68,68,.1)}
+.console-history-item[data-status="running"] span{color:#a16207;background:rgba(245,158,11,.11)}
+[data-theme="dark"] .console-history-item span{color:#6ee7b7}
+[data-theme="dark"] .console-history-item[data-status="failed"] span{color:#fca5a5}
+[data-theme="dark"] .console-history-item[data-status="running"] span{color:#fcd34d}
+.console-history-item small{color:var(--muted);font-size:7.8px}
+.console-history-item p{margin:0;color:var(--danger);font-size:8px;line-height:1.5;overflow-wrap:anywhere}
+.console-history-empty{padding:25px 14px;color:var(--muted);font-size:9.5px;line-height:1.55;text-align:center}
+.console-history-empty.error{color:var(--danger)}
 .denied-card{padding:38px;text-align:center}
 .denied-card span{font-size:38px}
 .denied-card h2{margin:15px 0 7px}
@@ -756,6 +932,8 @@ a{color:inherit}
   .security-panel{grid-column:auto}
   .own-posts-panel{grid-column:auto}
   .permission-grid{grid-template-columns:1fr}
+  .console-layout{grid-template-columns:1fr}
+  .console-history-list{max-height:330px}
   .profile-summary{display:grid;grid-template-columns:auto 1fr;align-items:center;text-align:left;column-gap:18px}
   .avatar-shell{grid-row:1/5;margin:0}
   .summary-actions{grid-column:1/-1;grid-template-columns:repeat(2,1fr)}
@@ -792,6 +970,12 @@ a{color:inherit}
   .form-actions{display:grid;grid-template-columns:1fr}
   .own-post-item{align-items:stretch;flex-direction:column}
   .own-post-actions{flex-wrap:wrap}
+  .console-command-row{grid-template-columns:auto minmax(0,1fr)}
+  .console-command-row .button{grid-column:1/-1}
+  .console-titlebar small{display:none}
+  .console-confirm-card{align-items:stretch;flex-direction:column}
+  .console-confirm-card>div:last-child{display:grid;grid-template-columns:1fr 1fr}
+  .console-output{min-height:220px;max-height:360px}
 }
 
 .resend-confirmation{

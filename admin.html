@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/account.css?v=20260809-1">
+  <link rel="stylesheet" href="assets/account.css?v=20260824-1">
 </head>
 <body>
   <header class="account-topbar">
@@ -65,6 +65,11 @@
           <span aria-hidden="true">🛡️</span>
           <span><strong>Quyền theo role</strong><small>Bật hoặc tắt từng chức năng</small></span>
         </button>
+        <button id="consoleTab" class="admin-tab" type="button" role="tab"
+          aria-selected="false" aria-controls="consolePanel" data-admin-tab="console">
+          <span aria-hidden="true">⌨️</span>
+          <span><strong>Bảng lệnh</strong><small>Thao tác quản trị có nhật ký</small></span>
+        </button>
       </nav>
 
       <section id="accountsPanel" class="panel admin-panel" role="tabpanel"
@@ -103,9 +108,83 @@
         <div id="permissionLoading" class="loading-card">Đang tải ma trận quyền...</div>
         <div id="permissionGrid" class="permission-grid" hidden></div>
       </section>
+
+      <section id="consolePanel" class="panel admin-panel" role="tabpanel"
+        aria-labelledby="consoleTab" hidden>
+        <header class="admin-section-heading console-heading">
+          <div>
+            <span class="admin-section-kicker">Phần 3 · Chỉ quản trị viên</span>
+            <h2>Bảng lệnh quản trị</h2>
+            <p>Gửi các lệnh đã được giới hạn sẵn. Edge Function sẽ xác thực lại role admin,
+              trạng thái tài khoản và ghi nhật ký trước khi thực hiện.</p>
+          </div>
+          <span class="console-secure-badge">Đã khóa phía server</span>
+        </header>
+
+        <div class="console-safety-note">
+          <span aria-hidden="true">⚠️</span>
+          <p>Không hỗ trợ SQL tự do. Lệnh xóa phải xác nhận lần hai; media R2/Supabase được
+            xóa trước khi dữ liệu bài viết hoặc bình luận bị xóa.</p>
+        </div>
+
+        <div class="console-layout">
+          <div class="console-main">
+            <div class="console-window" aria-label="Bảng lệnh quản trị">
+              <div class="console-titlebar">
+                <span><i></i><i></i><i></i></span>
+                <strong>admin@chonhoctap</strong>
+                <small>allowlist mode</small>
+              </div>
+              <div id="consoleOutput" class="console-output" role="log" aria-live="polite"
+                tabindex="0">Sẵn sàng. Gõ help để xem danh sách lệnh.</div>
+              <form id="consoleForm" class="console-command-row">
+                <label for="consoleInput" aria-label="Lệnh quản trị">admin $</label>
+                <input id="consoleInput" type="text" list="consoleTargets"
+                  placeholder="user info @username" maxlength="500" autocomplete="off"
+                  spellcheck="false">
+                <button id="consoleRunButton" class="button" type="submit">Chạy lệnh</button>
+              </form>
+              <datalist id="consoleTargets"></datalist>
+            </div>
+
+            <div id="consoleConfirm" class="console-confirm-card" hidden>
+              <div>
+                <strong>Xác nhận lệnh xóa</strong>
+                <p id="consoleConfirmText"></p>
+              </div>
+              <div>
+                <button id="consoleCancelButton" class="button button-secondary" type="button">Hủy</button>
+                <button id="consoleConfirmButton" class="button button-danger" type="button">Xác nhận xóa</button>
+              </div>
+            </div>
+
+            <div class="console-examples" aria-label="Lệnh gợi ý">
+              <button type="button" data-console-command="help">help</button>
+              <button type="button" data-console-command="user info ">user info</button>
+              <button type="button" data-console-command="cooldown clear ">cooldown clear</button>
+              <button type="button" data-console-command="role set ">role set</button>
+              <button type="button" data-console-command="status set ">status set</button>
+              <button type="button" data-console-command="posts delete-all ">posts delete-all</button>
+            </div>
+          </div>
+
+          <aside class="console-history-panel">
+            <div class="console-history-heading">
+              <div>
+                <strong>Nhật ký gần đây</strong>
+                <small>20 lệnh mới nhất</small>
+              </div>
+              <button id="consoleRefreshButton" type="button" aria-label="Tải lại nhật ký">↻</button>
+            </div>
+            <div id="consoleHistory" class="console-history-list">
+              <div class="console-history-empty">Chưa tải nhật ký.</div>
+            </div>
+          </aside>
+        </div>
+      </section>
     </section>
   </main>
 
-  <script type="module" src="assets/admin-page.js?v=20260815-2"></script>
+  <script type="module" src="assets/admin-page.js?v=20260824-1"></script>
 </body>
 </html>

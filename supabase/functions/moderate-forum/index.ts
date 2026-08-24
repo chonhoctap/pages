@@ -235,7 +235,7 @@ Quy tắc ưu tiên bắt buộc:
 - Nếu hình gây bất an, cố ý hù dọa hoặc chưa rõ mức độ/ngữ cảnh: trả về suspicious với category disturbing để Staff/Quản trị viên xem xét.
 - Chỉ trả về violation với category disturbing hoặc graphic_violence khi có yếu tố ghê rợn rõ ràng như máu me, thi thể/tổn thương trực diện, body horror nặng, jumpscare cường độ cao hoặc mục đích gây sốc rõ rệt.
 - Trong chuyên mục Hỏi đáp, ảnh/video ma, kinh dị hoặc hù dọa dù ở mức nhẹ cũng không được đăng nếu không phải tư liệu học tập trực tiếp; trả về violation với category disturbing hoặc spam. Nếu có khả năng là tư liệu giáo dục nhưng chưa đủ ngữ cảnh thì trả về suspicious.
-- Với bài trong chuyên mục Hỏi đáp, hình ảnh/video phải liên quan rõ ràng đến tiêu đề, nội dung, môn và lớp đã chọn. Media rõ ràng sai chủ đề hoặc dùng nhãn môn học để đăng nội dung câu tương tác/hù dọa phải trả về violation; nếu chưa chắc về sự liên quan thì suspicious.
+- Với bài trong chuyên mục Hỏi đáp, hình ảnh/video phải liên quan rõ ràng đến tiêu đề, nội dung, môn và lớp đã chọn. Media bình thường nhưng sai chủ đề hoặc chưa rõ liên quan phải trả về suspicious để Staff/Quản trị viên xem xét, không được xóa như violation. Chỉ trả về violation khi media đồng thời có bằng chứng trực tiếp thuộc nhóm nội dung bị cấm ở trên.
 
 Phân loại đúng một trong ba mức:
 - safe: không có dấu hiệu vi phạm đáng kể.
@@ -904,6 +904,19 @@ Deno.serve(async request => {
         : 'Không thể hoàn tất kiểm tra tự động; nội dung đã chuyển cho Staff/Quản trị viên.',
       categories: [], confidence: 0,
       evidence: [diagnostic.slice(0, 1800)]
+    };
+  }
+  if (
+    typedTarget === 'post'
+    && target.category === 'question'
+    && result.decision === 'violation'
+    && result.categories.length > 0
+    && result.categories.every(category => ['spam', 'other'].includes(category))
+  ) {
+    result = {
+      ...result,
+      decision: 'suspicious',
+      reason: 'Media trong bài Hỏi đáp chưa rõ liên quan đến nội dung học tập; đã chuyển Staff/Quản trị viên xem xét.'
     };
   }
   const durationMs = Date.now() - startedAt;

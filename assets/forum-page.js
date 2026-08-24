@@ -349,8 +349,9 @@ function adminMediaLabel(mediaItems = []) {
     .join(' và ');
 }
 
-function canReviewContent() {
-  return canModerate();
+function canReviewContent(mediaItems = []) {
+  if (!canModerate()) return false;
+  return !containsAdminMedia(mediaItems) || isForumAdmin();
 }
 
 function canReviewComment(comment) {
@@ -2054,8 +2055,13 @@ async function markSolved(post, card, button) {
 }
 
 async function reviewPost(post, action, button) {
-  if (!canModerate()) {
-    setInfo('Chỉ Staff hoặc quản trị viên được duyệt bài.', 'error');
+  if (!canReviewContent(post.mediaItems)) {
+    setInfo(
+      containsAdminMedia(post.mediaItems)
+        ? 'Bài viết có âm thanh chỉ quản trị viên được duyệt.'
+        : 'Chỉ Staff hoặc quản trị viên được duyệt bài.',
+      'error'
+    );
     return;
   }
   const note = action === 'reject'

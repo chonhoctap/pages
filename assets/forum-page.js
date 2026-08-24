@@ -391,7 +391,9 @@ function canReviewComment() {
 }
 
 function userFacingModerationReason(value, fallback) {
-  return String(value || fallback).replace(/Gemini/giu, 'Hệ thống');
+  const message = String(value || fallback);
+  if (/Gemini.*(?:giới hạn|quota)|(?:HTTP\s*)?429/iu.test(message)) return message;
+  return message.replace(/Gemini/giu, 'Hệ thống');
 }
 
 async function queueHumanReview(targetType, targetId) {
@@ -426,6 +428,12 @@ function moderateInBackground(targetType, targetId, onSettled = null, onDecision
             ? 'Bài viết vi phạm tiêu chuẩn cộng đồng nên đã bị xóa.'
             : 'Bình luận vi phạm tiêu chuẩn cộng đồng nên đã bị xóa.',
           'error'
+        );
+      } else if (data?.quotaLimited) {
+        decision = 'quota';
+        setInfo(
+          'Gemini đã đạt giới hạn yêu cầu tạm thời (HTTP 429); nội dung đã chuyển cho Staff/Quản trị viên xem xét.',
+          'info'
         );
       } else if (data?.decision === 'manual') {
         decision = 'manual';
@@ -1175,6 +1183,8 @@ async function publishPost(event) {
         finishPostProgress('Bài viết đã được hệ thống duyệt và công khai.');
       } else if (decision === 'violation') {
         finishPostProgress('Bài viết vi phạm và đã bị xóa.', 'error');
+      } else if (decision === 'quota') {
+        finishPostProgress('Gemini đã đạt giới hạn yêu cầu tạm thời; bài viết đã chuyển cho Staff/Quản trị viên xem xét.');
       } else {
         finishPostProgress('Đã chuyển bài viết cho Staff/Quản trị viên xem xét.');
       }

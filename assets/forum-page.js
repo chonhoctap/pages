@@ -586,6 +586,19 @@ function finishPostProgress(message, status = 'success') {
   }, status === 'error' ? 12000 : 7000);
 }
 
+function hidePostProgress() {
+  clearPostProgressTimers();
+  postProgressState = null;
+  if (!elements.postProgress) return;
+  elements.postProgress.hidden = true;
+  elements.postProgress.dataset.status = 'active';
+}
+
+function isPostCooldownError(error) {
+  return /(?:chỉ có thể đăng một bài|sau mỗi|sau)\s*15\s*phút|15\s*phút/iu
+    .test(String(error?.message || error || ''));
+}
+
 function relativeTime(value) {
   const date = new Date(value);
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);
@@ -867,24 +880,6 @@ async function openComposer() {
     setInfo('Role của bạn hiện không có quyền đăng bài.', 'error');
     return;
   }
-  if (!editingPost && !hasUnlimitedVipPosting()) {
-    try {
-      await refreshPostCooldown();
-    } catch (error) {
-      setInfo(`Không thể đồng bộ thời gian chờ: ${humanizeAuthError(error)}`, 'error');
-      return;
-    }
-  }
-  const remaining = editingPost ? 0 : cooldownSeconds();
-  if (!editingPost && (!postCooldownServerReady || remaining > 0)) {
-    setInfo(
-      remaining > 0
-        ? `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`
-        : 'Hệ thống đang đồng bộ thời gian chờ. Vui lòng thử lại sau giây lát.',
-      'error'
-    );
-    return;
-  }
   if (typeof elements.composerDialog.showModal === 'function') {
     elements.composerDialog.showModal();
   } else {
@@ -1062,26 +1057,6 @@ async function publishPost(event) {
     return;
   }
   const editing = editingPost;
-  if (!editing && !hasUnlimitedVipPosting()) {
-    try {
-      // Kiểm tra lại ngay trước khi tải media và INSERT để nút, frontend và
-      // trigger database luôn dùng cùng trạng thái cooldown từ Supabase.
-      await refreshPostCooldown();
-    } catch (error) {
-      setInfo(`Không thể đồng bộ thời gian chờ: ${humanizeAuthError(error)}`, 'error');
-      return;
-    }
-  }
-  const remaining = editing ? 0 : cooldownSeconds();
-  if (!editing && (!postCooldownServerReady || remaining > 0)) {
-    setInfo(
-      remaining > 0
-        ? `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`
-        : 'Hệ thống đang đồng bộ thời gian chờ. Vui lòng thử lại sau giây lát.',
-      'error'
-    );
-    return;
-  }
   await previewPreparePromise;
 
   const title = elements.title.value.trim();
@@ -1157,25 +1132,19 @@ async function publishPost(event) {
     });
     if (mentionError) throw mentionError;
 
-    elements.form.reset();
-    resetPreview();
-    editingPost = null;
-    elements.media.disabled = false;
-    elements.publish.textContent = 'Đăng bài';
-    delete elements.publish.dataset.originalText;
-    configureAccount();
-    setInfo(
-      editing
-        ? 'Đã lưu thay đổi. Hệ thống đang kiểm tra lại bài viết.'
-        : 'Đã gửi bài viết. Hệ thống đang kiểm tra trước khi công khai.',
-      'info'
-    );
     if (!editing && !hasUnlimitedVipPosting()) {
       postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
       postCooldownServerReady = false;
       rememberPostCooldown(postCooldownUntil);
     }
     updatePostCooldownUi();
+    closeComposer();
+    setInfo(
+      editing
+        ? 'Đã lưu thay đổi. Hệ thống đang kiểm tra lại bài viết.'
+        : 'Đã gửi bài viết. Hệ thống đang kiểm tra trước khi công khai.',
+      'info'
+    );
     await loadPosts();
     startModerationProgress(uploaded);
     moderateInBackground('post', createdPostId, loadPosts, decision => {
@@ -1190,15 +1159,21 @@ async function publishPost(event) {
       }
     });
   } catch (error) {
+    const cooldownRejected = !editing && isPostCooldownError(error);
     if (createdPostId && !editing) {
       await supabase.from('forum_posts').delete().eq('id', createdPostId);
     }
     await Promise.allSettled(
       uploaded.map(item => removeStoredMedia(item.path, 'forum-media'))
     );
-    if (/15\s*phút/iu.test(error?.message || '')) {
+    if (cooldownRejected) {
       postCooldownServerReady = false;
       await refreshPostCooldown().catch(() => {});
+      updatePostCooldownUi();
+      hidePostProgress();
+      closeComposer();
+      setInfo('Bài viết trước đã được ghi nhận. Hãy chờ bộ đếm trên nút Đăng bài kết thúc.', 'info');
+      return;
     }
     setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
     finishPostProgress(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');

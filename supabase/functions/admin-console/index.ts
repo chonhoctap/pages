@@ -127,10 +127,10 @@ function parseCommand(commandText: string): ParsedCommand {
     return { action: 'comment_cooldown.clear', target: third, destructive: false };
   }
   if (first.toLowerCase() === 'role' && second.toLowerCase() === 'set' && third && fourth && parts.length === 4) {
-    return { action: 'role.set', target: third, value: fourth.toLowerCase(), destructive: false };
+    return { action: 'role.set', target: third, value: fourth.toLowerCase(), destructive: true };
   }
   if (first.toLowerCase() === 'status' && second.toLowerCase() === 'set' && third && fourth && parts.length === 4) {
-    return { action: 'status.set', target: third, value: fourth.toLowerCase(), destructive: false };
+    return { action: 'status.set', target: third, value: fourth.toLowerCase(), destructive: true };
   }
   if (first.toLowerCase() === 'posts' && second.toLowerCase() === 'delete-all' && third && parts.length === 3) {
     return { action: 'posts.delete_all', target: third, destructive: true };
@@ -458,7 +458,7 @@ Deno.serve(async request => {
     return json(request, { error: errorMessage(error) }, error instanceof AppError ? error.status : 400);
   }
   if (parsed.destructive && body.confirm !== true) {
-    return json(request, { error: 'Lệnh xóa cần xác nhận trên giao diện quản trị.', confirmationRequired: true }, 409);
+    return json(request, { error: 'Lệnh nhạy cảm cần xác nhận trên giao diện quản trị.', confirmationRequired: true }, 409);
   }
 
   let auditId = '';

@@ -11,25 +11,34 @@ export const VIP_IMAGE_OUTPUT_LIMIT = 50 * MB;
 export const VIP_VIDEO_OUTPUT_LIMIT = 50 * MB;
 export const VIP_AUDIO_OUTPUT_LIMIT = 50 * MB;
 export const MEDIA_TOTAL_LIMIT = 50 * MB;
+const R2_MULTIPART_THRESHOLD = 40 * MB;
+const R2_MULTIPART_CHUNK_SIZE = 8 * MB;
 
-export function mediaLimitsForRole(role) {
+export function mediaLimitsForRole(role, scope = 'post') {
   const admin = role === 'admin';
+  const unlimitedVipPost = role === 'vip' && scope === 'post';
   const elevated = ['vip', 'moderator'].includes(role);
   return {
     elevated: elevated || admin,
     admin,
-    maxImages: admin ? Infinity : elevated ? 5 : 2,
-    maxVideos: admin ? Infinity : 1,
-    maxAudios: admin ? Infinity : 1,
-    imageBytes: admin ? 50 * MB : elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
-    totalMediaBytes: MEDIA_TOTAL_LIMIT,
-    videoBytes: admin ? 50 * MB : VIP_VIDEO_OUTPUT_LIMIT,
-    audioBytes: admin ? 50 * MB : elevated ? VIP_AUDIO_OUTPUT_LIMIT : AUDIO_OUTPUT_LIMIT,
+    unlimitedVipPost,
+    maxImages: unlimitedVipPost || admin ? Infinity : elevated ? 5 : 2,
+    maxVideos: unlimitedVipPost || admin ? Infinity : 1,
+    maxAudios: unlimitedVipPost || admin ? Infinity : 1,
+    imageBytes: unlimitedVipPost
+      ? Infinity
+      : admin ? 50 * MB : elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
+    totalMediaBytes: unlimitedVipPost ? Infinity : MEDIA_TOTAL_LIMIT,
+    videoBytes: unlimitedVipPost ? Infinity : admin ? 50 * MB : VIP_VIDEO_OUTPUT_LIMIT,
+    videoSourceBytes: unlimitedVipPost ? Infinity : VIDEO_SOURCE_LIMIT,
+    audioBytes: unlimitedVipPost
+      ? Infinity
+      : admin ? 50 * MB : elevated ? VIP_AUDIO_OUTPUT_LIMIT : AUDIO_OUTPUT_LIMIT,
     videoDuration: Infinity,
     audioDuration: Infinity,
-    maxWidth: 1280,
-    maxHeight: 720,
-    qualityLabel: '720p'
+    maxWidth: unlimitedVipPost ? Infinity : 1280,
+    maxHeight: unlimitedVipPost ? Infinity : 720,
+    qualityLabel: unlimitedVipPost ? 'chất lượng nguyên bản' : '720p'
   };
 }
 
@@ -70,9 +79,9 @@ async function decodeImage(file) {
   }
 }
 
-export async function optimizeImage(file, role = 'member') {
+export async function optimizeImage(file, role = 'member', scope = 'post') {
   if (!file?.type?.startsWith('image/')) return file;
-  const limits = mediaLimitsForRole(role);
+  const limits = mediaLimitsForRole(role, scope);
   if (file.size > limits.imageBytes) {
     throw new Error(
       `Ảnh phải nhỏ hơn ${Math.round(limits.imageBytes / MB)} MB. `
@@ -374,8 +383,9 @@ export async function prepareMedia(file, role = 'member', options = {}) {
   if (!kind) {
     throw new Error('Chỉ hỗ trợ ảnh, video hoặc âm thanh.');
   }
-  const limits = mediaLimitsForRole(role);
-  if (kind === 'image') return optimizeImage(file, role);
+  const scope = options.scope || 'post';
+  const limits = mediaLimitsForRole(role, scope);
+  if (kind === 'image') return optimizeImage(file, role, scope);
   if (kind === 'audio') {
     if (file.size > limits.audioBytes) {
       throw new Error(
@@ -394,14 +404,15 @@ export async function prepareMedia(file, role = 'member', options = {}) {
     }
     return file;
   }
-  if (file.size > VIDEO_SOURCE_LIMIT) {
+  if (file.size > limits.videoSourceBytes) {
     throw new Error(
-      `Video gốc phải nhỏ hơn ${Math.round(VIDEO_SOURCE_LIMIT / MB)} MB để nén.`
+      `Video gốc phải nhỏ hơn ${Math.round(limits.videoSourceBytes / MB)} MB để nén.`
     );
   }
   if (!['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type)) {
     throw new Error('Chỉ hỗ trợ video MP4, WebM hoặc MOV.');
   }
+  if (limits.unlimitedVipPost) return file;
   const metadata = await mediaMetadata(file);
   const needsTranscode = !fitsFrame(metadata, limits) || file.size > limits.videoBytes;
   if (!needsTranscode) return file;
@@ -423,6 +434,9 @@ async function apiError(response) {
 
 export async function uploadToR2(session, file, options = {}) {
   if (!r2Enabled()) throw new Error('Cloudflare R2 chưa được cấu hình.');
+  if (file.size > R2_MULTIPART_THRESHOLD) {
+    return uploadMultipartToR2(session, file, options);
+  }
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open('POST', `${MEDIA_API_URL}/api/media`);
@@ -455,6 +469,101 @@ export async function uploadToR2(session, file, options = {}) {
     };
     request.send(file);
   });
+}
+
+async function mediaApiJson(path, session, init = {}) {
+  const response = await fetch(`${MEDIA_API_URL}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      ...(init.headers || {})
+    }
+  });
+  if (!response.ok) throw new Error(await apiError(response));
+  return response.status === 204 ? {} : response.json();
+}
+
+async function uploadMultipartPart(session, file, upload, partNumber, start, end) {
+  const chunk = file.slice(start, end);
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await mediaApiJson('/api/media/multipart/part', session, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+          'X-Upload-Key': upload.key,
+          'X-Upload-Id': upload.uploadId,
+          'X-Part-Number': String(partNumber)
+        },
+        body: chunk
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        await new Promise(resolve => window.setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError || new Error('Không thể tải một phần của tệp lên R2.');
+}
+
+async function uploadMultipartToR2(session, file, options = {}) {
+  const chunkSize = Math.max(
+    R2_MULTIPART_CHUNK_SIZE,
+    Math.ceil(file.size / 9999 / MB) * MB
+  );
+  if (chunkSize > 64 * MB) {
+    throw new Error('Tệp quá lớn để tải an toàn bằng trình duyệt hiện tại.');
+  }
+  const upload = await mediaApiJson('/api/media/multipart/start', session, {
+    method: 'POST',
+    headers: {
+      'X-Media-Scope': options.scope || 'post',
+      'X-Post-Id': options.postId || '',
+      'X-File-Name': file.name || '',
+      'X-File-Type': file.type,
+      'X-File-Size': String(file.size)
+    }
+  });
+
+  const parts = [];
+  let uploadedBytes = 0;
+  try {
+    for (let start = 0, partNumber = 1; start < file.size; partNumber += 1) {
+      const end = Math.min(file.size, start + chunkSize);
+      const part = await uploadMultipartPart(
+        session,
+        file,
+        upload,
+        partNumber,
+        start,
+        end
+      );
+      parts.push({ partNumber: part.partNumber, etag: part.etag });
+      uploadedBytes = end;
+      options.onProgress?.(uploadedBytes, file.size);
+      start = end;
+    }
+    const completed = await mediaApiJson('/api/media/multipart/complete', session, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: upload.key,
+        uploadId: upload.uploadId,
+        parts
+      })
+    });
+    options.onProgress?.(file.size, file.size);
+    return completed;
+  } catch (error) {
+    await mediaApiJson('/api/media/multipart/abort', session, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: upload.key, uploadId: upload.uploadId })
+    }).catch(() => {});
+    throw error;
+  }
 }
 
 export async function deleteFromR2(session, key) {

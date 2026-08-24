@@ -12,10 +12,12 @@ Worker này là cổng duy nhất để diễn đàn Chốn Học Tập tải l�
 - Chủ tệp hoặc admin mới được xóa; moderator không thể xóa tệp của người khác.
 - Tác vụ dọn bài hết hạn chỉ được xóa hàng loạt qua `R2_CLEANUP_SECRET` dùng
   riêng giữa GitHub Actions và Worker.
-- Mỗi tài khoản tối đa 12 lượt tải lên trong một phút để hạn chế lạm dụng.
-- Thành viên: ảnh tối đa 5 MB/tệp, không video, âm thanh 2 MB.
-- VIP/moderator: ảnh 5 MB, video 50 MB, âm thanh 5 MB.
-- Admin: tối đa kỹ thuật 50 MB/tệp; giới hạn số lượng/thời lượng được DB kiểm tra.
+- Mỗi tài khoản thường tối đa 12 lượt tải lên trong một phút để hạn chế lạm dụng.
+- Member/moderator và bình luận VIP vẫn chịu hạn mức theo giao diện và database.
+- Bài viết VIP không giới hạn số lượng, dung lượng, thời lượng hoặc độ phân giải
+  media ở tầng ứng dụng và không bị rate limiter tải tệp.
+- Tệp bài viết VIP lớn hơn 40 MB được chia nhỏ và ghép trực tiếp bằng R2
+  Multipart Upload, không nén video xuống 720p.
 - CORS chỉ mở cho `https://chonhoctap.github.io` và localhost khi phát triển.
 
 ## Thiết lập lần đầu
@@ -63,3 +65,7 @@ Không cần bật Public Development URL cho bucket. Người xem nhận tệp 
 Endpoint `POST /api/cleanup` chỉ nhận tối đa 500 object key bắt đầu bằng
 `post/` hoặc `comment/`. Tác vụ sẽ thử lại khi Worker lỗi và không xóa dòng bài
 viết khỏi Supabase nếu R2 chưa xác nhận xóa đủ media.
+
+Các endpoint `/api/media/multipart/*` chỉ chấp nhận lượt tải đã xác thực và
+object key phải thuộc đúng tài khoản. Phần đầu tiên vẫn được kiểm tra chữ ký
+định dạng trước khi R2 nhận tệp.

@@ -19,7 +19,7 @@ import {
   uploadToR2,
   uploadToSupabaseResumable,
   deleteFromR2
-} from './media-storage.js?v=20260824-3';
+} from './media-storage.js?v=20260824-4';
 
 initThemeToggle();
 
@@ -198,7 +198,12 @@ function canInteract() {
   return currentProfile?.account_status === 'active';
 }
 
+function hasUnlimitedVipPosting() {
+  return currentProfile?.role === 'vip';
+}
+
 function cooldownSeconds() {
+  if (hasUnlimitedVipPosting()) return 0;
   return Math.max(0, Math.ceil((postCooldownUntil - Date.now()) / 1000));
 }
 
@@ -292,6 +297,12 @@ async function refreshCommentCooldown() {
 
 function refreshPostCooldown() {
   if (!session?.user?.id || !canInteract()) return Promise.resolve();
+  if (hasUnlimitedVipPosting()) {
+    postCooldownUntil = 0;
+    rememberPostCooldown(0);
+    updatePostCooldownUi();
+    return Promise.resolve();
+  }
   if (postCooldownRefreshPromise) return postCooldownRefreshPromise;
 
   postCooldownRefreshPromise = (async () => {
@@ -641,8 +652,8 @@ function uniqueMediaPath(file, prefix = '') {
   return `${session.user.id}/${prefix}${Date.now()}-${uniqueId}.${extension}`;
 }
 
-function currentMediaLimits() {
-  return mediaLimitsForRole(currentProfile?.role || 'member');
+function currentMediaLimits(scope = 'post') {
+  return mediaLimitsForRole(currentProfile?.role || 'member', scope);
 }
 
 function releasePreparedItems(items) {
@@ -660,8 +671,8 @@ function resetPreview() {
   elements.mediaPreview.hidden = true;
 }
 
-function selectionCountError(files) {
-  const limits = currentMediaLimits();
+function selectionCountError(files, scope = 'post') {
+  const limits = currentMediaLimits(scope);
   const imageCount = files.filter(file => mediaKind(file) === 'image').length;
   const videoCount = files.filter(file => mediaKind(file) === 'video').length;
   const audioCount = files.filter(file => mediaKind(file) === 'audio').length;
@@ -724,7 +735,7 @@ function renderPostSelectionPreview() {
   });
 }
 
-async function prepareSelectedFiles(fileList, sequenceCheck) {
+async function prepareSelectedFiles(fileList, sequenceCheck, scope = 'post') {
   const sourceFiles = [...(fileList || [])];
   const unsupported = sourceFiles.find(file => !mediaKind(file));
   if (unsupported) {
@@ -732,7 +743,7 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
       'Chỉ hỗ trợ ảnh JPG/PNG/WebP/GIF, video MP4/WebM/MOV hoặc âm thanh MP3/M4A/OGG/WebM/WAV.'
     );
   }
-  const countError = selectionCountError(sourceFiles);
+  const countError = selectionCountError(sourceFiles, scope);
   if (countError) throw new Error(countError);
 
   const preparedItems = [];
@@ -742,6 +753,7 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
         source,
         currentProfile?.role || 'member',
         {
+          scope,
           onProgress: progress => {
             if (sequenceCheck()) {
               const compressionStage = `Nén ${source.name} xuống 720p...`;
@@ -768,7 +780,7 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
         const sourceMetadata = await mediaMetadata(source);
         metadata.durationSeconds = sourceMetadata.durationSeconds;
       }
-      const limits = currentMediaLimits();
+      const limits = currentMediaLimits(scope);
       const landscape = (metadata.width || 0) >= (metadata.height || 0);
       const needsFrame = mediaKind(prepared) === 'video';
       const fitsFrame = !needsFrame || (metadata.width && metadata.height && (
@@ -792,7 +804,7 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
         previewUrl: URL.createObjectURL(prepared)
       });
     }
-    const limits = currentMediaLimits();
+    const limits = currentMediaLimits(scope);
     const preparedMediaBytes = preparedItems
       .reduce((sum, item) => sum + item.file.size, 0);
     if (
@@ -824,7 +836,8 @@ async function showMediaPreview(fileList) {
     setInfo(`Đang xử lý media theo giới hạn ${limits.qualityLabel}...`, 'info');
     const preparedItems = await prepareSelectedFiles(
       fileList,
-      () => sequence === previewPrepareSequence
+      () => sequence === previewPrepareSequence,
+      'post'
     );
     if (sequence !== previewPrepareSequence) return;
     selectedPostMedia = preparedItems;
@@ -957,6 +970,7 @@ async function uploadPreparedMedia(
     const uploaded = await uploadToR2(session, file, {
       scope,
       postId,
+      role: currentProfile?.role || 'member',
       onProgress
     });
     return {
@@ -1132,7 +1146,7 @@ async function publishPost(event) {
         : 'Đã gửi bài viết. Gemini đang kiểm tra trước khi công khai.',
       'info'
     );
-    if (!editing) {
+    if (!editing && !hasUnlimitedVipPosting()) {
       postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
       rememberPostCooldown(postCooldownUntil);
     }
@@ -2109,7 +2123,7 @@ function renderPost(post) {
     const task = showCommentMediaPreview(commentForm, commentMediaInput.files);
     commentPreparePromises.set(commentForm, task);
   });
-  const limits = currentMediaLimits();
+  const limits = currentMediaLimits('comment');
   card.querySelector('.comment-media-note').textContent = mediaLimitDescription(limits);
   commentForm.addEventListener('submit', event => addComment(event, post, card));
   card.querySelector('.replying-indicator button')
@@ -2545,7 +2559,8 @@ async function showCommentMediaPreview(form, fileList) {
     setInfo('Đang xử lý media bình luận...', 'info');
     const items = await prepareSelectedFiles(
       selectedFiles,
-      () => sequence === commentPrepareSequences.get(form)
+      () => sequence === commentPrepareSequences.get(form),
+      'comment'
     );
     if (sequence !== commentPrepareSequences.get(form)) return;
     commentPreparedFiles.set(form, items);
@@ -3139,6 +3154,10 @@ function configureAccount() {
 }
 
 function mediaLimitDescription(limits) {
+  if (limits.unlimitedVipPost) {
+    return 'Đặc quyền VIP: không giới hạn số lượng hoặc dung lượng tệp · '
+      + 'video/âm thanh không giới hạn thời lượng · giữ nguyên độ phân giải video';
+  }
   if (limits.admin) {
     return 'Không giới hạn số lượng · tổng tất cả tệp 50 MB · video/âm thanh không giới hạn thời lượng · video tự nén về 720p';
   }

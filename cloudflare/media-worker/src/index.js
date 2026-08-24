@@ -19,10 +19,15 @@ const MEDIA_TYPES = new Map([
   ['audio/x-wav', { kind: 'audio', extension: 'wav' }]
 ]);
 
-function mediaLimit(role, kind) {
+function mediaLimit(role, kind, scope = 'post') {
+  if (role === 'vip' && scope === 'post') return Infinity;
   if (role === 'admin') return ADMIN_LIMITS[kind];
   if (['vip', 'moderator'].includes(role)) return VIP_LIMITS[kind];
   return MEMBER_LIMITS[kind];
+}
+
+function unlimitedVipPost(profile, scope) {
+  return profile?.role === 'vip' && scope === 'post';
 }
 
 function mediaLabel(kind) {
@@ -43,9 +48,10 @@ function corsHeaders(request, env) {
     || origin === 'http://127.0.0.1:8000';
   return {
     'Access-Control-Allow-Origin': allowed ? origin : env.ALLOWED_ORIGIN,
-    'Access-Control-Allow-Methods': 'GET, HEAD, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers':
-      'Authorization, Content-Type, X-Media-Scope, X-Post-Id, X-File-Name, X-Cleanup-Secret',
+      'Authorization, Content-Type, X-Media-Scope, X-Post-Id, X-File-Name, '
+      + 'X-File-Type, X-File-Size, X-Upload-Key, X-Upload-Id, X-Part-Number, X-Cleanup-Secret',
     'Access-Control-Max-Age': '86400',
     'Access-Control-Expose-Headers': 'Content-Length, Content-Range, ETag',
     Vary: 'Origin'
@@ -187,7 +193,11 @@ function mediaKey(scope, ownerId, postId, extension) {
 
 async function upload(request, env) {
   const { user, profile } = await authenticate(request, env);
-  if (env.UPLOAD_RATE_LIMITER) {
+  const scope = request.headers.get('X-Media-Scope');
+  if (!['post', 'comment'].includes(scope)) {
+    return errorResponse(request, env, 'Loại tệp tải lên không hợp lệ.');
+  }
+  if (env.UPLOAD_RATE_LIMITER && !unlimitedVipPost(profile, scope)) {
     const { success } = await env.UPLOAD_RATE_LIMITER.limit({ key: user.id });
     if (!success) {
       return errorResponse(
@@ -197,10 +207,6 @@ async function upload(request, env) {
         429
       );
     }
-  }
-  const scope = request.headers.get('X-Media-Scope');
-  if (!['post', 'comment'].includes(scope)) {
-    return errorResponse(request, env, 'Loại tệp tải lên không hợp lệ.');
   }
 
   const postId = cleanPostId(request.headers.get('X-Post-Id'));
@@ -223,7 +229,7 @@ async function upload(request, env) {
   }
 
   const declaredLength = Number(request.headers.get('Content-Length') || 0);
-  const limit = mediaLimit(profile.role, media.kind);
+  const limit = mediaLimit(profile.role, media.kind, scope);
   const label = mediaLabel(media.kind);
   if (declaredLength > limit) {
     return errorResponse(
@@ -271,6 +277,164 @@ async function upload(request, env) {
     size: body.byteLength,
     provider: 'r2'
   }, 201);
+}
+
+function ownedUploadKey(key, userId) {
+  const cleaned = cleanR2Key(key);
+  if (!cleaned) return '';
+  const [scope, ownerId] = cleaned.split('/');
+  return ['post', 'comment'].includes(scope) && ownerId === userId ? cleaned : '';
+}
+
+function validUploadId(value) {
+  return typeof value === 'string'
+    && value.length >= 8
+    && value.length <= 1024
+    && !/[\u0000-\u001f\u007f]/u.test(value)
+    ? value
+    : '';
+}
+
+function multipartMedia(request) {
+  const contentType = (request.headers.get('X-File-Type') || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  return { contentType, media: MEDIA_TYPES.get(contentType) };
+}
+
+async function startMultipartUpload(request, env) {
+  const { user, profile } = await authenticate(request, env);
+  const scope = request.headers.get('X-Media-Scope');
+  if (!['post', 'comment'].includes(scope)) {
+    return errorResponse(request, env, 'Loại tệp tải lên không hợp lệ.');
+  }
+  if (env.UPLOAD_RATE_LIMITER && !unlimitedVipPost(profile, scope)) {
+    const { success } = await env.UPLOAD_RATE_LIMITER.limit({ key: user.id });
+    if (!success) {
+      return errorResponse(request, env, 'Bạn tải tệp quá nhanh. Hãy đợi một phút rồi thử lại.', 429);
+    }
+  }
+
+  const postId = cleanPostId(request.headers.get('X-Post-Id'));
+  if (scope === 'comment' && !postId) {
+    return errorResponse(request, env, 'Thiếu mã bài viết cho tệp bình luận.');
+  }
+  const { contentType, media } = multipartMedia(request);
+  if (!media) {
+    return errorResponse(request, env, 'Định dạng tệp tải lên không được hỗ trợ.', 415);
+  }
+  const fileSize = Number(request.headers.get('X-File-Size'));
+  if (!Number.isSafeInteger(fileSize) || fileSize <= 0) {
+    return errorResponse(request, env, 'Dung lượng tệp không hợp lệ.');
+  }
+  const limit = mediaLimit(profile.role, media.kind, scope);
+  if (fileSize > limit) {
+    return errorResponse(
+      request,
+      env,
+      `${mediaLabel(media.kind)} vượt quá ${megabyteLabel(limit)} MB.`,
+      413
+    );
+  }
+
+  const key = mediaKey(scope, user.id, postId, media.extension);
+  const multipart = await env.MEDIA_BUCKET.createMultipartUpload(key, {
+    httpMetadata: {
+      contentType,
+      cacheControl: 'public, max-age=31536000, immutable',
+      contentDisposition: 'inline'
+    },
+    customMetadata: {
+      ownerId: user.id,
+      ownerRole: profile.role || 'member',
+      scope,
+      postId,
+      mediaKind: media.kind,
+      declaredSize: String(fileSize),
+      originalName: (request.headers.get('X-File-Name') || '').slice(0, 160)
+    }
+  });
+  return json(request, env, { key: multipart.key, uploadId: multipart.uploadId }, 201);
+}
+
+async function uploadMultipartPart(request, env) {
+  const { user } = await authenticate(request, env);
+  const key = ownedUploadKey(request.headers.get('X-Upload-Key') || '', user.id);
+  const uploadId = validUploadId(request.headers.get('X-Upload-Id'));
+  const partNumber = Number(request.headers.get('X-Part-Number'));
+  if (!key || !uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10000) {
+    return errorResponse(request, env, 'Thông tin phần tải lên không hợp lệ.');
+  }
+
+  const body = await request.arrayBuffer();
+  if (!body.byteLength) return errorResponse(request, env, 'Phần tải lên không có dữ liệu.');
+  if (partNumber === 1) {
+    const contentType = (request.headers.get('Content-Type') || '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (!MEDIA_TYPES.has(contentType) || !signatureMatches(new Uint8Array(body.slice(0, 16)), contentType)) {
+      return errorResponse(request, env, 'Nội dung tệp không khớp với định dạng đã khai báo.', 415);
+    }
+  }
+
+  const multipart = env.MEDIA_BUCKET.resumeMultipartUpload(key, uploadId);
+  const part = await multipart.uploadPart(partNumber, body);
+  return json(request, env, { partNumber: part.partNumber, etag: part.etag });
+}
+
+async function multipartPayload(request, userId) {
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return null;
+  }
+  const key = ownedUploadKey(payload?.key || '', userId);
+  const uploadId = validUploadId(payload?.uploadId);
+  return key && uploadId ? { ...payload, key, uploadId } : null;
+}
+
+async function completeMultipartUpload(request, env) {
+  const { user } = await authenticate(request, env);
+  const payload = await multipartPayload(request, user.id);
+  if (!payload || !Array.isArray(payload.parts) || !payload.parts.length || payload.parts.length > 10000) {
+    return errorResponse(request, env, 'Danh sách phần tải lên không hợp lệ.');
+  }
+  const parts = payload.parts.map(part => ({
+    partNumber: Number(part?.partNumber),
+    etag: typeof part?.etag === 'string' ? part.etag : ''
+  }));
+  if (parts.some(part => (
+    !Number.isInteger(part.partNumber)
+    || part.partNumber < 1
+    || part.partNumber > 10000
+    || !part.etag
+  ))) {
+    return errorResponse(request, env, 'Danh sách phần tải lên chứa dữ liệu sai.');
+  }
+
+  const multipart = env.MEDIA_BUCKET.resumeMultipartUpload(payload.key, payload.uploadId);
+  await multipart.complete(parts);
+  const object = await env.MEDIA_BUCKET.head(payload.key);
+  if (!object) throw new Error('R2 không xác nhận tệp sau khi ghép.');
+  return json(request, env, {
+    path: payload.key,
+    url: `${new URL(request.url).origin}/media/${encodedKey(payload.key)}`,
+    type: object.customMetadata?.mediaKind || 'file',
+    size: object.size,
+    provider: 'r2'
+  }, 201);
+}
+
+async function abortMultipartUpload(request, env) {
+  const { user } = await authenticate(request, env);
+  const payload = await multipartPayload(request, user.id);
+  if (!payload) return errorResponse(request, env, 'Thông tin lượt tải lên không hợp lệ.');
+  const multipart = env.MEDIA_BUCKET.resumeMultipartUpload(payload.key, payload.uploadId);
+  await multipart.abort();
+  return new Response(null, { status: 204, headers: corsHeaders(request, env) });
 }
 
 function keyFromPath(pathname, prefix) {
@@ -416,6 +580,18 @@ export default {
     try {
       if (request.method === 'POST' && url.pathname === '/api/media') {
         return await upload(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/media/multipart/start') {
+        return await startMultipartUpload(request, env);
+      }
+      if (request.method === 'PUT' && url.pathname === '/api/media/multipart/part') {
+        return await uploadMultipartPart(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/media/multipart/complete') {
+        return await completeMultipartUpload(request, env);
+      }
+      if (request.method === 'POST' && url.pathname === '/api/media/multipart/abort') {
+        return await abortMultipartUpload(request, env);
       }
       if (request.method === 'POST' && url.pathname === '/api/cleanup') {
         return await cleanupMedia(request, env);

@@ -317,7 +317,7 @@ async function userInfo(target: Profile) {
     user: target,
     counts: { posts: postCount || 0, comments: commentCount || 0 },
     cooldowns: {
-      post: postAvailableAt && postAvailableAt.getTime() > Date.now()
+      post: target.role !== 'vip' && postAvailableAt && postAvailableAt.getTime() > Date.now()
         ? postAvailableAt.toISOString()
         : null,
       comment: commentAvailableAt && commentAvailableAt.getTime() > Date.now()

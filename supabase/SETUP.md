@@ -125,9 +125,10 @@ chuyển tệp mới sang Cloudflare R2 sau khi cấu hình Worker.
 3. Chép URL `workers.dev` vào `assets/media-config.js`.
 4. Không bật Public Development URL cho bucket và không đưa Access Key hoặc
    Secret Key R2 vào repository.
-5. Ảnh của member/VIP/moderator được thu về khung 720p trước khi tải lên. Video
-   VIP/moderator được kiểm tra 720p và 1 phút; R2 là nơi
-   lưu trữ chứ không tự mã hóa lại video.
+5. Member/moderator vẫn theo hạn mức hiện hành. Sau `forum_v18_migration.sql`,
+   bài viết VIP không giới hạn số lượng, dung lượng, thời lượng hoặc độ phân
+   giải media; video VIP được giữ nguyên thay vì nén xuống 720p. Bình luận VIP
+   vẫn theo hạn mức thông thường.
 
 Nếu `MEDIA_API_URL` còn trống, website tạm thời dùng hai bucket Supabase cũ để
 không làm gián đoạn phiên bản đang chạy.

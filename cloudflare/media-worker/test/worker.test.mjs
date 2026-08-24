@@ -241,7 +241,7 @@ test('member video is capped at 50 MB', async t => {
   assert.match((await response.json()).error, /50 MB/iu);
 });
 
-test('VIP audio is capped at 50 MB', async t => {
+test('VIP post audio is not capped by the application', async t => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   globalThis.fetch = async input => {
@@ -268,8 +268,139 @@ test('VIP audio is capped at 50 MB', async t => {
     },
     body: oversized
   }), { ...baseEnv, MEDIA_BUCKET: { async put() {} } });
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).type, 'audio');
+});
+
+test('VIP comment media keeps the 50 MB limit', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) return Response.json({ id: '4cc57975-9f97-4c9d-8f4e-19bba306d335' });
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{
+        id: '4cc57975-9f97-4c9d-8f4e-19bba306d335',
+        role: 'vip',
+        account_status: 'active'
+      }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+  const response = await worker.fetch(new Request('https://media.example/api/media', {
+    method: 'POST',
+    headers: {
+      Origin: baseEnv.ALLOWED_ORIGIN,
+      Authorization: 'Bearer valid-token',
+      'Content-Type': 'audio/mpeg',
+      'Content-Length': String(50 * 1024 * 1024 + 1),
+      'X-Media-Scope': 'comment',
+      'X-Post-Id': '6af8a30d-c937-49df-a950-94d62f2e9b2c'
+    },
+    body: new TextEncoder().encode('ID3')
+  }), { ...baseEnv, MEDIA_BUCKET: { async put() {} } });
   assert.equal(response.status, 413);
   assert.match((await response.json()).error, /50 MB/iu);
+});
+
+test('VIP can complete a multipart post video above 50 MB', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const userId = '4cc57975-9f97-4c9d-8f4e-19bba306d335';
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) return Response.json({ id: userId });
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{ id: userId, role: 'vip', account_status: 'active' }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+
+  let uploadKey = '';
+  let completedParts = [];
+  const env = {
+    ...baseEnv,
+    MEDIA_BUCKET: {
+      async createMultipartUpload(key) {
+        uploadKey = key;
+        return { key, uploadId: 'upload-test-id' };
+      },
+      resumeMultipartUpload(key, uploadId) {
+        assert.equal(key, uploadKey);
+        assert.equal(uploadId, 'upload-test-id');
+        return {
+          async uploadPart(partNumber) {
+            return { partNumber, etag: `etag-${partNumber}` };
+          },
+          async complete(parts) {
+            completedParts = parts;
+          },
+          async abort() {}
+        };
+      },
+      async head() {
+        return {
+          size: 80 * 1024 * 1024,
+          customMetadata: { mediaKind: 'video' }
+        };
+      }
+    }
+  };
+
+  const commonHeaders = {
+    Origin: baseEnv.ALLOWED_ORIGIN,
+    Authorization: 'Bearer valid-token'
+  };
+  const started = await worker.fetch(new Request(
+    'https://media.example/api/media/multipart/start',
+    {
+      method: 'POST',
+      headers: {
+        ...commonHeaders,
+        'X-Media-Scope': 'post',
+        'X-File-Type': 'video/mp4',
+        'X-File-Size': String(80 * 1024 * 1024),
+        'X-File-Name': 'video-nguyen-ban.mp4'
+      }
+    }
+  ), env);
+  assert.equal(started.status, 201);
+  const upload = await started.json();
+
+  const part = await worker.fetch(new Request(
+    'https://media.example/api/media/multipart/part',
+    {
+      method: 'PUT',
+      headers: {
+        ...commonHeaders,
+        'Content-Type': 'video/mp4',
+        'X-Upload-Key': upload.key,
+        'X-Upload-Id': upload.uploadId,
+        'X-Part-Number': '1'
+      },
+      body: new Uint8Array([0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70])
+    }
+  ), env);
+  assert.equal(part.status, 200);
+  const uploadedPart = await part.json();
+
+  const completed = await worker.fetch(new Request(
+    'https://media.example/api/media/multipart/complete',
+    {
+      method: 'POST',
+      headers: { ...commonHeaders, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: upload.key,
+        uploadId: upload.uploadId,
+        parts: [uploadedPart]
+      })
+    }
+  ), env);
+  assert.equal(completed.status, 201);
+  const result = await completed.json();
+  assert.equal(result.type, 'video');
+  assert.equal(result.size, 80 * 1024 * 1024);
+  assert.deepEqual(completedParts, [{ partNumber: 1, etag: 'etag-1' }]);
 });
 
 test('moderator cannot delete media owned by another member', async t => {

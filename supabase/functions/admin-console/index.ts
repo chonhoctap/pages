@@ -313,6 +313,7 @@ async function userInfo(target: Profile) {
     ? new Date(new Date(commentCooldown.last_commented_at).getTime() + 2 * 60 * 1000)
     : null;
   return {
+    cooldownFormat: 'available_at',
     user: target,
     counts: { posts: postCount || 0, comments: commentCount || 0 },
     cooldowns: {

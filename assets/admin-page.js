@@ -518,6 +518,13 @@ function consoleDateTime(value) {
   }).format(new Date(value));
 }
 
+function cooldownDisplayValue(result, type) {
+  const value = result.cooldowns?.[type];
+  if (!value || result.cooldownFormat === 'available_at') return value;
+  const delayMinutes = type === 'post' ? 15 : 2;
+  return new Date(new Date(value).getTime() + delayMinutes * 60 * 1000).toISOString();
+}
+
 function formatConsoleResult(data) {
   const result = data?.result || {};
   if (data?.action === 'help') {
@@ -531,8 +538,8 @@ function formatConsoleResult(data) {
       `Role: ${roleLabel(result.user?.role || 'member')}`,
       `Trạng thái: ${statusLabel(result.user?.account_status || 'active')}`,
       `Bài viết: ${result.counts?.posts || 0} · Bình luận: ${result.counts?.comments || 0}`,
-      `Được đăng bài lúc: ${consoleDateTime(result.cooldowns?.post)}`,
-      `Được bình luận lúc: ${consoleDateTime(result.cooldowns?.comment)}`
+      `Được đăng bài lúc: ${consoleDateTime(cooldownDisplayValue(result, 'post'))}`,
+      `Được bình luận lúc: ${consoleDateTime(cooldownDisplayValue(result, 'comment'))}`
     ].join('\n');
   }
   if (['cooldown.clear', 'post_cooldown.clear', 'comment_cooldown.clear'].includes(data?.action)) {

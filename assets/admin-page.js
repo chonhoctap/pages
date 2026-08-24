@@ -505,7 +505,9 @@ async function loadPermissions() {
 }
 
 function commandIsDestructive(command) {
-  return /^(posts|comments|content)\s+delete-all\s+\S+$/iu.test(command.trim());
+  const normalized = command.trim();
+  return /^(posts|comments|content)\s+delete-all\s+\S+$/iu.test(normalized)
+    || /^(role|status)\s+set\s+\S+\s+\S+$/iu.test(normalized);
 }
 
 function consoleTimestamp() {

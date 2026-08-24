@@ -374,30 +374,16 @@ function isForumAdmin() {
   return canInteract() && currentProfile?.role === 'admin';
 }
 
-function adminMediaTypes(mediaItems = []) {
-  return [...new Set(mediaItems
-    .map(item => item?.media_type || item?.type)
-    .filter(type => type === 'audio'))];
+function canReviewContent() {
+  return canModerate();
 }
 
-function containsAdminMedia(mediaItems = []) {
-  return adminMediaTypes(mediaItems).length > 0;
+function canReviewComment() {
+  return canModerate();
 }
 
-function adminMediaLabel(mediaItems = []) {
-  return adminMediaTypes(mediaItems)
-    .map(type => type === 'audio' ? 'âm thanh' : 'video')
-    .join(' và ');
-}
-
-function canReviewContent(mediaItems = []) {
-  if (!canModerate()) return false;
-  return !containsAdminMedia(mediaItems) || isForumAdmin();
-}
-
-function canReviewComment(comment) {
-  if (!canModerate()) return false;
-  return !containsAdminMedia(comment?.mediaItems) || isForumAdmin();
+function userFacingModerationReason(value, fallback) {
+  return String(value || fallback).replace(/Gemini/giu, 'Hệ thống');
 }
 
 async function queueHumanReview(targetType, targetId) {
@@ -421,8 +407,8 @@ function moderateInBackground(targetType, targetId, onSettled = null, onDecision
         decision = 'safe';
         setInfo(
           targetType === 'post'
-            ? 'Gemini đã kiểm tra và công khai bài viết.'
-            : 'Gemini đã kiểm tra và công khai bình luận.',
+            ? 'Hệ thống đã kiểm tra và công khai bài viết.'
+            : 'Hệ thống đã kiểm tra và công khai bình luận.',
           'success'
         );
       } else if (data?.decision === 'violation') {
@@ -435,9 +421,9 @@ function moderateInBackground(targetType, targetId, onSettled = null, onDecision
         );
       } else if (data?.decision === 'manual') {
         decision = 'manual';
-        setInfo('Nội dung có âm thanh đang chờ quản trị viên duyệt.', 'info');
+        setInfo('Hệ thống chưa đủ chắc chắn; nội dung đã chuyển cho Staff hoặc quản trị viên.', 'info');
       } else {
-        setInfo('Gemini chưa đủ chắc chắn; nội dung đã chuyển cho Staff hoặc quản trị viên.', 'info');
+        setInfo('Hệ thống chưa đủ chắc chắn; nội dung đã chuyển cho Staff hoặc quản trị viên.', 'info');
       }
     } catch (error) {
       decision = 'manual';
@@ -553,16 +539,16 @@ function startModerationProgress(mediaItems = []) {
   const imageCount = mediaItems.filter(item => item.type === 'image').length;
   const hasAudio = mediaItems.some(item => item.type === 'audio');
   const expectedSeconds = hasAudio
-    ? 8
+    ? 30
     : Math.max(12, Math.min(300, 14 + imageCount * 4 + videoSeconds * 0.45));
-  beginPostProgress('Đang kiểm duyệt bài viết', 'Gemini đang kiểm tra nội dung...', expectedSeconds);
+  beginPostProgress('Đang kiểm duyệt bài viết', 'Hệ thống đang kiểm tra nội dung...', expectedSeconds);
   postProgressTimer = window.setInterval(() => {
     if (!postProgressState) return;
     const elapsedSeconds = (performance.now() - postProgressState.startedAt) / 1000;
     const progress = Math.min(0.94, elapsedSeconds / expectedSeconds);
     updatePostProgress(progress);
     if (elapsedSeconds > expectedSeconds) {
-      elements.postProgressEta.textContent = 'Đang chờ Gemini phản hồi...';
+      elements.postProgressEta.textContent = 'Đang chờ hệ thống phản hồi...';
     }
   }, 1000);
 }
@@ -1142,8 +1128,8 @@ async function publishPost(event) {
     configureAccount();
     setInfo(
       editing
-        ? 'Đã lưu thay đổi. Gemini đang kiểm tra lại bài viết.'
-        : 'Đã gửi bài viết. Gemini đang kiểm tra trước khi công khai.',
+        ? 'Đã lưu thay đổi. Hệ thống đang kiểm tra lại bài viết.'
+        : 'Đã gửi bài viết. Hệ thống đang kiểm tra trước khi công khai.',
       'info'
     );
     if (!editing && !hasUnlimitedVipPosting()) {
@@ -1155,7 +1141,7 @@ async function publishPost(event) {
     startModerationProgress(uploaded);
     moderateInBackground('post', createdPostId, loadPosts, decision => {
       if (decision === 'safe') {
-        finishPostProgress('Bài viết đã được Gemini duyệt và công khai.');
+        finishPostProgress('Bài viết đã được hệ thống duyệt và công khai.');
       } else if (decision === 'violation') {
         finishPostProgress('Bài viết vi phạm và đã bị xóa.', 'error');
       } else {
@@ -2029,8 +2015,10 @@ function renderPost(post) {
   if (post.moderation_status === 'pending_review') {
     const moderationNote = document.createElement('div');
     moderationNote.className = 'moderation-note';
-    moderationNote.textContent = post.moderation_reason
-      || 'Bài viết đang chờ Staff hoặc quản trị viên xem xét.';
+    moderationNote.textContent = userFacingModerationReason(
+      post.moderation_reason,
+      'Bài viết đang chờ Staff hoặc quản trị viên xem xét.'
+    );
     card.querySelector('.post-header').after(moderationNote);
     if (canReviewContent(post.mediaItems)) {
       const controls = document.createElement('div');
@@ -2289,16 +2277,11 @@ async function markSolved(post, card, button) {
 
 async function reviewPost(post, action, button) {
   if (!canReviewContent(post.mediaItems)) {
-    setInfo(
-      containsAdminMedia(post.mediaItems)
-        ? 'Bài viết có âm thanh chỉ quản trị viên được duyệt.'
-        : 'Chỉ Staff hoặc quản trị viên được duyệt bài.',
-      'error'
-    );
+    setInfo('Chỉ Staff hoặc quản trị viên được duyệt bài.', 'error');
     return;
   }
   const note = action === 'reject'
-    ? window.prompt('Lý do từ chối bài viết:', post.moderation_reason || '')
+    ? window.prompt('Lý do từ chối bài viết:', userFacingModerationReason(post.moderation_reason, ''))
     : '';
   if (action === 'reject' && note === null) return;
   setBusy(button, true, action === 'approve' ? 'Đang duyệt...' : 'Đang từ chối...');
@@ -2323,16 +2306,11 @@ async function reviewPost(post, action, button) {
 
 async function reviewComment(comment, post, card, action, button) {
   if (!canReviewComment(comment)) {
-    setInfo(
-      containsAdminMedia(comment.mediaItems)
-        ? 'Bình luận có âm thanh chỉ quản trị viên được duyệt.'
-        : 'Chỉ Staff hoặc quản trị viên được duyệt bình luận này.',
-      'error'
-    );
+    setInfo('Chỉ Staff hoặc quản trị viên được duyệt bình luận này.', 'error');
     return;
   }
   const note = action === 'reject'
-    ? window.prompt('Lý do từ chối bình luận:', comment.moderation_reason || '')
+    ? window.prompt('Lý do từ chối bình luận:', userFacingModerationReason(comment.moderation_reason, ''))
     : '';
   if (action === 'reject' && note === null) return;
   setBusy(button, true, action === 'approve' ? 'Đang duyệt...' : 'Đang từ chối...');
@@ -2346,9 +2324,7 @@ async function reviewComment(comment, post, card, action, button) {
     if (!data) throw new Error('Không tìm thấy bình luận cần duyệt.');
     setInfo(
       action === 'approve'
-        ? (containsAdminMedia(comment.mediaItems)
-            ? `Đã duyệt bình luận có ${adminMediaLabel(comment.mediaItems)}.`
-            : 'Đã duyệt bình luận.')
+        ? 'Đã duyệt bình luận.'
         : 'Đã từ chối bình luận.',
       'success'
     );
@@ -2719,10 +2695,10 @@ function renderComments(comments, post, card) {
     if (comment.moderation_status === 'pending_review') {
       const pending = document.createElement('span');
       pending.className = 'comment-pending';
-      const adminMediaPending = containsAdminMedia(comment.mediaItems);
-      pending.textContent = adminMediaPending
-        ? `Chờ quản trị viên duyệt ${adminMediaLabel(comment.mediaItems)}`
-        : (comment.moderation_reason || 'Gemini đang kiểm tra bình luận');
+      pending.textContent = userFacingModerationReason(
+        comment.moderation_reason,
+        'Hệ thống đang kiểm tra bình luận'
+      );
       footer.appendChild(pending);
       if (canReviewComment(comment)) {
         const controls = document.createElement('div');
@@ -2870,13 +2846,7 @@ async function addComment(event, post, card) {
     setReplyingTo(form);
     resetCommentMedia(form);
     commentCooldownUntil = Date.now() + 2 * 60 * 1000;
-    const waitingForAdmin = containsAdminMedia(uploaded);
-    setInfo(
-      waitingForAdmin
-        ? `Đã gửi bình luận. ${adminMediaLabel(uploaded)} đang chờ quản trị viên xem xét.`
-        : 'Đã gửi bình luận. Gemini đang kiểm tra trước khi công khai.',
-      'info'
-    );
+    setInfo('Đã gửi bình luận. Hệ thống đang kiểm tra trước khi công khai.', 'info');
     void loadComments(post, card);
     void refreshPostEngagement(post.id, true);
     moderateInBackground('comment', createdCommentId, async () => {

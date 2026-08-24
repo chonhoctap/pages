@@ -320,7 +320,8 @@ Luồng V13 áp dụng cho cả bài viết và bình luận:
   `forum_moderation_runs`.
 - **Nghi ngờ, hết thời gian hoặc lỗi quota**: giữ nội dung ở trạng thái ẩn và
   gửi hộp thư cho Staff/Admin.
-- **Âm thanh**: không gửi Gemini, chuyển thẳng cho admin.
+- **Âm thanh**: gửi qua Gemini Files API để kiểm tra cả lời nói và âm thanh nền;
+  kết quả chưa rõ hoặc lỗi xử lý được chuyển cho Staff/Admin.
 - Request Gemini dùng `store=false`, structured JSON và mức suy luận thấp để
   giảm độ trễ. Edge Function có timeout 70 giây, thấp hơn giới hạn 5 phút.
 

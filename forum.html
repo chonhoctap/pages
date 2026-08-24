@@ -17,6 +17,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="assets/account.css?v=20260801-7">
   <link rel="stylesheet" href="assets/forum.css?v=20260823-1">
+  <style>
+  .post-progress{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(18px,env(safe-area-inset-bottom));z-index:4000;width:min(390px,calc(100vw - 32px));padding:18px;border:1px solid #c9daf5;border-radius:20px;background:rgba(255,255,255,.96);box-shadow:0 20px 60px rgba(27,75,137,.22);backdrop-filter:blur(18px);color:#10233f}
+  .post-progress[hidden]{display:none!important}.post-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.post-progress-head strong{font-size:15px}.post-progress-percent{font-weight:800;color:#2764e7}.post-progress-stage{margin:8px 0 12px;font-size:13px;line-height:1.45;color:#5f718e;overflow-wrap:anywhere}.post-progress-track{height:10px;overflow:hidden;border-radius:999px;background:#e5edfa}.post-progress-bar{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#18a8e7,#6b3df1);box-shadow:0 0 16px rgba(48,111,238,.35);transition:width .25s ease}.post-progress-eta{display:block;margin-top:9px;font-size:12px;font-weight:600;color:#61738e}.post-progress[data-status="success"] .post-progress-bar{background:linear-gradient(90deg,#16b98e,#24cc75)}.post-progress[data-status="error"] .post-progress-bar{background:linear-gradient(90deg,#ef3b59,#ff7a29)}.post-progress[data-status="error"] .post-progress-percent{color:#e52f4f}
+  html[data-theme="dark"] .post-progress{border-color:#294567;background:rgba(8,23,43,.96);color:#eef6ff;box-shadow:0 24px 70px rgba(0,0,0,.45)}html[data-theme="dark"] .post-progress-stage,html[data-theme="dark"] .post-progress-eta{color:#a9bdd9}html[data-theme="dark"] .post-progress-track{background:#1d3554}
+  @media(max-width:600px){.post-progress{right:16px;bottom:16px;left:16px;width:auto}}
+  </style>
 </head>
 <body>
   <header class="account-topbar" aria-label="Điều hướng chính">
@@ -61,6 +67,20 @@
     </section>
 
     <div id="forumMessage" class="message forum-message" role="status" aria-live="polite" hidden></div>
+
+    <section id="postProgress" class="post-progress" data-status="active"
+      aria-live="polite" aria-atomic="true" hidden>
+      <div class="post-progress-head">
+        <strong id="postProgressTitle">Đang đăng bài viết</strong>
+        <span id="postProgressPercent" class="post-progress-percent">0%</span>
+      </div>
+      <p id="postProgressStage" class="post-progress-stage">Đang chuẩn bị...</p>
+      <div class="post-progress-track" role="progressbar" aria-label="Tiến trình đăng bài"
+        aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <span id="postProgressBar" class="post-progress-bar"></span>
+      </div>
+      <small id="postProgressEta" class="post-progress-eta">Đang tính thời gian còn lại...</small>
+    </section>
 
     <section id="forumDenied" class="panel forum-denied" hidden>
       <span aria-hidden="true">🚫</span>
@@ -359,6 +379,6 @@
     </section>
   </dialog>
 
-  <script type="module" src="assets/forum-page.js?v=20260824-4"></script>
+  <script type="module" src="assets/forum-page.js?v=20260824-5"></script>
 </body>
 </html>

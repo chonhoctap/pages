@@ -423,21 +423,38 @@ async function apiError(response) {
 
 export async function uploadToR2(session, file, options = {}) {
   if (!r2Enabled()) throw new Error('Cloudflare R2 chưa được cấu hình.');
-  const headers = {
-    Authorization: `Bearer ${session.access_token}`,
-    'Content-Type': file.type,
-    'X-Media-Scope': options.scope || 'post',
-    'X-File-Name': file.name || ''
-  };
-  if (options.postId) headers['X-Post-Id'] = options.postId;
-
-  const response = await fetch(`${MEDIA_API_URL}/api/media`, {
-    method: 'POST',
-    headers,
-    body: file
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', `${MEDIA_API_URL}/api/media`);
+    request.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+    request.setRequestHeader('Content-Type', file.type);
+    request.setRequestHeader('X-Media-Scope', options.scope || 'post');
+    request.setRequestHeader('X-File-Name', file.name || '');
+    if (options.postId) request.setRequestHeader('X-Post-Id', options.postId);
+    request.upload.onprogress = event => {
+      if (event.lengthComputable && typeof options.onProgress === 'function') {
+        options.onProgress(event.loaded, event.total);
+      }
+    };
+    request.onerror = () => reject(new Error('Mất kết nối khi tải tệp lên R2.'));
+    request.onabort = () => reject(new Error('Đã hủy tải tệp lên R2.'));
+    request.onload = () => {
+      let payload = {};
+      try {
+        payload = request.responseText ? JSON.parse(request.responseText) : {};
+      } catch {
+        reject(new Error(`Máy chủ trả về dữ liệu không hợp lệ (${request.status}).`));
+        return;
+      }
+      if (request.status < 200 || request.status >= 300) {
+        reject(new Error(payload.error || `Máy chủ trả về mã ${request.status}.`));
+        return;
+      }
+      options.onProgress?.(file.size, file.size);
+      resolve(payload);
+    };
+    request.send(file);
   });
-  if (!response.ok) throw new Error(await apiError(response));
-  return response.json();
 }
 
 export async function deleteFromR2(session, key) {
@@ -451,7 +468,7 @@ export async function deleteFromR2(session, key) {
   }
 }
 
-export async function uploadToSupabaseResumable(session, bucket, path, file) {
+export async function uploadToSupabaseResumable(session, bucket, path, file, options = {}) {
   const { Upload } = await import('https://cdn.jsdelivr.net/npm/tus-js-client@4/+esm');
   return new Promise((resolve, reject) => {
     const upload = new Upload(file, {
@@ -469,6 +486,9 @@ export async function uploadToSupabaseResumable(session, bucket, path, file) {
         objectName: path,
         contentType: file.type,
         cacheControl: '3600'
+      },
+      onProgress: (uploadedBytes, totalBytes) => {
+        options.onProgress?.(uploadedBytes, totalBytes);
       },
       onError: reject,
       onSuccess: () => resolve({ path })

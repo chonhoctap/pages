@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 30334)
+Total output lines: 3290
+
 import {
   supabase,
   pageUrl,
@@ -67,6 +70,12 @@ const elements = {
   mediaPreview: document.getElementById('mediaPreview'),
   mediaLimitNote: document.getElementById('mediaLimitNote'),
   publish: document.getElementById('publishButton'),
+  postProgress: document.getElementById('postProgress'),
+  postProgressTitle: document.getElementById('postProgressTitle'),
+  postProgressStage: document.getElementById('postProgressStage'),
+  postProgressBar: document.getElementById('postProgressBar'),
+  postProgressPercent: document.getElementById('postProgressPercent'),
+  postProgressEta: document.getElementById('postProgressEta'),
   feedTitle: document.getElementById('feedTitle'),
   feedCount: document.getElementById('feedCount'),
   search: document.getElementById('forumSearch'),
@@ -133,6 +142,9 @@ let activeLightboxItems = [];
 let activeLightboxIndex = 0;
 let activeLightboxZoomControls = null;
 let activeLightboxCleanup = null;
+let postProgressState = null;
+let postProgressTimer = 0;
+let postProgressHideTimer = 0;
 
 const REACTIONS = {
   like: { emoji: '👍', label: 'Thích' },
@@ -368,14 +380,16 @@ async function queueHumanReview(targetType, targetId) {
   if (error) console.warn('Could not queue human review', error);
 }
 
-function moderateInBackground(targetType, targetId, onSettled = null) {
+function moderateInBackground(targetType, targetId, onSettled = null, onDecision = null) {
   void (async () => {
+    let decision = 'review';
     try {
       const { data, error } = await supabase.functions.invoke('moderate-forum', {
         body: { targetType, targetId }
       });
       if (error) throw error;
       if (data?.decision === 'safe') {
+        decision = 'safe';
         setInfo(
           targetType === 'post'
             ? 'Gemini đã kiểm tra và công khai bài viết.'
@@ -383,6 +397,7 @@ function moderateInBackground(targetType, targetId, onSettled = null) {
           'success'
         );
       } else if (data?.decision === 'violation') {
+        decision = 'violation';
         setInfo(
           targetType === 'post'
             ? 'Bài viết vi phạm tiêu chuẩn cộng đồng nên đã bị xóa.'
@@ -390,11 +405,13 @@ function moderateInBackground(targetType, targetId, onSettled = null) {
           'error'
         );
       } else if (data?.decision === 'manual') {
+        decision = 'manual';
         setInfo('Nội dung có âm thanh đang chờ quản trị viên duyệt.', 'info');
       } else {
         setInfo('Gemini chưa đủ chắc chắn; nội dung đã chuyển cho Staff hoặc quản trị viên.', 'info');
       }
     } catch (error) {
+      decision = 'manual';
       console.warn('Automatic forum moderation unavailable', error);
       await queueHumanReview(targetType, targetId);
       setInfo(
@@ -402,6 +419,7 @@ function moderateInBackground(targetType, targetId, onSettled = null) {
         'info'
       );
     } finally {
+      if (typeof onDecision === 'function') onDecision(decision);
       if (typeof onSettled === 'function') {
         await onSettled().catch(error => console.warn('Moderation UI refresh failed', error));
       }
@@ -431,6 +449,107 @@ function normalizeSearch(value) {
 function setInfo(message, type = 'info') {
   showMessage(elements.message, message, type);
   if (message) elements.message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function durationLabel(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
+  if (seconds < 60) return `${seconds} giây`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return remainder ? `${minutes} phút ${remainder} giây` : `${minutes} phút`;
+}
+
+function clearPostProgressTimers() {
+  window.clearInterval(postProgressTimer);
+  window.clearTimeout(postProgressHideTimer);
+  postProgressTimer = 0;
+  postProgressHideTimer = 0;
+}
+
+function beginPostProgress(title, stage, expectedSeconds = 0) {
+  clearPostProgressTimers();
+  postProgressState = {
+    title,
+    stage,
+    startedAt: performance.now(),
+    expectedSeconds: Math.max(0, expectedSeconds),
+    progress: 0
+  };
+  if (!elements.postProgress) return;
+  elements.postProgress.hidden = false;
+  elements.postProgress.dataset.status = 'active';
+  elements.postProgressTitle.textContent = title;
+  elements.postProgressStage.textContent = stage;
+  elements.postProgressBar.style.width = '0%';
+  elements.postProgressBar.parentElement.setAttribute('aria-valuenow', '0');
+  elements.postProgressPercent.textContent = '0%';
+  elements.postProgressEta.textContent = expectedSeconds
+    ? `Ước tính còn ${durationLabel(expectedSeconds)}`
+    : 'Đang tính thời gian còn lại...';
+}
+
+function updatePostProgress(progress, stage = '') {
+  if (!postProgressState || !elements.postProgress) return;
+  const value = Math.max(0, Math.min(1, Number(progress) || 0));
+  postProgressState.progress = value;
+  if (stage) {
+    postProgressState.stage = stage;
+    elements.postProgressStage.textContent = stage;
+  }
+  const percent = Math.round(value * 100);
+  elements.postProgressBar.style.width = `${percent}%`;
+  elements.postProgressBar.parentElement.setAttribute('aria-valuenow', String(percent));
+  elements.postProgressPercent.textContent = `${percent}%`;
+  const elapsedSeconds = (performance.now() - postProgressState.startedAt) / 1000;
+  let remaining = 0;
+  if (value >= 0.02 && value < 1) {
+    remaining = elapsedSeconds * (1 - value) / value;
+  } else if (postProgressState.expectedSeconds) {
+    remaining = Math.max(0, postProgressState.expectedSeconds - elapsedSeconds);
+  }
+  elements.postProgressEta.textContent = value >= 1
+    ? 'Đang chuyển sang bước tiếp theo...'
+    : remaining > 0
+      ? `Ước tính còn ${durationLabel(remaining)}`
+      : 'Đang tính thời gian còn lại...';
+}
+
+function startModerationProgress(mediaItems = []) {
+  const videoSeconds = mediaItems
+    .filter(item => item.type === 'video')
+    .reduce((sum, item) => sum + (Number(item.duration_seconds) || 0), 0);
+  const imageCount = mediaItems.filter(item => item.type === 'image').length;
+  const hasAudio = mediaItems.some(item => item.type === 'audio');
+  const expectedSeconds = hasAudio
+    ? 8
+    : Math.max(12, Math.min(300, 14 + imageCount * 4 + videoSeconds * 0.45));
+  beginPostProgress('Đang kiểm duyệt bài viết', 'Gemini đang kiểm tra nội dung...', expectedSeconds);
+  postProgressTimer = window.setInterval(() => {
+    if (!postProgressState) return;
+    const elapsedSeconds = (performance.now() - postProgressState.startedAt) / 1000;
+    const progress = Math.min(0.94, elapsedSeconds / expectedSeconds);
+    updatePostProgress(progress);
+    if (elapsedSeconds > expectedSeconds) {
+      elements.postProgressEta.textContent = 'Đang chờ Gemini phản hồi...';
+    }
+  }, 1000);
+}
+
+function finishPostProgress(message, status = 'success') {
+  clearPostProgressTimers();
+  if (!elements.postProgress) return;
+  if (!postProgressState) beginPostProgress('Tiến trình đăng bài', message);
+  postProgressState.progress = 1;
+  elements.postProgress.dataset.status = status;
+  elements.postProgressStage.textContent = message;
+  elements.postProgressBar.style.width = '100%';
+  elements.postProgressBar.parentElement.setAttribute('aria-valuenow', '100');
+  elements.postProgressPercent.textContent = status === 'error' ? 'Lỗi' : '100%';
+  elements.postProgressEta.textContent = status === 'error' ? 'Vui lòng kiểm tra thông báo lỗi.' : 'Đã hoàn tất';
+  postProgressHideTimer = window.setTimeout(() => {
+    elements.postProgress.hidden = true;
+    postProgressState = null;
+  }, status === 'error' ? 12000 : 7000);
 }
 
 function relativeTime(value) {
@@ -604,7 +723,14 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
         {
           onProgress: progress => {
             if (sequenceCheck()) {
-              setInfo(`Đang nén video xuống 720p... ${Math.round(progress * 100)}%`, 'info');
+              const compressionStage = `Nén ${source.name} xuống 720p...`;
+              if (
+                postProgressState?.title !== 'Đang nén video'
+                || postProgressState?.stage !== compressionStage
+              ) {
+                beginPostProgress('Đang nén video', compressionStage);
+              }
+              updatePostProgress(progress, compressionStage);
             }
           }
         }
@@ -680,10 +806,16 @@ async function showMediaPreview(fileList) {
       `Đã chuẩn bị ${selectedPostMedia.length} tệp (${(totalSize / 1024 / 1024).toFixed(1)} MB).`,
       'success'
     );
+    if (postProgressState?.title === 'Đang nén video') {
+      finishPostProgress('Đã nén video xuống 720p.');
+    }
   } catch (error) {
     if (sequence !== previewPrepareSequence) return;
     elements.media.value = '';
     setInfo(error.message, 'error');
+    if (postProgressState?.title === 'Đang nén video') {
+      finishPostProgress(error.message, 'error');
+    }
   }
 }
 
@@ -787,11 +919,18 @@ function updateCategoryUi() {
   });
 }
 
-async function uploadPreparedMedia(item, { scope = 'post', postId = '' } = {}) {
+async function uploadPreparedMedia(
+  item,
+  { scope = 'post', postId = '', onProgress = null } = {}
+) {
   if (!item?.file) return null;
   const file = item.file;
   if (r2Enabled()) {
-    const uploaded = await uploadToR2(session, file, { scope, postId });
+    const uploaded = await uploadToR2(session, file, {
+      scope,
+      postId,
+      onProgress
+    });
     return {
       ...uploaded,
       size_bytes: file.size,
@@ -803,8 +942,11 @@ async function uploadPreparedMedia(item, { scope = 'post', postId = '' } = {}) {
   const bucket = scope === 'comment' ? 'forum-comment-media' : 'forum-media';
   const path = uniqueMediaPath(file, postId ? `${postId}/` : '');
   if (file.size > 6 * 1024 * 1024) {
-    await uploadToSupabaseResumable(session, bucket, path, file);
+    await uploadToSupabaseResumable(session, bucket, path, file, {
+      onProgress
+    });
   } else {
+    onProgress?.(0, file.size);
     const { error } = await supabase.storage
       .from(bucket)
       .upload(path, file, {
@@ -813,6 +955,7 @@ async function uploadPreparedMedia(item, { scope = 'post', postId = '' } = {}) {
         contentType: file.type
       });
     if (error) throw error;
+    onProgress?.(file.size, file.size);
   }
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return {
@@ -828,9 +971,23 @@ async function uploadPreparedMedia(item, { scope = 'post', postId = '' } = {}) {
 
 async function uploadPreparedMediaList(items, options) {
   const uploaded = [];
+  const totalBytes = Math.max(1, items.reduce((sum, item) => sum + item.file.size, 0));
+  let completedBytes = 0;
   try {
-    for (const item of items) {
-      uploaded.push(await uploadPreparedMedia(item, options));
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      uploaded.push(await uploadPreparedMedia(item, {
+        ...options,
+        onProgress: loadedBytes => {
+          const overall = (completedBytes + Math.min(item.file.size, loadedBytes)) / totalBytes;
+          options?.onProgress?.(overall, `Đang tải tệp ${index + 1}/${items.length}: ${item.file.name}`);
+        }
+      }));
+      completedBytes += item.file.size;
+      options?.onProgress?.(
+        completedBytes / totalBytes,
+        `Đã tải ${index + 1}/${items.length} tệp`
+      );
     }
     return uploaded;
   } catch (error) {
@@ -871,8 +1028,16 @@ async function publishPost(event) {
   let uploaded = [];
   let createdPostId = '';
   setBusy(elements.publish, true, 'Đang đăng...');
+  beginPostProgress(
+    'Đang đăng bài viết',
+    mediaItems.length ? `Chuẩn bị tải ${mediaItems.length} tệp lên R2...` : 'Đang lưu nội dung bài viết...'
+  );
   try {
-    uploaded = await uploadPreparedMediaList(mediaItems, { scope: 'post' });
+    uploaded = await uploadPreparedMediaList(mediaItems, {
+      scope: 'post',
+      onProgress: (progress, stage) => updatePostProgress(progress, stage)
+    });
+    beginPostProgress('Đang hoàn tất bài viết', 'Đang lưu nội dung và thông tin tệp...', 5);
     const firstMedia = uploaded[0];
     const payload = {
       author_id: session.user.id,
@@ -941,7 +1106,16 @@ async function publishPost(event) {
     }
     updatePostCooldownUi();
     await loadPosts();
-    moderateInBackground('post', createdPostId, loadPosts);
+    startModerationProgress(uploaded);
+    moderateInBackground('post', createdPostId, loadPosts, decision => {
+      if (decision === 'safe') {
+        finishPostProgress('Bài viết đã được Gemini duyệt và công khai.');
+      } else if (decision === 'violation') {
+        finishPostProgress('Bài viết vi phạm và đã bị xóa.', 'error');
+      } else {
+        finishPostProgress('Đã chuyển bài viết cho Staff/Quản trị viên xem xét.');
+      }
+    });
   } catch (error) {
     if (createdPostId && !editing) {
       await supabase.from('forum_posts').delete().eq('id', createdPostId);
@@ -953,6 +1127,7 @@ async function publishPost(event) {
       await refreshPostCooldown().catch(() => {});
     }
     setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
+    finishPostProgress(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
   } finally {
     setBusy(elements.publish, false);
   }
@@ -1484,34 +1659,7 @@ function createImageLightbox(item, positionLabel) {
     const previousCenterY = stage.scrollTop + stage.clientHeight / 2;
     const previousWidth = Math.max(1, stage.scrollWidth);
     const previousHeight = Math.max(1, stage.scrollHeight);
-    const availableWidth = Math.max(1, stage.clientWidth - 20);
-    const availableHeight = Math.max(1, stage.clientHeight - 20);
-    const sideways = Math.abs(rotation % 180) === 90;
-    const fittedWidth = sideways ? image.naturalHeight : image.naturalWidth;
-    const fittedHeight = sideways ? image.naturalWidth : image.naturalHeight;
-    const fitScale = Math.min(
-      availableWidth / fittedWidth,
-      availableHeight / fittedHeight,
-      1
-    );
-    const width = Math.max(1, Math.round(image.naturalWidth * fitScale * zoom));
-    const height = Math.max(1, Math.round(image.naturalHeight * fitScale * zoom));
-    const visualWidth = sideways ? height : width;
-    const visualHeight = sideways ? width : height;
-    canvas.style.width = `${Math.max(stage.clientWidth, visualWidth + 20)}px`;
-    canvas.style.height = `${Math.max(stage.clientHeight, visualHeight + 20)}px`;
-    image.style.width = `${width}px`;
-    image.style.height = `${height}px`;
-    image.style.transform = `translate(-50%,-50%) rotate(${rotation}deg)`;
-    stage.classList.toggle('can-pan', zoom > 1);
-    zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
-    zoomOut.disabled = zoom <= 1;
-    zoomIn.disabled = zoom >= 5;
-
-    window.requestAnimationFrame(() => {
-      const targetCenterX = preserveCenter
-        ? previousCenterX / previousWidth * stage.scrollWidth
-        : stage.scrollWidth / 2;
+    const availableWidth = Mat…334 tokens truncated…     : stage.scrollWidth / 2;
       const targetCenterY = preserveCenter
         ? previousCenterY / previousHeight * stage.scrollHeight
         : stage.scrollHeight / 2;

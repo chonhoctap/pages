@@ -22,6 +22,8 @@ const MAX_MEDIA_ITEMS = 12;
 const MAX_INLINE_MEDIA_BYTES = 12 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 70_000;
 const GEMINI_FILE_TIMEOUT_MS = 60_000;
+const GEMINI_RATE_LIMIT_RETRIES = 1;
+const GEMINI_MAX_RETRY_DELAY_MS = 20_000;
 const ALLOWED_CATEGORIES = new Set([
   'illegal', 'scam', 'gambling', 'drugs', 'sexual', 'hate', 'harassment',
   'bullying', 'graphic_violence', 'disturbing', 'dangerous', 'privacy', 'spam', 'other'
@@ -114,6 +116,43 @@ function errorMessage(payload: unknown, fallback: string) {
 
   const serialized = safeSerialize(payload, 2400);
   return serialized && serialized !== '{}' ? serialized : fallback;
+}
+
+class GeminiHttpError extends Error {
+  status: number;
+  retryAfterMs: number;
+
+  constructor(status: number, statusText: string, detail: string, retryAfterMs = 0) {
+    super(`Gemini HTTP ${status} ${statusText}: ${detail}`.slice(0, 2600));
+    this.name = 'GeminiHttpError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+function retryAfterMs(response: Response, payload: unknown) {
+  const header = response.headers.get('retry-after')?.trim() || '';
+  let delayMs = 0;
+  if (/^\d+(?:\.\d+)?$/u.test(header)) {
+    delayMs = Number(header) * 1000;
+  } else if (header) {
+    const retryAt = Date.parse(header);
+    if (Number.isFinite(retryAt)) delayMs = Math.max(0, retryAt - Date.now());
+  }
+
+  if (!delayMs) {
+    const detail = errorMessage(payload, '');
+    const match = detail.match(/retry\s+in\s+([\d.]+)s/iu);
+    if (match) delayMs = Number(match[1]) * 1000;
+  }
+
+  return Number.isFinite(delayMs) && delayMs > 0
+    ? Math.ceil(delayMs) + 500
+    : 0;
+}
+
+function wait(delayMs: number) {
+  return new Promise(resolve => setTimeout(resolve, delayMs));
 }
 
 function clampConfidence(value: unknown) {
@@ -504,7 +543,7 @@ function responseSchema() {
   };
 }
 
-async function callGemini(input: Record<string, unknown>[]) {
+async function callGeminiOnce(input: Record<string, unknown>[]) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   try {
@@ -544,13 +583,17 @@ async function callGemini(input: Record<string, unknown>[]) {
 
     if (!response.ok) {
       const detail = errorMessage(payload, `Gemini HTTP ${response.status}`);
-      console.error('Gemini API rejected request', {
+      const log = response.status === 429 ? console.warn : console.error;
+      log('Gemini API rejected request', {
         status: response.status,
         statusText: response.statusText,
         detail
       });
-      throw new Error(
-        `Gemini HTTP ${response.status} ${response.statusText}: ${detail}`.slice(0, 2600)
+      throw new GeminiHttpError(
+        response.status,
+        response.statusText,
+        detail,
+        response.status === 429 ? retryAfterMs(response, payload) : 0
       );
     }
 
@@ -577,6 +620,32 @@ async function callGemini(input: Record<string, unknown>[]) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function callGemini(input: Record<string, unknown>[]) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= GEMINI_RATE_LIMIT_RETRIES; attempt += 1) {
+    try {
+      return await callGeminiOnce(input);
+    } catch (error) {
+      lastError = error;
+      const retryDelay = error instanceof GeminiHttpError ? error.retryAfterMs : 0;
+      const canRetry = error instanceof GeminiHttpError
+        && error.status === 429
+        && attempt < GEMINI_RATE_LIMIT_RETRIES
+        && retryDelay > 0
+        && retryDelay <= GEMINI_MAX_RETRY_DELAY_MS;
+      if (!canRetry) throw error;
+
+      const delayWithJitter = retryDelay + Math.floor(250 + Math.random() * 500);
+      console.warn('Gemini rate limit reached; retrying once', {
+        attempt: attempt + 1,
+        retryAfterMs: delayWithJitter
+      });
+      await wait(delayWithJitter);
+    }
+  }
+  throw lastError;
 }
 
 async function moderate(targetType: TargetType, target: Record<string, unknown>) {
@@ -817,15 +886,19 @@ Deno.serve(async request => {
     result = await moderate(typedTarget, target);
   } catch (error) {
     const diagnostic = errorMessage(error, 'Lỗi Gemini không xác định.');
-    console.error('Gemini moderation failed', {
+    const rateLimited = error instanceof GeminiHttpError && error.status === 429;
+    const log = rateLimited ? console.warn : console.error;
+    log(rateLimited ? 'Gemini quota unavailable; queued human review' : 'Gemini moderation failed', {
       diagnostic,
       name: error instanceof Error ? error.name : typeof error,
       stack: error instanceof Error ? error.stack : undefined,
       cause: error instanceof Error ? safeSerialize(error.cause, 1200) : undefined
     });
     result = {
-      decision: 'error',
-      reason: 'Không thể hoàn tất kiểm tra tự động; nội dung đã chuyển cho Staff/Quản trị viên.',
+      decision: rateLimited ? 'suspicious' : 'error',
+      reason: rateLimited
+        ? 'Hệ thống đang tạm quá tải; nội dung đã chuyển cho Staff/Quản trị viên xem xét.'
+        : 'Không thể hoàn tất kiểm tra tự động; nội dung đã chuyển cho Staff/Quản trị viên.',
       categories: [], confidence: 0,
       evidence: [diagnostic.slice(0, 1800)]
     };

@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 30334)
-Total output lines: 3290
-
 import {
   supabase,
   pageUrl,
@@ -1659,7 +1656,34 @@ function createImageLightbox(item, positionLabel) {
     const previousCenterY = stage.scrollTop + stage.clientHeight / 2;
     const previousWidth = Math.max(1, stage.scrollWidth);
     const previousHeight = Math.max(1, stage.scrollHeight);
-    const availableWidth = Mat…334 tokens truncated…     : stage.scrollWidth / 2;
+    const availableWidth = Math.max(1, stage.clientWidth - 20);
+    const availableHeight = Math.max(1, stage.clientHeight - 20);
+    const sideways = Math.abs(rotation % 180) === 90;
+    const fittedWidth = sideways ? image.naturalHeight : image.naturalWidth;
+    const fittedHeight = sideways ? image.naturalWidth : image.naturalHeight;
+    const fitScale = Math.min(
+      availableWidth / fittedWidth,
+      availableHeight / fittedHeight,
+      1
+    );
+    const width = Math.max(1, Math.round(image.naturalWidth * fitScale * zoom));
+    const height = Math.max(1, Math.round(image.naturalHeight * fitScale * zoom));
+    const visualWidth = sideways ? height : width;
+    const visualHeight = sideways ? width : height;
+    canvas.style.width = `${Math.max(stage.clientWidth, visualWidth + 20)}px`;
+    canvas.style.height = `${Math.max(stage.clientHeight, visualHeight + 20)}px`;
+    image.style.width = `${width}px`;
+    image.style.height = `${height}px`;
+    image.style.transform = `translate(-50%,-50%) rotate(${rotation}deg)`;
+    stage.classList.toggle('can-pan', zoom > 1);
+    zoomLevel.textContent = `${Math.round(zoom * 100)}%`;
+    zoomOut.disabled = zoom <= 1;
+    zoomIn.disabled = zoom >= 5;
+
+    window.requestAnimationFrame(() => {
+      const targetCenterX = preserveCenter
+        ? previousCenterX / previousWidth * stage.scrollWidth
+        : stage.scrollWidth / 2;
       const targetCenterY = preserveCenter
         ? previousCenterY / previousHeight * stage.scrollHeight
         : stage.scrollHeight / 2;

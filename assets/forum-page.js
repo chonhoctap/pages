@@ -19,7 +19,7 @@ import {
   uploadToR2,
   uploadToSupabaseResumable,
   deleteFromR2
-} from './media-storage.js?v=20260815-2';
+} from './media-storage.js?v=20260824-1';
 
 initThemeToggle();
 
@@ -632,10 +632,26 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
     const preparedImageBytes = preparedItems
       .filter(item => item.type === 'image')
       .reduce((sum, item) => sum + item.file.size, 0);
-    if (preparedImageBytes > currentMediaLimits().totalImageBytes) {
+    const limits = currentMediaLimits();
+    if (
+      Number.isFinite(limits.totalImageBytes)
+      && preparedImageBytes > limits.totalImageBytes
+    ) {
       throw new Error(
         `Tổng dung lượng ảnh sau nén tối đa `
-        + `${Math.round(currentMediaLimits().totalImageBytes / 1024 / 1024)} MB.`
+        + `${Math.round(limits.totalImageBytes / 1024 / 1024)} MB.`
+      );
+    }
+    const preparedImageVideoBytes = preparedItems
+      .filter(item => ['image', 'video'].includes(item.type))
+      .reduce((sum, item) => sum + item.file.size, 0);
+    if (
+      Number.isFinite(limits.totalImageVideoBytes)
+      && preparedImageVideoBytes > limits.totalImageVideoBytes
+    ) {
+      throw new Error(
+        `Tổng dung lượng ảnh và video tối đa `
+        + `${Math.round(limits.totalImageVideoBytes / 1024 / 1024)} MB.`
       );
     }
     return preparedItems;
@@ -2924,6 +2940,13 @@ function mediaLimitDescription(limits) {
   const video = limits.maxVideos
     ? `${limits.maxVideos} video 1 phút`
     : 'không hỗ trợ video';
+  if (Number.isFinite(limits.totalImageVideoBytes)) {
+    return `${limits.maxImages} ảnh + ${video} `
+      + `(tổng ảnh/video ${Math.round(limits.totalImageVideoBytes / 1024 / 1024)} MB) · `
+      + `${limits.maxAudios} âm thanh `
+      + `${Math.round(limits.audioBytes / 1024 / 1024)} MB/`
+      + `${Math.round(limits.audioDuration / 60)} phút · ${limits.qualityLabel}`;
+  }
   return `${limits.maxImages} ảnh (tổng ${Math.round(limits.totalImageBytes / 1024 / 1024)} MB) · `
     + `${video} · ${limits.maxAudios} âm thanh `
     + `${Math.round(limits.audioBytes / 1024 / 1024)} MB/`

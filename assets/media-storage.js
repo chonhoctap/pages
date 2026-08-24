@@ -12,6 +12,7 @@ export const VIP_AUDIO_OUTPUT_LIMIT = 5 * MB;
 export const MEDIA_DURATION_LIMIT = 60;
 export const MEMBER_AUDIO_DURATION_LIMIT = 60;
 export const VIP_AUDIO_DURATION_LIMIT = 120;
+export const MEMBER_IMAGE_VIDEO_TOTAL_LIMIT = 50 * MB;
 
 export function mediaLimitsForRole(role) {
   const admin = role === 'admin';
@@ -20,10 +21,11 @@ export function mediaLimitsForRole(role) {
     elevated: elevated || admin,
     admin,
     maxImages: admin ? Infinity : elevated ? 5 : 2,
-    maxVideos: admin ? Infinity : elevated ? 1 : 0,
+    maxVideos: admin ? Infinity : 1,
     maxAudios: admin ? Infinity : 1,
     imageBytes: admin ? 50 * MB : elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
-    totalImageBytes: admin ? Infinity : elevated ? 25 * MB : 5 * MB,
+    totalImageBytes: admin ? Infinity : elevated ? 25 * MB : Infinity,
+    totalImageVideoBytes: admin || elevated ? Infinity : MEMBER_IMAGE_VIDEO_TOTAL_LIMIT,
     videoBytes: admin ? 50 * MB : VIP_VIDEO_OUTPUT_LIMIT,
     audioBytes: admin ? 50 * MB : elevated ? VIP_AUDIO_OUTPUT_LIMIT : AUDIO_OUTPUT_LIMIT,
     videoDuration: admin ? Infinity : MEDIA_DURATION_LIMIT,

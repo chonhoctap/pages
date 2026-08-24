@@ -146,7 +146,7 @@ test('upload without a Supabase session is rejected', async () => {
   assert.equal(response.status, 401);
 });
 
-test('regular members cannot upload video', async t => {
+test('active member can upload a valid video up to 50 MB', async t => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   globalThis.fetch = async input => {
@@ -173,8 +173,41 @@ test('regular members cannot upload video', async t => {
     },
     body: mp4
   }), env);
-  assert.equal(response.status, 403);
-  assert.match((await response.json()).error, /không được tải video/iu);
+  assert.equal(response.status, 201);
+  const payload = await response.json();
+  assert.equal(payload.type, 'video');
+  assert.match(payload.path, /\.mp4$/u);
+});
+
+test('member video is capped at 50 MB', async t => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = async input => {
+    const url = String(input);
+    if (url.endsWith('/auth/v1/user')) return Response.json({ id: '4cc57975-9f97-4c9d-8f4e-19bba306d335' });
+    if (url.includes('/rest/v1/profiles')) {
+      return Response.json([{
+        id: '4cc57975-9f97-4c9d-8f4e-19bba306d335',
+        role: 'member',
+        account_status: 'active'
+      }]);
+    }
+    return new Response(null, { status: 404 });
+  };
+  const mp4 = new Uint8Array([0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70]);
+  const response = await worker.fetch(new Request('https://media.example/api/media', {
+    method: 'POST',
+    headers: {
+      Origin: baseEnv.ALLOWED_ORIGIN,
+      Authorization: 'Bearer valid-token',
+      'Content-Type': 'video/mp4',
+      'Content-Length': String(50 * 1024 * 1024 + 1),
+      'X-Media-Scope': 'post'
+    },
+    body: mp4
+  }), { ...baseEnv, MEDIA_BUCKET: { async put() {} } });
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /50 MB/iu);
 });
 
 test('VIP audio is capped at 5 MB', async t => {

@@ -1148,7 +1148,6 @@ async function publishPost(event) {
       rememberPostCooldown(postCooldownUntil);
     }
     updatePostCooldownUi();
-    if (!editing) closeComposer();
     await loadPosts();
     startModerationProgress(uploaded);
     moderateInBackground('post', createdPostId, loadPosts, decision => {
@@ -1158,6 +1157,16 @@ async function publishPost(event) {
         finishPostProgress('Bài viết vi phạm và đã bị xóa.', 'error');
       } else {
         finishPostProgress('Đã chuyển bài viết cho Staff/Quản trị viên xem xét.');
+      }
+      if (!editing) {
+        window.setTimeout(() => {
+          if (elements.composerDialog.open || elements.composerDialog.hasAttribute('open')) {
+            closeComposer();
+          }
+          clearPostProgressTimers();
+          postProgressState = null;
+          if (elements.postProgress) elements.postProgress.hidden = true;
+        }, 2500);
       }
     });
   } catch (error) {

@@ -24,7 +24,7 @@ const GEMINI_TIMEOUT_MS = 70_000;
 const GEMINI_FILE_TIMEOUT_MS = 60_000;
 const ALLOWED_CATEGORIES = new Set([
   'illegal', 'scam', 'gambling', 'drugs', 'sexual', 'hate', 'harassment',
-  'bullying', 'graphic_violence', 'dangerous', 'privacy', 'spam', 'other'
+  'bullying', 'graphic_violence', 'disturbing', 'dangerous', 'privacy', 'spam', 'other'
 ]);
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
@@ -174,13 +174,29 @@ function modelText(response: Record<string, unknown>) {
 function policyPrompt(targetType: TargetType, content: Record<string, unknown>) {
   const title = textValue(content.title, 180);
   const body = textValue(content.body, 5000);
+  const category = textValue(content.category, 40);
+  const subject = textValue(content.subject, 80);
+  const grade = textValue(content.grade, 40);
+  const postContext = targetType === 'post'
+    ? `\nChuyên mục: ${category === 'question' ? 'Hỏi đáp' : category === 'entertainment' ? 'Giải trí' : category || '(không rõ)'}
+Môn học đã chọn: ${subject || '(không có)'}
+Lớp đã chọn: ${grade || '(không có)'}`
+    : '';
   return `Hãy kiểm duyệt ${targetType === 'post' ? 'bài viết' : 'bình luận'} sau cho cộng đồng học tập tại Việt Nam.
 
 Quy tắc không được phép:
 - Nội dung bất hợp pháp theo pháp luật Việt Nam: kích động chống phá, cờ bạc, lừa đảo, mua bán chất cấm, nội dung đồi trụy.
-- Thù ghét, quấy rối, bắt nạt, đe dọa, kích động bạo lực; hình ảnh/video/âm thanh máu me, man rợ, tục tĩu hoặc gây sốc.
+- Thù ghét, quấy rối, bắt nạt, đe dọa, kích động bạo lực; hình ảnh/video/âm thanh máu me, man rợ, tục tĩu, kinh dị, gây sợ hãi, gây ám ảnh hoặc gây sốc.
 - Spam, quảng cáo bẩn, liên kết lừa đảo hoặc lặp lại nội dung nhằm phá diễn đàn.
 - Công khai thông tin cá nhân của người khác khi chưa được phép.
+
+Quy tắc ưu tiên bắt buộc:
+- Đánh giá mức độ thực tế, không tự động coi mọi ảnh ma hoặc ảnh phim là vi phạm.
+- Trong chuyên mục Giải trí, ảnh hư cấu hơi rùng rợn nhưng không máu me, không ghê rợn và xuất hiện đúng ngữ cảnh có thể là safe.
+- Nếu hình gây bất an, cố ý hù dọa hoặc chưa rõ mức độ/ngữ cảnh: trả về suspicious với category disturbing để Staff/Quản trị viên xem xét.
+- Chỉ trả về violation với category disturbing hoặc graphic_violence khi có yếu tố ghê rợn rõ ràng như máu me, thi thể/tổn thương trực diện, body horror nặng, jumpscare cường độ cao hoặc mục đích gây sốc rõ rệt.
+- Trong chuyên mục Hỏi đáp, ảnh/video ma, kinh dị hoặc hù dọa dù ở mức nhẹ cũng không được đăng nếu không phải tư liệu học tập trực tiếp; trả về violation với category disturbing hoặc spam. Nếu có khả năng là tư liệu giáo dục nhưng chưa đủ ngữ cảnh thì trả về suspicious.
+- Với bài trong chuyên mục Hỏi đáp, hình ảnh/video phải liên quan rõ ràng đến tiêu đề, nội dung, môn và lớp đã chọn. Media rõ ràng sai chủ đề hoặc dùng nhãn môn học để đăng nội dung câu tương tác/hù dọa phải trả về violation; nếu chưa chắc về sự liên quan thì suspicious.
 
 Phân loại đúng một trong ba mức:
 - safe: không có dấu hiệu vi phạm đáng kể.
@@ -192,7 +208,7 @@ Không suy đoán danh tính hoặc thuộc tính nhạy cảm. Nội dung học
 Với âm thanh, hãy xét cả lời nói và âm thanh nền. Nếu không nghe rõ, thiếu ngữ cảnh hoặc chưa đủ chắc chắn thì phải trả về suspicious.
 
 Tiêu đề: ${title || '(không có)'}
-Nội dung: ${body || '(không có văn bản)'}`;
+Nội dung: ${body || '(không có văn bản)'}${postContext}`;
 }
 
 function allowedMediaUrl(raw: unknown) {
@@ -433,7 +449,7 @@ async function getTarget(targetType: TargetType, targetId: string) {
   if (targetType === 'post') {
     const { data: target, error } = await service
       .from('forum_posts')
-      .select('id, author_id, title, body, moderation_status, media_url, media_path, media_type, moderation_attempts')
+      .select('id, author_id, category, subject, grade, title, body, moderation_status, media_url, media_path, media_type, moderation_attempts')
       .eq('id', targetId)
       .maybeSingle();
     if (error) throw error;

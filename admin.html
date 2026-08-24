@@ -123,8 +123,8 @@
 
         <div class="console-safety-note">
           <span aria-hidden="true">⚠️</span>
-          <p>Không hỗ trợ SQL tự do. Lệnh xóa phải xác nhận lần hai; media R2/Supabase được
-            xóa trước khi dữ liệu bài viết hoặc bình luận bị xóa.</p>
+          <p>Không hỗ trợ SQL tự do. Lệnh đổi quyền, đổi trạng thái và xóa dữ liệu phải xác
+            nhận lần hai; media R2/Supabase được xóa trước nội dung tương ứng.</p>
         </div>
 
         <div class="console-layout">
@@ -149,12 +149,12 @@
 
             <div id="consoleConfirm" class="console-confirm-card" hidden>
               <div>
-                <strong>Xác nhận lệnh xóa</strong>
+                <strong>Xác nhận lệnh quản trị nhạy cảm</strong>
                 <p id="consoleConfirmText"></p>
               </div>
               <div>
                 <button id="consoleCancelButton" class="button button-secondary" type="button">Hủy</button>
-                <button id="consoleConfirmButton" class="button button-danger" type="button">Xác nhận xóa</button>
+                <button id="consoleConfirmButton" class="button button-danger" type="button">Xác nhận thực hiện</button>
               </div>
             </div>
 

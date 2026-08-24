@@ -1153,7 +1153,15 @@ async function publishPost(event) {
     await Promise.allSettled(
       uploaded.map(item => removeStoredMedia(item.path, 'forum-media'))
     );
-    const cooldownRejected = /15\s*phút/iu.test(error?.message || '');
+    const readableError = humanizeAuthError(error);
+    const cooldownDiagnostic = [
+      error?.message,
+      error?.details,
+      error?.hint,
+      readableError
+    ].filter(Boolean).join(' ');
+    const cooldownRejected = /(?:15\s*phút|15\s*minutes?|one post.*15)/iu
+      .test(cooldownDiagnostic);
     if (cooldownRejected) {
       await refreshPostCooldown().catch(() => {});
       updatePostCooldownUi();
@@ -1166,8 +1174,8 @@ async function publishPost(event) {
       }
       return;
     }
-    setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
-    finishPostProgress(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
+    setInfo(`Không thể đăng bài: ${readableError}`, 'error');
+    finishPostProgress(`Không thể đăng bài: ${readableError}`, 'error');
   } finally {
     setBusy(elements.publish, false);
   }

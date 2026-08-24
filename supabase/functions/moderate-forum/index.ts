@@ -18,10 +18,12 @@ type ModerationResult = {
 };
 
 const MODEL = 'gemini-3.6-flash';
+const OPENAI_MODEL = 'gpt-4.1-mini';
 const MAX_MEDIA_ITEMS = 12;
 const MAX_INLINE_MEDIA_BYTES = 12 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 70_000;
 const GEMINI_FILE_TIMEOUT_MS = 60_000;
+const OPENAI_TIMEOUT_MS = 70_000;
 const ALLOWED_CATEGORIES = new Set([
   'illegal', 'scam', 'gambling', 'drugs', 'sexual', 'hate', 'harassment',
   'bullying', 'graphic_violence', 'disturbing', 'dangerous', 'privacy', 'spam', 'other'
@@ -30,6 +32,7 @@ const ALLOWED_CATEGORIES = new Set([
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || '';
+const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
 const MEDIA_API_URL = (Deno.env.get('MEDIA_API_URL') || '').replace(/\/+$/u, '');
 const R2_CLEANUP_SECRET = Deno.env.get('R2_CLEANUP_SECRET') || '';
 
@@ -579,7 +582,147 @@ async function callGemini(input: Record<string, unknown>[]) {
   }
 }
 
-async function moderate(targetType: TargetType, target: Record<string, unknown>) {
+function openAIOutputText(payload: Record<string, unknown>) {
+  const choices = Array.isArray(payload.choices) ? payload.choices : [];
+  const choice = choices[0] && typeof choices[0] === 'object'
+    ? choices[0] as Record<string, unknown>
+    : {};
+  const message = choice.message && typeof choice.message === 'object'
+    ? choice.message as Record<string, unknown>
+    : {};
+  if (typeof message.content === 'string') return message.content;
+  if (!Array.isArray(message.content)) return '';
+  return message.content
+    .map(item => item && typeof item === 'object'
+      ? textValue((item as Record<string, unknown>).text, 10_000)
+      : '')
+    .filter(Boolean)
+    .join('\n');
+}
+
+async function callOpenAI(input: Record<string, unknown>[]) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json'
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [{ role: 'user', content: input }],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'forum_moderation',
+            strict: true,
+            schema: responseSchema()
+          }
+        },
+        temperature: 0,
+        max_completion_tokens: 600
+      }),
+      signal: controller.signal
+    });
+
+    const rawBody = await response.text();
+    let payload: unknown = null;
+    if (rawBody.trim()) {
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        payload = rawBody;
+      }
+    }
+    if (!response.ok) {
+      const detail = errorMessage(payload, `OpenAI HTTP ${response.status}`);
+      throw new Error(
+        `OpenAI HTTP ${response.status} ${response.statusText}: ${detail}`.slice(0, 2600)
+      );
+    }
+    if (!payload || typeof payload !== 'object') {
+      throw new Error(
+        `OpenAI trả về dữ liệu không phải JSON: ${errorMessage(payload, 'phản hồi trống')}`
+      );
+    }
+    const output = openAIOutputText(payload as Record<string, unknown>);
+    if (!output) {
+      throw new Error(
+        `OpenAI không trả về kết quả phân loại: ${errorMessage(payload, 'không có output')}`
+      );
+    }
+    try {
+      return normalizeResult(JSON.parse(output));
+    } catch (error) {
+      throw new Error(
+        `OpenAI trả về JSON phân loại không hợp lệ: ${errorMessage(error, 'JSON parse failed')}; output=${textValue(output, 1200)}`
+      );
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function moderateWithOpenAI(
+  targetType: TargetType,
+  target: Record<string, unknown>
+) {
+  if (!OPENAI_API_KEY) throw new Error('Thiếu OPENAI_API_KEY cho hệ thống dự phòng.');
+  const media = (target.media || []) as MediaItem[];
+  const input: Record<string, unknown>[] = [
+    { type: 'text', text: policyPrompt(targetType, target) }
+  ];
+  const unsupportedMedia = new Set<string>();
+  let remainingBytes = MAX_INLINE_MEDIA_BYTES;
+
+  for (const item of media) {
+    if (item.media_type !== 'image') {
+      unsupportedMedia.add(textValue(item.media_type, 20) || 'media');
+      continue;
+    }
+    const prepared = await prepareInlineMedia(item, remainingBytes);
+    if (!prepared.input || !prepared.bytes) {
+      throw new Error(
+        prepared.reason || 'Không thể chuẩn bị ảnh cho OpenAI kiểm tra.'
+      );
+    }
+    remainingBytes -= prepared.bytes;
+    const preparedInput = prepared.input as Record<string, unknown>;
+    const data = typeof preparedInput.data === 'string' ? preparedInput.data : '';
+    const mimeType = textValue(preparedInput.mime_type, 80);
+    if (!data || !mimeType.startsWith('image/')) {
+      throw new Error('Ảnh chuẩn bị cho OpenAI không hợp lệ.');
+    }
+    input.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:${mimeType};base64,${data}`,
+        detail: 'auto'
+      }
+    });
+  }
+
+  const result = await callOpenAI(input);
+  if (unsupportedMedia.size > 0 && result.decision === 'safe') {
+    const unsupportedLabel = [...unsupportedMedia].join(', ');
+    return {
+      ...result,
+      decision: 'suspicious',
+      reason: `OpenAI đã kiểm tra phần chữ và ảnh, nhưng ${unsupportedLabel} cần Staff/Quản trị viên kiểm tra thêm.`,
+      confidence: Math.min(result.confidence, 0.69),
+      evidence: [
+        ...result.evidence,
+        `Media chưa được OpenAI hỗ trợ trực tiếp: ${unsupportedLabel}`
+      ].slice(0, 5)
+    } as ModerationResult;
+  }
+  return result;
+}
+
+async function moderateWithGemini(targetType: TargetType, target: Record<string, unknown>) {
   const media = (target.media || []) as MediaItem[];
   if (media.length > MAX_MEDIA_ITEMS) {
     return {
@@ -730,14 +873,16 @@ async function saveRun(
   targetType: TargetType,
   target: Record<string, unknown>,
   result: ModerationResult,
-  durationMs: number
+  durationMs: number,
+  provider: string,
+  model: string | null
 ) {
   const { error } = await service.from('forum_moderation_runs').insert({
     target_type: targetType,
     target_id: target.id,
     author_id: target.author_id,
-    provider: result.decision === 'manual' ? 'manual' : 'gemini',
-    model: result.decision === 'manual' ? null : MODEL,
+    provider,
+    model,
     decision: result.decision,
     reason: result.reason,
     categories: result.categories,
@@ -760,8 +905,12 @@ async function updateTarget(
 Deno.serve(async request => {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(request) });
   if (request.method !== 'POST') return json(request, { error: 'Chỉ hỗ trợ POST.' }, 405);
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !GEMINI_API_KEY) {
-    return json(request, { error: 'Edge Function chưa được cấu hình đủ secret.' }, 503);
+  if (
+    !SUPABASE_URL
+    || !SERVICE_ROLE_KEY
+    || (!GEMINI_API_KEY && !OPENAI_API_KEY)
+  ) {
+    return json(request, { error: 'Edge Function chưa được cấu hình đủ secret kiểm duyệt.' }, 503);
   }
 
   const authorization = request.headers.get('Authorization') || '';
@@ -804,41 +953,102 @@ Deno.serve(async request => {
   }
 
   const startedAt = Date.now();
+  let moderationProvider = GEMINI_API_KEY ? 'gemini' : 'openai';
+  let moderationModel: string | null = GEMINI_API_KEY ? MODEL : OPENAI_MODEL;
   await updateTarget(typedTarget, targetId, {
     moderation_started_at: new Date(startedAt).toISOString(),
     moderation_attempts: Number(target.moderation_attempts || 0) + 1,
-    moderation_provider: 'gemini',
-    moderation_model: MODEL,
+    moderation_provider: moderationProvider,
+    moderation_model: moderationModel,
     moderation_reason: 'Hệ thống đang kiểm tra nội dung trước khi công khai.'
   });
 
-  let result: ModerationResult;
-  try {
-    result = await moderate(typedTarget, target);
-  } catch (error) {
-    const diagnostic = errorMessage(error, 'Lỗi Gemini không xác định.');
-    console.error('Gemini moderation failed', {
-      diagnostic,
-      name: error instanceof Error ? error.name : typeof error,
-      stack: error instanceof Error ? error.stack : undefined,
-      cause: error instanceof Error ? safeSerialize(error.cause, 1200) : undefined
+  let result: ModerationResult | null = null;
+  let geminiDiagnostic = '';
+
+  if (GEMINI_API_KEY) {
+    try {
+      result = await moderateWithGemini(typedTarget, target);
+    } catch (error) {
+      geminiDiagnostic = errorMessage(error, 'Lỗi Gemini không xác định.');
+      const rateLimited = /(?:429|quota|too many requests|resource_exhausted)/iu
+        .test(geminiDiagnostic);
+      const log = rateLimited ? console.warn : console.error;
+      log(
+        rateLimited
+          ? 'Gemini quota/rate limit reached; switching to OpenAI'
+          : 'Gemini moderation failed; switching to OpenAI',
+        {
+          diagnostic: geminiDiagnostic,
+          name: error instanceof Error ? error.name : typeof error,
+          stack: error instanceof Error ? error.stack : undefined,
+          cause: error instanceof Error ? safeSerialize(error.cause, 1200) : undefined
+        }
+      );
+    }
+  }
+
+  if (!result && OPENAI_API_KEY) {
+    moderationProvider = 'openai';
+    moderationModel = OPENAI_MODEL;
+    await updateTarget(typedTarget, targetId, {
+      moderation_provider: moderationProvider,
+      moderation_model: moderationModel,
+      moderation_reason: 'Gemini tạm thời không khả dụng; OpenAI đang tiếp tục kiểm tra nội dung.'
     });
+    try {
+      result = await moderateWithOpenAI(typedTarget, target);
+    } catch (error) {
+      const openAIDiagnostic = errorMessage(error, 'Lỗi OpenAI không xác định.');
+      console.error('OpenAI fallback moderation failed', {
+        diagnostic: openAIDiagnostic,
+        name: error instanceof Error ? error.name : typeof error,
+        stack: error instanceof Error ? error.stack : undefined,
+        cause: error instanceof Error ? safeSerialize(error.cause, 1200) : undefined
+      });
+      moderationProvider = 'manual';
+      moderationModel = null;
+      result = {
+        decision: 'error',
+        reason: 'Gemini và OpenAI đều chưa thể kiểm tra; nội dung đã chuyển cho Staff/Quản trị viên.',
+        categories: [],
+        confidence: 0,
+        evidence: [
+          geminiDiagnostic && `Gemini: ${geminiDiagnostic.slice(0, 850)}`,
+          `OpenAI: ${openAIDiagnostic.slice(0, 850)}`
+        ].filter(Boolean) as string[]
+      };
+    }
+  }
+
+  if (!result) {
+    moderationProvider = 'manual';
+    moderationModel = null;
     result = {
       decision: 'error',
-      reason: 'Không thể hoàn tất kiểm tra tự động; nội dung đã chuyển cho Staff/Quản trị viên.',
-      categories: [], confidence: 0,
-      evidence: [diagnostic.slice(0, 1800)]
+      reason: 'Không có dịch vụ kiểm duyệt tự động khả dụng; nội dung đã chuyển cho Staff/Quản trị viên.',
+      categories: [],
+      confidence: 0,
+      evidence: geminiDiagnostic ? [geminiDiagnostic.slice(0, 1800)] : []
     };
   }
+
   const durationMs = Date.now() - startedAt;
-  await saveRun(typedTarget, target, result, durationMs);
+  await saveRun(
+    typedTarget,
+    target,
+    result,
+    durationMs,
+    moderationProvider,
+    moderationModel
+  );
 
   if (result.decision === 'safe') {
     const values: Record<string, unknown> = {
       moderation_status: 'published',
       moderation_reason: null,
-      moderation_provider: 'gemini',
-      moderation_model: MODEL,
+      moderation_provider: moderationProvider,
+      moderation_model: moderationModel,
       moderation_result: result,
       moderation_completed_at: new Date().toISOString()
     };
@@ -850,7 +1060,9 @@ Deno.serve(async request => {
     }
     await updateTarget(typedTarget, targetId, values);
     await clearModerationNotifications(typedTarget, target);
-    return json(request, { ok: true, decision: 'safe', durationMs });
+    return json(request, {
+      ok: true, decision: 'safe', provider: moderationProvider, durationMs
+    });
   }
 
   if (result.decision === 'violation') {
@@ -862,7 +1074,7 @@ Deno.serve(async request => {
       if (error) throw error;
       return json(request, {
         ok: true, decision: 'violation', deleted: true, deletedMedia,
-        reason: result.reason, durationMs
+        reason: result.reason, provider: moderationProvider, durationMs
       });
     } catch (error) {
       console.error('Violation cleanup failed', error);
@@ -874,12 +1086,12 @@ Deno.serve(async request => {
     }
   }
 
-  const manual = result.decision === 'manual';
+  const manual = result.decision === 'manual' || moderationProvider === 'manual';
   const values: Record<string, unknown> = {
     moderation_status: 'pending_review',
     moderation_reason: result.reason,
-    moderation_provider: manual ? 'manual' : 'gemini',
-    moderation_model: manual ? null : MODEL,
+    moderation_provider: manual ? 'manual' : moderationProvider,
+    moderation_model: manual ? null : moderationModel,
     moderation_result: result,
     moderation_completed_at: new Date().toISOString()
   };
@@ -895,6 +1107,7 @@ Deno.serve(async request => {
     ok: true,
     decision: manual ? 'manual' : 'suspicious',
     reason: result.reason,
+    provider: moderationProvider,
     durationMs
   });
 });

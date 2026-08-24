@@ -120,6 +120,7 @@ let postCooldownUntil = 0;
 let postCooldownTimer = 0;
 let postCooldownSyncTimer = 0;
 let postCooldownRefreshPromise = null;
+let postCooldownServerReady = false;
 let commentCooldownUntil = 0;
 let commentCooldownTimer = 0;
 let notificationTimer = 0;
@@ -243,15 +244,17 @@ function cooldownLabel(totalSeconds) {
 
 function updatePostCooldownUi() {
   const remaining = cooldownSeconds();
+  const ready = hasUnlimitedVipPosting()
+    || (postCooldownServerReady && remaining === 0);
   const label = elements.openComposer.querySelector('span:last-child');
-  elements.openComposer.disabled = remaining > 0;
+  elements.openComposer.disabled = !ready;
   elements.openComposer.title = remaining > 0
     ? `Bạn có thể đăng bài tiếp theo sau ${cooldownLabel(remaining)}`
-    : '';
+    : (ready ? '' : 'Đang đồng bộ thời gian chờ với hệ thống');
   if (label) {
     label.textContent = remaining > 0
       ? `Đăng sau ${cooldownLabel(remaining)}`
-      : 'Đăng bài';
+      : (ready ? 'Đăng bài' : 'Đang đồng bộ...');
   }
 }
 
@@ -299,6 +302,7 @@ function refreshPostCooldown() {
   if (!session?.user?.id || !canInteract()) return Promise.resolve();
   if (hasUnlimitedVipPosting()) {
     postCooldownUntil = 0;
+    postCooldownServerReady = true;
     rememberPostCooldown(0);
     updatePostCooldownUi();
     return Promise.resolve();
@@ -313,6 +317,9 @@ function refreshPostCooldown() {
       // Supabase là nguồn chính. Khi admin xóa mốc chờ, giá trị NULL phải
       // thắng cache cũ trong localStorage thay vì tiếp tục đếm hết 15 phút.
       postCooldownUntil = nextPostAt ? new Date(nextPostAt).getTime() : 0;
+      // Chỉ mở nút khi Supabase xác nhận mốc chờ đã thật sự hết. Không dùng
+      // đồng hồ thiết bị để tự suy đoán vì có thể lệch với đồng hồ database.
+      postCooldownServerReady = !nextPostAt;
       rememberPostCooldown(postCooldownUntil);
       updatePostCooldownUi();
       return;
@@ -332,6 +339,7 @@ function refreshPostCooldown() {
       ? new Date(latestAt).getTime() + 15 * 60 * 1000
       : 0;
     postCooldownUntil = Math.max(fallbackCooldownUntil, storedPostCooldown());
+    postCooldownServerReady = cooldownSeconds() === 0;
     rememberPostCooldown(postCooldownUntil);
     updatePostCooldownUi();
   })().finally(() => {
@@ -846,15 +854,25 @@ async function showMediaPreview(fileList) {
   }
 }
 
-function openComposer() {
+async function openComposer() {
   if (!canInteract() || !hasForumPermission('forum.create_post')) {
     setInfo('Role của bạn hiện không có quyền đăng bài.', 'error');
     return;
   }
+  if (!editingPost && !hasUnlimitedVipPosting()) {
+    try {
+      await refreshPostCooldown();
+    } catch (error) {
+      setInfo(`Không thể đồng bộ thời gian chờ: ${humanizeAuthError(error)}`, 'error');
+      return;
+    }
+  }
   const remaining = editingPost ? 0 : cooldownSeconds();
-  if (remaining > 0) {
+  if (!editingPost && (!postCooldownServerReady || remaining > 0)) {
     setInfo(
-      `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`,
+      remaining > 0
+        ? `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`
+        : 'Hệ thống đang đồng bộ thời gian chờ. Vui lòng thử lại sau giây lát.',
       'error'
     );
     return;
@@ -1036,10 +1054,22 @@ async function publishPost(event) {
     return;
   }
   const editing = editingPost;
+  if (!editing && !hasUnlimitedVipPosting()) {
+    try {
+      // Kiểm tra lại ngay trước khi tải media và INSERT để nút, frontend và
+      // trigger database luôn dùng cùng trạng thái cooldown từ Supabase.
+      await refreshPostCooldown();
+    } catch (error) {
+      setInfo(`Không thể đồng bộ thời gian chờ: ${humanizeAuthError(error)}`, 'error');
+      return;
+    }
+  }
   const remaining = editing ? 0 : cooldownSeconds();
-  if (remaining > 0) {
+  if (!editing && (!postCooldownServerReady || remaining > 0)) {
     setInfo(
-      `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`,
+      remaining > 0
+        ? `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`
+        : 'Hệ thống đang đồng bộ thời gian chờ. Vui lòng thử lại sau giây lát.',
       'error'
     );
     return;
@@ -1134,6 +1164,7 @@ async function publishPost(event) {
     );
     if (!editing && !hasUnlimitedVipPosting()) {
       postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
+      postCooldownServerReady = false;
       rememberPostCooldown(postCooldownUntil);
     }
     updatePostCooldownUi();
@@ -1156,6 +1187,7 @@ async function publishPost(event) {
       uploaded.map(item => removeStoredMedia(item.path, 'forum-media'))
     );
     if (/15\s*phút/iu.test(error?.message || '')) {
+      postCooldownServerReady = false;
       await refreshPostCooldown().catch(() => {});
     }
     setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
@@ -3164,7 +3196,7 @@ async function init() {
     await Promise.all([refreshPostCooldown(), refreshCommentCooldown()]);
     postCooldownTimer = window.setInterval(updatePostCooldownUi, 1000);
     postCooldownSyncTimer = window.setInterval(() => {
-      if (cooldownSeconds() > 0) syncPostCooldown();
+      if (cooldownSeconds() > 0 || !postCooldownServerReady) syncPostCooldown();
     }, 10000);
     commentCooldownTimer = window.setInterval(updateCommentCooldownUi, 1000);
     notificationTimer = window.setInterval(() => loadNotifications().catch(() => {}), 45000);
@@ -3306,6 +3338,7 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('beforeunload', () => {
   window.clearInterval(postCooldownTimer);
+  window.clearInterval(postCooldownSyncTimer);
   window.clearInterval(commentCooldownTimer);
   window.clearInterval(notificationTimer);
   window.clearTimeout(realtimeReloadTimer);

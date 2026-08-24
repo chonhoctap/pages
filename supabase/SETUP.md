@@ -373,7 +373,9 @@ Luồng V13 áp dụng cho cả bài viết và bình luận:
 32. Chạy `role_permissions_migration.sql`, mở `admin.html`, thử cả hai tab và
     tắt/bật một quyền không khóa của Staff; xác nhận thay đổi có hiệu lực ở một
     tài khoản Staff đang hoạt động.
-32. Đăng bài bất kỳ và xác nhận bài nằm trong hàng chờ, Staff/admin nhận thông
-    báo và đều có nút Duyệt/Từ chối. Staff được ẩn/hiện nhưng không được xóa bài
-    của người khác hoặc quản lý tài khoản. Bình luận văn bản/ảnh công khai ngay;
-    âm thanh/video trong bình luận vẫn chờ riêng admin.
+33. Chạy `forum_v13_migration.sql`, deploy lại `moderate-forum`, sau đó thử:
+    bài/bình luận văn bản an toàn tự công khai; ảnh và một video hợp lệ được
+    Gemini kiểm tra; nội dung nghi ngờ xuất hiện trong hộp thư Staff/Admin; âm
+    thanh chỉ admin duyệt; nội dung vi phạm bị xóa khỏi database và object R2
+    cũng không còn. Tắt tạm key hoặc gây lỗi quota để xác nhận nội dung chuyển
+    sang người kiểm duyệt thay vì bị treo.

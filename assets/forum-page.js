@@ -121,6 +121,7 @@ let postCooldownTimer = 0;
 let postCooldownSyncTimer = 0;
 let postCooldownRefreshPromise = null;
 let postCooldownServerReady = false;
+let postCooldownGuardUntil = 0;
 let postPublishPending = false;
 let commentCooldownUntil = 0;
 let commentCooldownTimer = 0;
@@ -299,10 +300,11 @@ async function refreshCommentCooldown() {
   updateCommentCooldownUi();
 }
 
-function refreshPostCooldown() {
+function refreshPostCooldown({ allowServerClear = false } = {}) {
   if (!session?.user?.id || !canInteract()) return Promise.resolve();
   if (hasUnlimitedVipPosting()) {
     postCooldownUntil = 0;
+    postCooldownGuardUntil = 0;
     postCooldownServerReady = true;
     rememberPostCooldown(0);
     updatePostCooldownUi();
@@ -316,9 +318,15 @@ function refreshPostCooldown() {
 
     if (!rpcError) {
       const serverCooldownUntil = nextPostAt ? new Date(nextPostAt).getTime() : 0;
-      // Giữ mốc vừa được xác nhận khi đăng bài hoặc khi trigger chống spam
-      // từ chối. RPC trả NULL chậm/khác phiên không được phép mở nút sớm.
-      postCooldownUntil = Math.max(serverCooldownUntil, storedPostCooldown());
+      const guardedCooldownUntil = !allowServerClear && postCooldownGuardUntil > Date.now()
+        ? postCooldownGuardUntil
+        : 0;
+      // Trong lúc vừa INSERT/trigger phản hồi, giữ mốc đã xác nhận để một
+      // lần đọc chậm không mở nút. Khi tải lại/focus, Supabase được phép xác
+      // nhận mốc đã bị admin xóa.
+      postCooldownUntil = Math.max(serverCooldownUntil, guardedCooldownUntil);
+      if (serverCooldownUntil > 0) postCooldownGuardUntil = serverCooldownUntil;
+      else if (allowServerClear) postCooldownGuardUntil = 0;
       postCooldownServerReady = true;
       rememberPostCooldown(postCooldownUntil);
       updatePostCooldownUi();
@@ -338,7 +346,11 @@ function refreshPostCooldown() {
     const fallbackCooldownUntil = latestAt
       ? new Date(latestAt).getTime() + 15 * 60 * 1000
       : 0;
-    postCooldownUntil = Math.max(fallbackCooldownUntil, storedPostCooldown());
+    postCooldownUntil = Math.max(
+      fallbackCooldownUntil,
+      storedPostCooldown(),
+      postCooldownGuardUntil > Date.now() ? postCooldownGuardUntil : 0
+    );
     postCooldownServerReady = true;
     rememberPostCooldown(postCooldownUntil);
     updatePostCooldownUi();
@@ -349,9 +361,9 @@ function refreshPostCooldown() {
   return postCooldownRefreshPromise;
 }
 
-function syncPostCooldown() {
+function syncPostCooldown(allowServerClear = false) {
   if (document.visibilityState === 'hidden') return;
-  void refreshPostCooldown().catch(error => {
+  void refreshPostCooldown({ allowServerClear }).catch(error => {
     console.warn('Không thể đồng bộ thời gian chờ đăng bài', error);
   });
 }
@@ -1143,6 +1155,7 @@ async function publishPost(event) {
 
     if (!editing && !hasUnlimitedVipPosting()) {
       postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
+      postCooldownGuardUntil = postCooldownUntil;
       postCooldownServerReady = true;
       rememberPostCooldown(postCooldownUntil);
     }
@@ -1182,6 +1195,7 @@ async function publishPost(event) {
       postCooldownUntil = knownCooldownUntil > Date.now()
         ? knownCooldownUntil
         : Date.now() + 15 * 60 * 1000;
+      postCooldownGuardUntil = postCooldownUntil;
       postCooldownServerReady = true;
       rememberPostCooldown(postCooldownUntil);
       updatePostCooldownUi();
@@ -3194,7 +3208,10 @@ async function init() {
     }
 
     configureAccount();
-    await Promise.all([refreshPostCooldown(), refreshCommentCooldown()]);
+    await Promise.all([
+      refreshPostCooldown({ allowServerClear: true }),
+      refreshCommentCooldown()
+    ]);
     postCooldownTimer = window.setInterval(updatePostCooldownUi, 1000);
     postCooldownSyncTimer = window.setInterval(() => {
       if (cooldownSeconds() > 0 || !postCooldownServerReady) syncPostCooldown();
@@ -3237,10 +3254,10 @@ elements.closeComposer.addEventListener('click', closeComposer);
 elements.composerDialog.addEventListener('cancel', event => {
   event.preventDefault();
 });
-window.addEventListener('focus', syncPostCooldown);
-document.addEventListener('visibilitychange', syncPostCooldown);
+window.addEventListener('focus', () => syncPostCooldown(true));
+document.addEventListener('visibilitychange', () => syncPostCooldown(true));
 window.addEventListener('storage', event => {
-  if (event.key === postCooldownStorageKey()) syncPostCooldown();
+  if (event.key === postCooldownStorageKey()) syncPostCooldown(true);
 });
 elements.search.addEventListener('input', renderPosts);
 elements.sortButtons.forEach(button => {

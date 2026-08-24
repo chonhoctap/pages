@@ -121,6 +121,7 @@ let postCooldownTimer = 0;
 let postCooldownSyncTimer = 0;
 let postCooldownRefreshPromise = null;
 let postCooldownServerReady = false;
+let postPublishPending = false;
 let commentCooldownUntil = 0;
 let commentCooldownTimer = 0;
 let notificationTimer = 0;
@@ -314,12 +315,11 @@ function refreshPostCooldown() {
       .rpc('get_forum_post_cooldown');
 
     if (!rpcError) {
-      // Supabase là nguồn chính. Khi admin xóa mốc chờ, giá trị NULL phải
-      // thắng cache cũ trong localStorage thay vì tiếp tục đếm hết 15 phút.
-      postCooldownUntil = nextPostAt ? new Date(nextPostAt).getTime() : 0;
-      // Chỉ mở nút khi Supabase xác nhận mốc chờ đã thật sự hết. Không dùng
-      // đồng hồ thiết bị để tự suy đoán vì có thể lệch với đồng hồ database.
-      postCooldownServerReady = !nextPostAt;
+      const serverCooldownUntil = nextPostAt ? new Date(nextPostAt).getTime() : 0;
+      // Giữ mốc vừa được xác nhận khi đăng bài hoặc khi trigger chống spam
+      // từ chối. RPC trả NULL chậm/khác phiên không được phép mở nút sớm.
+      postCooldownUntil = Math.max(serverCooldownUntil, storedPostCooldown());
+      postCooldownServerReady = true;
       rememberPostCooldown(postCooldownUntil);
       updatePostCooldownUi();
       return;
@@ -339,7 +339,7 @@ function refreshPostCooldown() {
       ? new Date(latestAt).getTime() + 15 * 60 * 1000
       : 0;
     postCooldownUntil = Math.max(fallbackCooldownUntil, storedPostCooldown());
-    postCooldownServerReady = cooldownSeconds() === 0;
+    postCooldownServerReady = true;
     rememberPostCooldown(postCooldownUntil);
     updatePostCooldownUi();
   })().finally(() => {
@@ -1056,11 +1056,20 @@ async function publishPost(event) {
     setInfo('Role của bạn hiện không có quyền đăng bài.', 'error');
     return;
   }
+  if (postPublishPending) return;
+  postPublishPending = true;
   const editing = editingPost;
-  await previewPreparePromise;
+  try {
+    await previewPreparePromise;
+  } catch (error) {
+    postPublishPending = false;
+    setInfo(`Không thể chuẩn bị media: ${humanizeAuthError(error)}`, 'error');
+    return;
+  }
 
   const title = elements.title.value.trim();
   if (title.length < 3) {
+    postPublishPending = false;
     setInfo('Nội dung chính cần ít nhất 3 ký tự.', 'error');
     elements.title.focus();
     return;
@@ -1134,7 +1143,7 @@ async function publishPost(event) {
 
     if (!editing && !hasUnlimitedVipPosting()) {
       postCooldownUntil = new Date(createdPost.created_at).getTime() + 15 * 60 * 1000;
-      postCooldownServerReady = false;
+      postCooldownServerReady = true;
       rememberPostCooldown(postCooldownUntil);
     }
     updatePostCooldownUi();
@@ -1167,17 +1176,24 @@ async function publishPost(event) {
       uploaded.map(item => removeStoredMedia(item.path, 'forum-media'))
     );
     if (cooldownRejected) {
-      postCooldownServerReady = false;
-      await refreshPostCooldown().catch(() => {});
+      // Trigger là xác nhận cuối cùng rằng cooldown vẫn còn. Khóa nút ngay
+      // cả khi RPC đọc mốc chờ đang trả NULL hoặc dữ liệu cũ.
+      const knownCooldownUntil = Math.max(postCooldownUntil, storedPostCooldown());
+      postCooldownUntil = knownCooldownUntil > Date.now()
+        ? knownCooldownUntil
+        : Date.now() + 15 * 60 * 1000;
+      postCooldownServerReady = true;
+      rememberPostCooldown(postCooldownUntil);
       updatePostCooldownUi();
       hidePostProgress();
       closeComposer();
-      setInfo('Bài viết trước đã được ghi nhận. Hãy chờ bộ đếm trên nút Đăng bài kết thúc.', 'info');
+      setInfo('', 'info');
       return;
     }
     setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
     finishPostProgress(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
   } finally {
+    postPublishPending = false;
     setBusy(elements.publish, false);
   }
 }

@@ -297,7 +297,33 @@ Từ thời điểm đó, tài khoản chủ có thể mở `admin.html` để c
 hoặc cấm tài khoản. Người dùng thông thường không thể tự thay đổi `role` hay
 `account_status`.
 
-## 6. Kiểm tra
+## 6. Bật kiểm duyệt Gemini 3.6 Flash
+
+1. Chạy toàn bộ `forum_v13_migration.sql` trong **SQL Editor** sau V12 và
+   migration phân quyền.
+2. Tạo hoặc cập nhật Edge Function tên `moderate-forum` bằng file
+   `functions/moderate-forum/index.ts`.
+3. Trong **Edge Functions → Secrets**, thêm:
+   - `GEMINI_API_KEY`: khóa Gemini API; không đưa khóa vào frontend/GitHub.
+   - `MEDIA_API_URL`: `https://chonhoctap-media.chonhoctap-vn.workers.dev`.
+   - `R2_CLEANUP_SECRET`: cùng secret đang đặt trong Cloudflare Worker để xóa
+     media vi phạm theo lô.
+   - `ALLOWED_ORIGINS` (tùy chọn): danh sách origin bổ sung, phân cách bằng dấu phẩy.
+4. Deploy Edge Function rồi mới đưa thay đổi frontend V13 lên nhánh chính.
+
+Luồng V13 áp dụng cho cả bài viết và bình luận:
+
+- **An toàn**: Gemini tự công khai.
+- **Vi phạm rõ ràng**: xóa object R2/Supabase Storage trước, sau đó xóa nội dung;
+  vẫn giữ một bản ghi kiểm duyệt không chứa nội dung trong
+  `forum_moderation_runs`.
+- **Nghi ngờ, hết thời gian hoặc lỗi quota**: giữ nội dung ở trạng thái ẩn và
+  gửi hộp thư cho Staff/Admin.
+- **Âm thanh**: không gửi Gemini, chuyển thẳng cho admin.
+- Request Gemini dùng `store=false`, structured JSON và mức suy luận thấp để
+  giảm độ trễ. Edge Function có timeout 70 giây, thấp hơn giới hạn 5 phút.
+
+## 7. Kiểm tra
 
 1. Đăng ký bằng email, username và mật khẩu.
 2. Xác nhận email nếu Supabase yêu cầu.

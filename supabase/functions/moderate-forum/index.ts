@@ -19,6 +19,7 @@ type ModerationResult = {
 
 const MODEL = 'gemini-3.6-flash';
 const MAX_MEDIA_ITEMS = 12;
+const MAX_INLINE_MEDIA_BYTES = 12 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 70_000;
 const ALLOWED_CATEGORIES = new Set([
   'illegal', 'scam', 'gambling', 'drugs', 'sexual', 'hate', 'harassment',
@@ -211,6 +212,79 @@ function allowedMediaUrl(raw: unknown) {
   return '';
 }
 
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function mediaMimeType(item: MediaItem, uri: string, header: string) {
+  const expectedPrefix = item.media_type === 'video' ? 'video/' : 'image/';
+  const normalizedHeader = header.split(';')[0].trim().toLowerCase();
+  if (normalizedHeader.startsWith(expectedPrefix)) return normalizedHeader;
+
+  const pathname = new URL(uri).pathname.toLowerCase();
+  if (item.media_type === 'video') {
+    if (pathname.endsWith('.webm')) return 'video/webm';
+    if (pathname.endsWith('.mov')) return 'video/mov';
+    if (pathname.endsWith('.mpeg') || pathname.endsWith('.mpg')) return 'video/mpeg';
+    if (pathname.endsWith('.avi')) return 'video/avi';
+    if (pathname.endsWith('.wmv')) return 'video/wmv';
+    if (pathname.endsWith('.3gp')) return 'video/3gpp';
+    return 'video/mp4';
+  }
+  if (pathname.endsWith('.png')) return 'image/png';
+  if (pathname.endsWith('.webp')) return 'image/webp';
+  if (pathname.endsWith('.gif')) return 'image/gif';
+  if (pathname.endsWith('.heic')) return 'image/heic';
+  if (pathname.endsWith('.heif')) return 'image/heif';
+  if (pathname.endsWith('.bmp')) return 'image/bmp';
+  if (pathname.endsWith('.tif') || pathname.endsWith('.tiff')) return 'image/tiff';
+  return 'image/jpeg';
+}
+
+async function prepareInlineMedia(item: MediaItem, remainingBytes: number) {
+  const uri = allowedMediaUrl(item.media_url);
+  if (!uri || !['image', 'video'].includes(item.media_type || '')) {
+    return { reason: 'Có tệp phương tiện không thể xác minh nguồn an toàn.' };
+  }
+
+  const response = await fetch(uri, {
+    headers: { Accept: item.media_type === 'video' ? 'video/*' : 'image/*' },
+    signal: AbortSignal.timeout(20_000)
+  });
+  if (!response.ok) {
+    return { reason: `Không tải được tệp phương tiện từ R2 (HTTP ${response.status}).` };
+  }
+
+  const declaredLength = Number(response.headers.get('content-length') || 0);
+  if (declaredLength > remainingBytes) {
+    return { reason: 'Tổng dung lượng ảnh/video vượt giới hạn kiểm tra tự động 12 MB.' };
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length) return { reason: 'Tệp phương tiện rỗng hoặc không đọc được.' };
+  if (bytes.length > remainingBytes) {
+    return { reason: 'Tổng dung lượng ảnh/video vượt giới hạn kiểm tra tự động 12 MB.' };
+  }
+
+  return {
+    bytes: bytes.length,
+    input: {
+      type: item.media_type,
+      data: bytesToBase64(bytes),
+      mime_type: mediaMimeType(
+        item,
+        uri,
+        response.headers.get('content-type') || ''
+      )
+    }
+  };
+}
+
 function uniqueMedia(items: MediaItem[]) {
   const seen = new Set<string>();
   return items.filter(item => {
@@ -374,16 +448,18 @@ async function moderate(targetType: TargetType, target: Record<string, unknown>)
 
   const prompt = policyPrompt(targetType, target);
   const inputs: Record<string, unknown>[] = [];
+  let remainingBytes = MAX_INLINE_MEDIA_BYTES;
   for (const item of media) {
-    const uri = allowedMediaUrl(item.media_url);
-    if (!uri || !['image', 'video'].includes(item.media_type || '')) {
+    const prepared = await prepareInlineMedia(item, remainingBytes);
+    if (!prepared.input || !prepared.bytes) {
       return {
         decision: 'suspicious',
-        reason: 'Có tệp phương tiện không thể xác minh nguồn an toàn.',
+        reason: prepared.reason || 'Không thể chuẩn bị tệp phương tiện để Gemini kiểm tra.',
         categories: [], confidence: 0, evidence: []
       } as ModerationResult;
     }
-    inputs.push({ type: item.media_type, uri });
+    remainingBytes -= prepared.bytes;
+    inputs.push(prepared.input);
   }
   inputs.push({ type: 'text', text: prompt });
   return callGemini(inputs);
@@ -668,4 +744,3 @@ Deno.serve(async request => {
     durationMs
   });
 });
-

@@ -3,10 +3,11 @@ import { MEDIA_API_URL } from './media-config.js?v=20260815-1';
 const MB = 1024 * 1024;
 const SUPABASE_TUS_URL =
   'https://qartstnodgujgqkczzml.storage.supabase.co/storage/v1/upload/resumable';
-export const IMAGE_OUTPUT_LIMIT = 5 * MB;
+export const IMAGE_OUTPUT_LIMIT = 50 * MB;
 export const VIDEO_OUTPUT_LIMIT = 50 * MB;
+export const VIDEO_SOURCE_LIMIT = 300 * MB;
 export const AUDIO_OUTPUT_LIMIT = 2 * MB;
-export const VIP_IMAGE_OUTPUT_LIMIT = 5 * MB;
+export const VIP_IMAGE_OUTPUT_LIMIT = 50 * MB;
 export const VIP_VIDEO_OUTPUT_LIMIT = 50 * MB;
 export const VIP_AUDIO_OUTPUT_LIMIT = 5 * MB;
 export const MEDIA_DURATION_LIMIT = 60;
@@ -32,9 +33,9 @@ export function mediaLimitsForRole(role) {
     audioDuration: admin ? Infinity : elevated
       ? VIP_AUDIO_DURATION_LIMIT
       : MEMBER_AUDIO_DURATION_LIMIT,
-    maxWidth: admin ? Infinity : 1280,
-    maxHeight: admin ? Infinity : 720,
-    qualityLabel: admin ? 'nguyên bản' : '720p'
+    maxWidth: 1280,
+    maxHeight: 720,
+    qualityLabel: '720p'
   };
 }
 
@@ -47,16 +48,6 @@ function mediaType(file) {
   if (file?.type?.startsWith('video/')) return 'video';
   if (file?.type?.startsWith('audio/')) return 'audio';
   return '';
-}
-
-function canvasBlob(canvas, type, quality) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      blob => blob ? resolve(blob) : reject(new Error('Không thể nén ảnh này.')),
-      type,
-      quality
-    );
-  });
 }
 
 function targetDimensions(width, height, maxWidth, maxHeight, scale = 1) {
@@ -88,57 +79,13 @@ async function decodeImage(file) {
 export async function optimizeImage(file, role = 'member') {
   if (!file?.type?.startsWith('image/')) return file;
   const limits = mediaLimitsForRole(role);
-  if (limits.admin) return file;
-  if (file.type === 'image/gif') {
-    if (file.size > limits.imageBytes) {
-      throw new Error(
-        `GIF động phải nhỏ hơn ${(limits.imageBytes / MB).toFixed(1)} MB.`
-      );
-    }
-    return file;
-  }
-
-  const source = await decodeImage(file);
-  const sourceWidth = source.width || source.naturalWidth;
-  const sourceHeight = source.height || source.naturalHeight;
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d', { alpha: false });
-  if (!context) throw new Error('Trình duyệt không hỗ trợ nén ảnh.');
-
-  let scale = 1;
-  let quality = 0.84;
-  let blob;
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const dimensions = targetDimensions(
-      sourceWidth,
-      sourceHeight,
-      limits.maxWidth,
-      limits.maxHeight,
-      scale
-    );
-    canvas.width = dimensions.width;
-    canvas.height = dimensions.height;
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.drawImage(source, 0, 0, canvas.width, canvas.height);
-    blob = await canvasBlob(canvas, 'image/webp', quality);
-    if (blob.size <= limits.imageBytes) break;
-    if (quality > 0.58) quality -= 0.08;
-    else scale *= 0.82;
-  }
-  source.close?.();
-  if (!blob || blob.size > limits.imageBytes) {
+  if (file.size > limits.imageBytes) {
     throw new Error(
-      `Không thể nén ảnh xuống dưới ${(limits.imageBytes / MB).toFixed(1)} MB. `
-      + 'Hãy chọn ảnh nhỏ hơn.'
+      `Ảnh phải nhỏ hơn ${Math.round(limits.imageBytes / MB)} MB. `
+      + 'Ảnh được giữ nguyên chất lượng và độ phân giải.'
     );
   }
-
-  const baseName = (file.name || 'image').replace(/\.[^.]+$/u, '');
-  return new File([blob], `${baseName}.webp`, {
-    type: 'image/webp',
-    lastModified: Date.now()
-  });
+  return file;
 }
 
 function videoMetadata(file) {
@@ -235,7 +182,196 @@ function fitsFrame(metadata, limits) {
     : metadata.width <= limits.maxHeight && metadata.height <= limits.maxWidth;
 }
 
-export async function prepareMedia(file, role = 'member') {
+export function videoOutputDimensions(width, height, maxWidth = 1280, maxHeight = 720) {
+  const dimensions = targetDimensions(width, height, maxWidth, maxHeight);
+  return {
+    width: Math.max(2, Math.floor(dimensions.width / 2) * 2),
+    height: Math.max(2, Math.floor(dimensions.height / 2) * 2)
+  };
+}
+
+function recorderMimeType() {
+  const candidates = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4'
+  ];
+  return candidates.find(type => MediaRecorder.isTypeSupported(type)) || '';
+}
+
+function videoFileName(file, mimeType) {
+  const baseName = (file.name || 'video').replace(/\.[^.]+$/u, '');
+  const extension = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+  return `${baseName}-720p.${extension}`;
+}
+
+async function transcodeVideoTo720p(file, metadata, limits, options = {}) {
+  const canRecord = typeof MediaRecorder !== 'undefined'
+    && typeof MediaStream !== 'undefined'
+    && typeof HTMLCanvasElement !== 'undefined'
+    && typeof HTMLCanvasElement.prototype.captureStream === 'function';
+  if (!canRecord) {
+    throw new Error(
+      'Trình duyệt này không hỗ trợ nén video tự động. '
+      + 'Hãy dùng Chrome, Edge hoặc Firefox phiên bản mới.'
+    );
+  }
+
+  const mimeType = recorderMimeType();
+  if (!mimeType) throw new Error('Trình duyệt không có bộ mã hóa video phù hợp.');
+
+  const url = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d', { alpha: false });
+  if (!context) {
+    URL.revokeObjectURL(url);
+    throw new Error('Trình duyệt không thể tạo khung hình để nén video.');
+  }
+
+  video.preload = 'auto';
+  video.playsInline = true;
+  video.src = url;
+  await new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(
+      () => reject(new Error('Không thể mở video để nén.')),
+      15000
+    );
+    video.onloadeddata = () => {
+      window.clearTimeout(timeout);
+      resolve();
+    };
+    video.onerror = () => {
+      window.clearTimeout(timeout);
+      reject(new Error('Không thể giải mã video này để nén.'));
+    };
+  }).catch(error => {
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(url);
+    throw error;
+  });
+
+  const dimensions = videoOutputDimensions(
+    metadata.width,
+    metadata.height,
+    limits.maxWidth,
+    limits.maxHeight
+  );
+  canvas.width = dimensions.width;
+  canvas.height = dimensions.height;
+  const canvasStream = canvas.captureStream(30);
+  let audioContext;
+  let audioSource;
+  let audioDestination;
+  let outputStream;
+  let recorder;
+  let animationFrame = 0;
+  let frameCallback = 0;
+  let transcodeTimeout = 0;
+  const chunks = [];
+
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const audioTracks = [];
+    if (AudioContextClass) {
+      audioContext = new AudioContextClass();
+      await audioContext.resume();
+      audioSource = audioContext.createMediaElementSource(video);
+      audioDestination = audioContext.createMediaStreamDestination();
+      audioSource.connect(audioDestination);
+      audioTracks.push(...audioDestination.stream.getAudioTracks());
+    } else {
+      const captured = video.captureStream?.() || video.mozCaptureStream?.();
+      if (captured) audioTracks.push(...captured.getAudioTracks());
+    }
+
+    outputStream = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...audioTracks
+    ]);
+    recorder = new MediaRecorder(outputStream, {
+      mimeType,
+      videoBitsPerSecond: 4_500_000,
+      audioBitsPerSecond: 128_000
+    });
+    recorder.ondataavailable = event => {
+      if (event.data?.size) chunks.push(event.data);
+    };
+    const stopped = new Promise((resolve, reject) => {
+      recorder.onstop = resolve;
+      recorder.onerror = event => reject(event.error || new Error('Nén video thất bại.'));
+    });
+    const playbackEnded = new Promise((resolve, reject) => {
+      const finish = callback => value => {
+        window.clearTimeout(transcodeTimeout);
+        callback(value);
+      };
+      video.onended = finish(resolve);
+      video.onerror = finish(() => reject(new Error('Video bị lỗi trong lúc nén.')));
+      transcodeTimeout = window.setTimeout(
+        finish(() => reject(new Error('Nén video quá thời gian cho phép. Hãy thử lại.'))),
+        Math.max(45_000, ((metadata.durationSeconds || 60) + 30) * 1000)
+      );
+    });
+
+    const drawFrame = () => {
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (metadata.durationSeconds && typeof options.onProgress === 'function') {
+        options.onProgress(Math.min(1, video.currentTime / metadata.durationSeconds));
+      }
+      if (!video.ended) {
+        if (typeof video.requestVideoFrameCallback === 'function') {
+          frameCallback = video.requestVideoFrameCallback(drawFrame);
+        } else {
+          animationFrame = window.requestAnimationFrame(drawFrame);
+        }
+      }
+    };
+
+    recorder.start(1000);
+    drawFrame();
+    await video.play();
+    await playbackEnded;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    recorder.stop();
+    await stopped;
+
+    const outputType = mimeType.split(';')[0];
+    const blob = new Blob(chunks, { type: outputType });
+    if (!blob.size) throw new Error('Video sau nén không có dữ liệu.');
+    if (blob.size > limits.videoBytes) {
+      throw new Error(
+        `Video sau nén vẫn vượt ${Math.round(limits.videoBytes / MB)} MB. `
+        + 'Hãy chọn video ngắn hơn.'
+      );
+    }
+    options.onProgress?.(1);
+    return new File([blob], videoFileName(file, outputType), {
+      type: outputType,
+      lastModified: Date.now()
+    });
+  } finally {
+    window.clearTimeout(transcodeTimeout);
+    video.pause();
+    if (frameCallback && typeof video.cancelVideoFrameCallback === 'function') {
+      video.cancelVideoFrameCallback(frameCallback);
+    }
+    if (animationFrame) window.cancelAnimationFrame(animationFrame);
+    if (recorder?.state === 'recording') recorder.stop();
+    outputStream?.getTracks().forEach(track => track.stop());
+    canvasStream.getTracks().forEach(track => track.stop());
+    audioSource?.disconnect();
+    if (audioContext) await audioContext.close().catch(() => {});
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function prepareMedia(file, role = 'member', options = {}) {
   const kind = mediaType(file);
   if (!kind) {
     throw new Error('Chỉ hỗ trợ ảnh, video hoặc âm thanh.');
@@ -267,28 +403,24 @@ export async function prepareMedia(file, role = 'member') {
     }
     return file;
   }
-  if (file.size > limits.videoBytes) {
+  if (file.size > VIDEO_SOURCE_LIMIT) {
     throw new Error(
-      `Video phải nhỏ hơn ${Math.round(limits.videoBytes / MB)} MB.`
+      `Video gốc phải nhỏ hơn ${Math.round(VIDEO_SOURCE_LIMIT / MB)} MB để nén.`
     );
   }
   if (!['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type)) {
     throw new Error('Chỉ hỗ trợ video MP4, WebM hoặc MOV.');
   }
   const metadata = await mediaMetadata(file);
-  if (!fitsFrame(metadata, limits)) {
-    throw new Error(
-      `Video phải có sẵn chất lượng tối đa ${limits.qualityLabel}. `
-      + 'Trình duyệt chưa thể tự nén video; hãy giảm độ phân giải trước khi tải lên.'
-    );
-  }
   if (
     metadata.durationSeconds
     && metadata.durationSeconds > limits.videoDuration
   ) {
     throw new Error('Video tối đa 1 phút.');
   }
-  return file;
+  const needsTranscode = !fitsFrame(metadata, limits) || file.size > limits.videoBytes;
+  if (!needsTranscode) return file;
+  return transcodeVideoTo720p(file, metadata, limits, options);
 }
 
 function encodedKey(key) {

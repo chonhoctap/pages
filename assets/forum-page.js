@@ -19,7 +19,7 @@ import {
   uploadToR2,
   uploadToSupabaseResumable,
   deleteFromR2
-} from './media-storage.js?v=20260824-1';
+} from './media-storage.js?v=20260824-2';
 
 initThemeToggle();
 
@@ -598,7 +598,17 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
   const preparedItems = [];
   try {
     for (const source of sourceFiles) {
-      const prepared = await prepareMedia(source, currentProfile?.role || 'member');
+      const prepared = await prepareMedia(
+        source,
+        currentProfile?.role || 'member',
+        {
+          onProgress: progress => {
+            if (sequenceCheck()) {
+              setInfo(`Đang nén video xuống 720p... ${Math.round(progress * 100)}%`, 'info');
+            }
+          }
+        }
+      );
       if (!sequenceCheck()) {
         releasePreparedItems(preparedItems);
         return [];
@@ -606,7 +616,7 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
       const metadata = await mediaMetadata(prepared);
       const limits = currentMediaLimits();
       const landscape = (metadata.width || 0) >= (metadata.height || 0);
-      const needsFrame = mediaKind(prepared) !== 'audio';
+      const needsFrame = mediaKind(prepared) === 'video';
       const fitsFrame = !needsFrame || (metadata.width && metadata.height && (
         landscape
           ? metadata.width <= limits.maxWidth && metadata.height <= limits.maxHeight
@@ -614,8 +624,7 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
       ));
       if (!fitsFrame) {
         throw new Error(
-          `Media phải nằm trong khung ${limits.qualityLabel}. `
-          + 'GIF động không thể tự giảm độ phân giải.'
+          `Video sau nén phải nằm trong khung ${limits.qualityLabel}.`
         );
       }
       if (!sequenceCheck()) {
@@ -2936,7 +2945,9 @@ function configureAccount() {
 }
 
 function mediaLimitDescription(limits) {
-  if (limits.admin) return 'Không giới hạn số lượng · tối đa kỹ thuật 50 MB/tệp';
+  if (limits.admin) {
+    return 'Không giới hạn số lượng · tối đa kỹ thuật 50 MB/tệp · video tự nén về 720p';
+  }
   const video = limits.maxVideos
     ? `${limits.maxVideos} video 1 phút`
     : 'không hỗ trợ video';

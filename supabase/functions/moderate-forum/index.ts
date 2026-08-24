@@ -19,6 +19,7 @@ type ModerationResult = {
 
 const MODEL = 'gemini-3.6-flash';
 const MAX_MEDIA_ITEMS = 12;
+const MAX_INLINE_MEDIA_BYTES = 18 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 70_000;
 const ALLOWED_CATEGORIES = new Set([
   'illegal', 'scam', 'gambling', 'drugs', 'sexual', 'hate', 'harassment',
@@ -127,18 +128,13 @@ function normalizeResult(value: unknown): ModerationResult {
 }
 
 function modelText(response: Record<string, unknown>) {
-  const steps = Array.isArray(response.steps) ? response.steps : [];
-  for (let stepIndex = steps.length - 1; stepIndex >= 0; stepIndex -= 1) {
-    const step = steps[stepIndex] as Record<string, unknown>;
-    if (step?.type !== 'model_output' || !Array.isArray(step.content)) continue;
-    for (const item of step.content as Record<string, unknown>[]) {
-      if (item?.type === 'text' && typeof item.text === 'string') return item.text;
+  const candidates = Array.isArray(response.candidates) ? response.candidates : [];
+  for (const candidate of candidates as Record<string, unknown>[]) {
+    const content = candidate?.content as Record<string, unknown> | undefined;
+    const parts = Array.isArray(content?.parts) ? content.parts : [];
+    for (const part of parts as Record<string, unknown>[]) {
+      if (typeof part?.text === 'string' && part.text.trim()) return part.text;
     }
-  }
-  const outputs = Array.isArray(response.outputs) ? response.outputs : [];
-  for (let index = outputs.length - 1; index >= 0; index -= 1) {
-    const output = outputs[index] as Record<string, unknown>;
-    if (output?.type === 'text' && typeof output.text === 'string') return output.text;
   }
   return '';
 }
@@ -254,11 +250,74 @@ function responseSchema() {
   };
 }
 
-async function callGemini(input: Record<string, unknown>[]) {
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function fallbackMimeType(item: MediaItem, uri: string) {
+  const pathname = new URL(uri).pathname.toLowerCase();
+  if (item.media_type === 'video') {
+    if (pathname.endsWith('.webm')) return 'video/webm';
+    if (pathname.endsWith('.mov')) return 'video/quicktime';
+    return 'video/mp4';
+  }
+  if (pathname.endsWith('.png')) return 'image/png';
+  if (pathname.endsWith('.webp')) return 'image/webp';
+  if (pathname.endsWith('.heic')) return 'image/heic';
+  if (pathname.endsWith('.heif')) return 'image/heif';
+  return 'image/jpeg';
+}
+
+async function inlineMediaPart(item: MediaItem, remainingBytes: number) {
+  const uri = allowedMediaUrl(item.media_url);
+  if (!uri || !['image', 'video'].includes(item.media_type || '')) {
+    return { reason: 'Có tệp phương tiện không thể xác minh nguồn an toàn.' };
+  }
+  const response = await fetch(uri, {
+    method: 'GET',
+    headers: { Accept: item.media_type === 'video' ? 'video/*' : 'image/*' },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(20_000)
+  });
+  if (!response.ok) {
+    return { reason: `Không tải được tệp phương tiện để gửi Gemini (HTTP ${response.status}).` };
+  }
+  const declaredLength = Number(response.headers.get('content-length') || 0);
+  if (declaredLength > remainingBytes) {
+    return { reason: 'Tổng dung lượng ảnh/video vượt giới hạn gửi trực tiếp 18 MB; cần người kiểm duyệt.' };
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.length || bytes.length > remainingBytes) {
+    return { reason: 'Tổng dung lượng ảnh/video vượt giới hạn gửi trực tiếp 18 MB; cần người kiểm duyệt.' };
+  }
+  const headerMime = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  const expectedPrefix = item.media_type === 'video' ? 'video/' : 'image/';
+  const mimeType = headerMime.startsWith(expectedPrefix)
+    ? headerMime
+    : fallbackMimeType(item, uri);
+  return {
+    bytes: bytes.length,
+    part: {
+      inline_data: {
+        mime_type: mimeType,
+        data: bytesToBase64(bytes)
+      }
+    }
+  };
+}
+
+async function callGemini(parts: Record<string, unknown>[]) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   try {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/interactions', {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -266,17 +325,16 @@ async function callGemini(input: Record<string, unknown>[]) {
         Accept: 'application/json'
       },
       body: JSON.stringify({
-        model: MODEL,
-        store: false,
-        input,
-        response_format: {
-          type: 'text',
-          mime_type: 'application/json',
-          schema: responseSchema()
-        },
-        generation_config: {
-          thinking_level: 'low',
-          max_output_tokens: 600
+        contents: [{ role: 'user', parts }],
+        generationConfig: {
+          responseFormat: {
+            text: {
+              mimeType: 'application/json',
+              schema: responseSchema()
+            }
+          },
+          thinkingConfig: { thinkingLevel: 'low' },
+          maxOutputTokens: 600
         }
       }),
       signal: controller.signal
@@ -287,7 +345,22 @@ async function callGemini(input: Record<string, unknown>[]) {
       throw new Error(message);
     }
     const output = modelText(payload as Record<string, unknown>);
-    if (!output) throw new Error('Gemini không trả về kết quả phân loại.');
+    if (!output) {
+      const promptFeedback = (payload as Record<string, unknown>).promptFeedback as Record<string, unknown> | undefined;
+      const candidates = Array.isArray((payload as Record<string, unknown>).candidates)
+        ? (payload as Record<string, unknown>).candidates as Record<string, unknown>[]
+        : [];
+      const blocked = textValue(promptFeedback?.blockReason, 100)
+        || textValue(candidates[0]?.finishReason, 100);
+      if (/SAFETY|PROHIBITED|BLOCKLIST/u.test(blocked)) {
+        return {
+          decision: 'violation',
+          reason: 'Gemini Safety xác định nội dung có dấu hiệu vi phạm rõ ràng.',
+          categories: ['other'], confidence: 1, evidence: [blocked]
+        } as ModerationResult;
+      }
+      throw new Error(`Gemini không trả về kết quả phân loại${blocked ? ` (${blocked})` : ''}.`);
+    }
     return normalizeResult(JSON.parse(output));
   } finally {
     clearTimeout(timeout);
@@ -312,20 +385,22 @@ async function moderate(targetType: TargetType, target: Record<string, unknown>)
   }
 
   const prompt = policyPrompt(targetType, target);
-  const inputs: Record<string, unknown>[] = [];
+  const parts: Record<string, unknown>[] = [];
+  let remainingBytes = MAX_INLINE_MEDIA_BYTES;
   for (const item of media) {
-    const uri = allowedMediaUrl(item.media_url);
-    if (!uri || !['image', 'video'].includes(item.media_type || '')) {
+    const loaded = await inlineMediaPart(item, remainingBytes);
+    if (!loaded.part || !loaded.bytes) {
       return {
         decision: 'suspicious',
-        reason: 'Có tệp phương tiện không thể xác minh nguồn an toàn.',
+        reason: loaded.reason || 'Không thể chuẩn bị tệp phương tiện để gửi Gemini.',
         categories: [], confidence: 0, evidence: []
       } as ModerationResult;
     }
-    inputs.push({ type: item.media_type, uri });
+    remainingBytes -= loaded.bytes;
+    parts.push(loaded.part);
   }
-  inputs.push({ type: 'text', text: prompt });
-  return callGemini(inputs);
+  parts.push({ text: prompt });
+  return callGemini(parts);
 }
 
 function encodedKey(key: string) {

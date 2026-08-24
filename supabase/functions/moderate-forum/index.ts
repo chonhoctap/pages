@@ -22,8 +22,6 @@ const MAX_MEDIA_ITEMS = 12;
 const MAX_INLINE_MEDIA_BYTES = 12 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 70_000;
 const GEMINI_FILE_TIMEOUT_MS = 60_000;
-const GEMINI_RATE_LIMIT_RETRIES = 1;
-const GEMINI_MAX_RETRY_DELAY_MS = 20_000;
 const ALLOWED_CATEGORIES = new Set([
   'illegal', 'scam', 'gambling', 'drugs', 'sexual', 'hate', 'harassment',
   'bullying', 'graphic_violence', 'disturbing', 'dangerous', 'privacy', 'spam', 'other'
@@ -118,43 +116,6 @@ function errorMessage(payload: unknown, fallback: string) {
   return serialized && serialized !== '{}' ? serialized : fallback;
 }
 
-class GeminiHttpError extends Error {
-  status: number;
-  retryAfterMs: number;
-
-  constructor(status: number, statusText: string, detail: string, retryAfterMs = 0) {
-    super(`Gemini HTTP ${status} ${statusText}: ${detail}`.slice(0, 2600));
-    this.name = 'GeminiHttpError';
-    this.status = status;
-    this.retryAfterMs = retryAfterMs;
-  }
-}
-
-function retryAfterMs(response: Response, payload: unknown) {
-  const header = response.headers.get('retry-after')?.trim() || '';
-  let delayMs = 0;
-  if (/^\d+(?:\.\d+)?$/u.test(header)) {
-    delayMs = Number(header) * 1000;
-  } else if (header) {
-    const retryAt = Date.parse(header);
-    if (Number.isFinite(retryAt)) delayMs = Math.max(0, retryAt - Date.now());
-  }
-
-  if (!delayMs) {
-    const detail = errorMessage(payload, '');
-    const match = detail.match(/retry\s+in\s+([\d.]+)s/iu);
-    if (match) delayMs = Number(match[1]) * 1000;
-  }
-
-  return Number.isFinite(delayMs) && delayMs > 0
-    ? Math.ceil(delayMs) + 500
-    : 0;
-}
-
-function wait(delayMs: number) {
-  return new Promise(resolve => setTimeout(resolve, delayMs));
-}
-
 function clampConfidence(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0;
@@ -235,7 +196,7 @@ Quy tắc ưu tiên bắt buộc:
 - Nếu hình gây bất an, cố ý hù dọa hoặc chưa rõ mức độ/ngữ cảnh: trả về suspicious với category disturbing để Staff/Quản trị viên xem xét.
 - Chỉ trả về violation với category disturbing hoặc graphic_violence khi có yếu tố ghê rợn rõ ràng như máu me, thi thể/tổn thương trực diện, body horror nặng, jumpscare cường độ cao hoặc mục đích gây sốc rõ rệt.
 - Trong chuyên mục Hỏi đáp, ảnh/video ma, kinh dị hoặc hù dọa dù ở mức nhẹ cũng không được đăng nếu không phải tư liệu học tập trực tiếp; trả về violation với category disturbing hoặc spam. Nếu có khả năng là tư liệu giáo dục nhưng chưa đủ ngữ cảnh thì trả về suspicious.
-- Với bài trong chuyên mục Hỏi đáp, hình ảnh/video phải liên quan rõ ràng đến tiêu đề, nội dung, môn và lớp đã chọn. Media bình thường nhưng sai chủ đề hoặc chưa rõ liên quan phải trả về suspicious để Staff/Quản trị viên xem xét, không được xóa như violation. Chỉ trả về violation khi media đồng thời có bằng chứng trực tiếp thuộc nhóm nội dung bị cấm ở trên.
+- Với bài trong chuyên mục Hỏi đáp, hình ảnh/video phải liên quan rõ ràng đến tiêu đề, nội dung, môn và lớp đã chọn. Media rõ ràng sai chủ đề hoặc dùng nhãn môn học để đăng nội dung câu tương tác/hù dọa phải trả về violation; nếu chưa chắc về sự liên quan thì suspicious.
 
 Phân loại đúng một trong ba mức:
 - safe: không có dấu hiệu vi phạm đáng kể.
@@ -543,7 +504,7 @@ function responseSchema() {
   };
 }
 
-async function callGeminiOnce(input: Record<string, unknown>[]) {
+async function callGemini(input: Record<string, unknown>[]) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
   try {
@@ -583,17 +544,13 @@ async function callGeminiOnce(input: Record<string, unknown>[]) {
 
     if (!response.ok) {
       const detail = errorMessage(payload, `Gemini HTTP ${response.status}`);
-      const log = response.status === 429 ? console.warn : console.error;
-      log('Gemini API rejected request', {
+      console.error('Gemini API rejected request', {
         status: response.status,
         statusText: response.statusText,
         detail
       });
-      throw new GeminiHttpError(
-        response.status,
-        response.statusText,
-        detail,
-        response.status === 429 ? retryAfterMs(response, payload) : 0
+      throw new Error(
+        `Gemini HTTP ${response.status} ${response.statusText}: ${detail}`.slice(0, 2600)
       );
     }
 
@@ -620,32 +577,6 @@ async function callGeminiOnce(input: Record<string, unknown>[]) {
   } finally {
     clearTimeout(timeout);
   }
-}
-
-async function callGemini(input: Record<string, unknown>[]) {
-  let lastError: unknown;
-  for (let attempt = 0; attempt <= GEMINI_RATE_LIMIT_RETRIES; attempt += 1) {
-    try {
-      return await callGeminiOnce(input);
-    } catch (error) {
-      lastError = error;
-      const retryDelay = error instanceof GeminiHttpError ? error.retryAfterMs : 0;
-      const canRetry = error instanceof GeminiHttpError
-        && error.status === 429
-        && attempt < GEMINI_RATE_LIMIT_RETRIES
-        && retryDelay > 0
-        && retryDelay <= GEMINI_MAX_RETRY_DELAY_MS;
-      if (!canRetry) throw error;
-
-      const delayWithJitter = retryDelay + Math.floor(250 + Math.random() * 500);
-      console.warn('Gemini rate limit reached; retrying once', {
-        attempt: attempt + 1,
-        retryAfterMs: delayWithJitter
-      });
-      await wait(delayWithJitter);
-    }
-  }
-  throw lastError;
 }
 
 async function moderate(targetType: TargetType, target: Record<string, unknown>) {
@@ -755,8 +686,7 @@ async function clearModerationNotifications(targetType: TargetType, target: Reco
 async function notifyReviewers(
   targetType: TargetType,
   target: Record<string, unknown>,
-  adminOnly = false,
-  reviewMessage = ''
+  adminOnly = false
 ) {
   let profiles = service.from('profiles')
     .select('id')
@@ -786,9 +716,9 @@ async function notifyReviewers(
       type: 'moderation',
       post_id: target.post_id,
       comment_id: targetType === 'comment' ? target.id : null,
-      message: reviewMessage || (adminOnly
+      message: adminOnly
         ? `Có ${targetType === 'post' ? 'bài viết' : 'bình luận'} chứa âm thanh đang chờ bạn duyệt.`
-        : `Hệ thống chưa đủ chắc chắn về ${targetType === 'post' ? 'một bài viết' : 'một bình luận'}; cần bạn xem xét.`)
+        : `Hệ thống chưa đủ chắc chắn về ${targetType === 'post' ? 'một bài viết' : 'một bình luận'}; cần bạn xem xét.`
     }));
   if (rows.length) {
     const { error: insertError } = await service.from('forum_notifications').insert(rows);
@@ -883,40 +813,21 @@ Deno.serve(async request => {
   });
 
   let result: ModerationResult;
-  let quotaLimited = false;
   try {
     result = await moderate(typedTarget, target);
   } catch (error) {
     const diagnostic = errorMessage(error, 'Lỗi Gemini không xác định.');
-    const rateLimited = error instanceof GeminiHttpError && error.status === 429;
-    quotaLimited = rateLimited;
-    const log = rateLimited ? console.warn : console.error;
-    log(rateLimited ? 'Gemini đã đạt giới hạn yêu cầu; chuyển Staff/Admin duyệt' : 'Gemini moderation failed', {
+    console.error('Gemini moderation failed', {
       diagnostic,
       name: error instanceof Error ? error.name : typeof error,
       stack: error instanceof Error ? error.stack : undefined,
       cause: error instanceof Error ? safeSerialize(error.cause, 1200) : undefined
     });
     result = {
-      decision: rateLimited ? 'suspicious' : 'error',
-      reason: rateLimited
-        ? 'Gemini đã đạt giới hạn yêu cầu tạm thời (HTTP 429/quota exceeded). Nội dung đã chuyển cho Staff/Quản trị viên xem xét.'
-        : 'Không thể hoàn tất kiểm tra tự động; nội dung đã chuyển cho Staff/Quản trị viên.',
+      decision: 'error',
+      reason: 'Không thể hoàn tất kiểm tra tự động; nội dung đã chuyển cho Staff/Quản trị viên.',
       categories: [], confidence: 0,
       evidence: [diagnostic.slice(0, 1800)]
-    };
-  }
-  if (
-    typedTarget === 'post'
-    && target.category === 'question'
-    && result.decision === 'violation'
-    && result.categories.length > 0
-    && result.categories.every(category => ['spam', 'other'].includes(category))
-  ) {
-    result = {
-      ...result,
-      decision: 'suspicious',
-      reason: 'Media trong bài Hỏi đáp chưa rõ liên quan đến nội dung học tập; đã chuyển Staff/Quản trị viên xem xét.'
     };
   }
   const durationMs = Date.now() - startedAt;
@@ -979,11 +890,10 @@ Deno.serve(async request => {
     values.ai_moderation_result = result;
   }
   await updateTarget(typedTarget, targetId, values);
-  await notifyReviewers(typedTarget, target, manual, quotaLimited ? result.reason : '');
+  await notifyReviewers(typedTarget, target, manual);
   return json(request, {
     ok: true,
     decision: manual ? 'manual' : 'suspicious',
-    quotaLimited,
     reason: result.reason,
     durationMs
   });

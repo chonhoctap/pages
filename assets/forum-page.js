@@ -19,7 +19,7 @@ import {
   uploadToR2,
   uploadToSupabaseResumable,
   deleteFromR2
-} from './media-storage.js?v=20260824-2';
+} from './media-storage.js?v=20260824-3';
 
 initThemeToggle();
 
@@ -638,29 +638,16 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
         previewUrl: URL.createObjectURL(prepared)
       });
     }
-    const preparedImageBytes = preparedItems
-      .filter(item => item.type === 'image')
-      .reduce((sum, item) => sum + item.file.size, 0);
     const limits = currentMediaLimits();
-    if (
-      Number.isFinite(limits.totalImageBytes)
-      && preparedImageBytes > limits.totalImageBytes
-    ) {
-      throw new Error(
-        `Tổng dung lượng ảnh sau nén tối đa `
-        + `${Math.round(limits.totalImageBytes / 1024 / 1024)} MB.`
-      );
-    }
-    const preparedImageVideoBytes = preparedItems
-      .filter(item => ['image', 'video'].includes(item.type))
+    const preparedMediaBytes = preparedItems
       .reduce((sum, item) => sum + item.file.size, 0);
     if (
-      Number.isFinite(limits.totalImageVideoBytes)
-      && preparedImageVideoBytes > limits.totalImageVideoBytes
+      Number.isFinite(limits.totalMediaBytes)
+      && preparedMediaBytes > limits.totalMediaBytes
     ) {
       throw new Error(
-        `Tổng dung lượng ảnh và video tối đa `
-        + `${Math.round(limits.totalImageVideoBytes / 1024 / 1024)} MB.`
+        `Tổng dung lượng ảnh, video và âm thanh tối đa `
+        + `${Math.round(limits.totalMediaBytes / 1024 / 1024)} MB.`
       );
     }
     return preparedItems;
@@ -2946,22 +2933,14 @@ function configureAccount() {
 
 function mediaLimitDescription(limits) {
   if (limits.admin) {
-    return 'Không giới hạn số lượng · tối đa kỹ thuật 50 MB/tệp · video tự nén về 720p';
+    return 'Không giới hạn số lượng · tổng tất cả tệp 50 MB · video/âm thanh không giới hạn thời lượng · video tự nén về 720p';
   }
   const video = limits.maxVideos
-    ? `${limits.maxVideos} video 1 phút`
+    ? `${limits.maxVideos} video không giới hạn thời lượng`
     : 'không hỗ trợ video';
-  if (Number.isFinite(limits.totalImageVideoBytes)) {
-    return `${limits.maxImages} ảnh + ${video} `
-      + `(tổng ảnh/video ${Math.round(limits.totalImageVideoBytes / 1024 / 1024)} MB) · `
-      + `${limits.maxAudios} âm thanh `
-      + `${Math.round(limits.audioBytes / 1024 / 1024)} MB/`
-      + `${Math.round(limits.audioDuration / 60)} phút · ${limits.qualityLabel}`;
-  }
-  return `${limits.maxImages} ảnh (tổng ${Math.round(limits.totalImageBytes / 1024 / 1024)} MB) · `
-    + `${video} · ${limits.maxAudios} âm thanh `
-    + `${Math.round(limits.audioBytes / 1024 / 1024)} MB/`
-    + `${Math.round(limits.audioDuration / 60)} phút · ${limits.qualityLabel}`;
+  return `${limits.maxImages} ảnh · `
+    + `${video} · ${limits.maxAudios} âm thanh không giới hạn thời lượng · `
+    + `tổng tất cả tệp ${Math.round(limits.totalMediaBytes / 1024 / 1024)} MB · ${limits.qualityLabel}`;
 }
 
 async function init() {

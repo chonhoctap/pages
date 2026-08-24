@@ -241,7 +241,7 @@ test('member video is capped at 50 MB', async t => {
   assert.match((await response.json()).error, /50 MB/iu);
 });
 
-test('VIP audio is capped at 5 MB', async t => {
+test('VIP audio is capped at 50 MB', async t => {
   const originalFetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = originalFetch; });
   globalThis.fetch = async input => {
@@ -256,20 +256,20 @@ test('VIP audio is capped at 5 MB', async t => {
     }
     return new Response(null, { status: 404 });
   };
-  const oversized = new Uint8Array(5 * 1024 * 1024 + 1);
-  oversized.set(new TextEncoder().encode('ID3'));
+  const oversized = new TextEncoder().encode('ID3');
   const response = await worker.fetch(new Request('https://media.example/api/media', {
     method: 'POST',
     headers: {
       Origin: baseEnv.ALLOWED_ORIGIN,
       Authorization: 'Bearer valid-token',
       'Content-Type': 'audio/mpeg',
+      'Content-Length': String(50 * 1024 * 1024 + 1),
       'X-Media-Scope': 'post'
     },
     body: oversized
   }), { ...baseEnv, MEDIA_BUCKET: { async put() {} } });
   assert.equal(response.status, 413);
-  assert.match((await response.json()).error, /5 MB/iu);
+  assert.match((await response.json()).error, /50 MB/iu);
 });
 
 test('moderator cannot delete media owned by another member', async t => {

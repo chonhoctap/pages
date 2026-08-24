@@ -1,6 +1,6 @@
 const MB = 1024 * 1024;
-const MEMBER_LIMITS = { image: 50 * MB, video: 50 * MB, audio: 2 * MB };
-const VIP_LIMITS = { image: 50 * MB, video: 50 * MB, audio: 5 * MB };
+const MEMBER_LIMITS = { image: 50 * MB, video: 50 * MB, audio: 50 * MB };
+const VIP_LIMITS = { image: 50 * MB, video: 50 * MB, audio: 50 * MB };
 const ADMIN_LIMITS = { image: 50 * MB, video: 50 * MB, audio: 50 * MB };
 
 const MEDIA_TYPES = new Map([

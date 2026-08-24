@@ -6,14 +6,11 @@ const SUPABASE_TUS_URL =
 export const IMAGE_OUTPUT_LIMIT = 50 * MB;
 export const VIDEO_OUTPUT_LIMIT = 50 * MB;
 export const VIDEO_SOURCE_LIMIT = 300 * MB;
-export const AUDIO_OUTPUT_LIMIT = 2 * MB;
+export const AUDIO_OUTPUT_LIMIT = 50 * MB;
 export const VIP_IMAGE_OUTPUT_LIMIT = 50 * MB;
 export const VIP_VIDEO_OUTPUT_LIMIT = 50 * MB;
-export const VIP_AUDIO_OUTPUT_LIMIT = 5 * MB;
-export const MEDIA_DURATION_LIMIT = 60;
-export const MEMBER_AUDIO_DURATION_LIMIT = 60;
-export const VIP_AUDIO_DURATION_LIMIT = 120;
-export const MEMBER_IMAGE_VIDEO_TOTAL_LIMIT = 50 * MB;
+export const VIP_AUDIO_OUTPUT_LIMIT = 50 * MB;
+export const MEDIA_TOTAL_LIMIT = 50 * MB;
 
 export function mediaLimitsForRole(role) {
   const admin = role === 'admin';
@@ -25,14 +22,11 @@ export function mediaLimitsForRole(role) {
     maxVideos: admin ? Infinity : 1,
     maxAudios: admin ? Infinity : 1,
     imageBytes: admin ? 50 * MB : elevated ? VIP_IMAGE_OUTPUT_LIMIT : IMAGE_OUTPUT_LIMIT,
-    totalImageBytes: admin ? Infinity : elevated ? 25 * MB : Infinity,
-    totalImageVideoBytes: admin || elevated ? Infinity : MEMBER_IMAGE_VIDEO_TOTAL_LIMIT,
+    totalMediaBytes: MEDIA_TOTAL_LIMIT,
     videoBytes: admin ? 50 * MB : VIP_VIDEO_OUTPUT_LIMIT,
     audioBytes: admin ? 50 * MB : elevated ? VIP_AUDIO_OUTPUT_LIMIT : AUDIO_OUTPUT_LIMIT,
-    videoDuration: admin ? Infinity : MEDIA_DURATION_LIMIT,
-    audioDuration: admin ? Infinity : elevated
-      ? VIP_AUDIO_DURATION_LIMIT
-      : MEMBER_AUDIO_DURATION_LIMIT,
+    videoDuration: Infinity,
+    audioDuration: Infinity,
     maxWidth: 1280,
     maxHeight: 720,
     qualityLabel: '720p'
@@ -292,10 +286,14 @@ async function transcodeVideoTo720p(file, metadata, limits, options = {}) {
       ...canvasStream.getVideoTracks(),
       ...audioTracks
     ]);
+    const durationSeconds = Math.max(1, metadata.durationSeconds || video.duration || 1);
+    const targetTotalBitrate = Math.floor((limits.videoBytes * 8 * 0.88) / durationSeconds);
+    const audioBitrate = Math.max(24_000, Math.min(128_000, Math.floor(targetTotalBitrate * 0.15)));
+    const videoBitrate = Math.max(60_000, Math.min(4_500_000, targetTotalBitrate - audioBitrate));
     recorder = new MediaRecorder(outputStream, {
       mimeType,
-      videoBitsPerSecond: 4_500_000,
-      audioBitsPerSecond: 128_000
+      videoBitsPerSecond: videoBitrate,
+      audioBitsPerSecond: audioBitrate
     });
     recorder.ondataavailable = event => {
       if (event.data?.size) chunks.push(event.data);
@@ -394,13 +392,6 @@ export async function prepareMedia(file, role = 'member', options = {}) {
     ].includes(file.type)) {
       throw new Error('Chỉ hỗ trợ âm thanh MP3, M4A, OGG, WebM hoặc WAV.');
     }
-    const metadata = await mediaMetadata(file);
-    if (
-      metadata.durationSeconds
-      && metadata.durationSeconds > limits.audioDuration
-    ) {
-      throw new Error(`Âm thanh tối đa ${Math.round(limits.audioDuration / 60)} phút.`);
-    }
     return file;
   }
   if (file.size > VIDEO_SOURCE_LIMIT) {
@@ -412,12 +403,6 @@ export async function prepareMedia(file, role = 'member', options = {}) {
     throw new Error('Chỉ hỗ trợ video MP4, WebM hoặc MOV.');
   }
   const metadata = await mediaMetadata(file);
-  if (
-    metadata.durationSeconds
-    && metadata.durationSeconds > limits.videoDuration
-  ) {
-    throw new Error('Video tối đa 1 phút.');
-  }
   const needsTranscode = !fitsFrame(metadata, limits) || file.size > limits.videoBytes;
   if (!needsTranscode) return file;
   return transcodeVideoTo720p(file, metadata, limits, options);

@@ -41,7 +41,7 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || SERVICE_ROLE_KEY;
 const MEDIA_API_URL = (Deno.env.get('MEDIA_API_URL') || '').replace(/\/+$/u, '');
 const R2_CLEANUP_SECRET = Deno.env.get('R2_CLEANUP_SECRET') || '';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-const TARGET_PATTERN = /^[a-z0-9_.-]{1,80}$/iu;
+const TARGET_PATTERN = /^[a-z0-9_]{3,24}$/iu;
 const BATCH_SIZE = 100;
 const PAGE_SIZE = 1000;
 
@@ -100,6 +100,54 @@ function unique(items: Array<string | null | undefined>) {
   return [...new Set(items.filter((item): item is string => Boolean(item)) )];
 }
 
+function normalizeLookup(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
+
+function editDistance(first: string, second: string) {
+  const left = normalizeLookup(first);
+  const right = normalizeLookup(second);
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = row[0];
+    row[0] = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const previous = row[rightIndex];
+      row[rightIndex] = Math.min(
+        row[rightIndex] + 1,
+        row[rightIndex - 1] + 1,
+        diagonal + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
+      );
+      diagonal = previous;
+    }
+  }
+  return row[right.length];
+}
+
+function bigramSimilarity(first: string, second: string) {
+  const left = normalizeLookup(first);
+  const right = normalizeLookup(second);
+  if (left === right) return 1;
+  if (left.length < 2 || right.length < 2) return 0;
+  const rightPairs: string[] = [];
+  for (let index = 0; index < right.length - 1; index += 1) {
+    rightPairs.push(right.slice(index, index + 2));
+  }
+  let matches = 0;
+  for (let index = 0; index < left.length - 1; index += 1) {
+    const pairIndex = rightPairs.indexOf(left.slice(index, index + 2));
+    if (pairIndex >= 0) {
+      matches += 1;
+      rightPairs.splice(pairIndex, 1);
+    }
+  }
+  return (2 * matches) / (left.length + right.length - 2);
+}
+
 function isR2Path(path: string) {
   return /^(post|comment)\//u.test(path)
     && !path.includes('\0')
@@ -107,39 +155,41 @@ function isR2Path(path: string) {
 }
 
 function parseCommand(commandText: string): ParsedCommand {
-  const command = commandText.trim().replace(/\s+/gu, ' ');
+  const command = commandText.trim().replace(/^\/+\s*/u, '').replace(/\s+/gu, ' ');
   if (!command || command.length > 500) throw new AppError('Lệnh trống hoặc quá dài.');
   const parts = command.split(' ');
   const [first = '', second = '', third = '', fourth = ''] = parts;
+  const one = first.toLowerCase();
+  const two = second.toLowerCase();
 
-  if (first.toLowerCase() === 'help' && parts.length === 1) {
+  if (one === 'help' && parts.length === 1) {
     return { action: 'help', destructive: false };
   }
-  if (first.toLowerCase() === 'user' && second.toLowerCase() === 'info' && third && parts.length === 3) {
+  if (((one === 'user' && two === 'info') || (one === 'info' && two === 'user')) && third && parts.length === 3) {
     return { action: 'user.info', target: third, destructive: false };
   }
-  if (first.toLowerCase() === 'cooldown' && second.toLowerCase() === 'clear' && third && parts.length === 3) {
+  if (((one === 'cooldown' && two === 'clear') || (one === 'clear' && two === 'cooldown')) && third && parts.length === 3) {
     return { action: 'cooldown.clear', target: third, destructive: false };
   }
-  if (first.toLowerCase() === 'post-cooldown' && second.toLowerCase() === 'clear' && third && parts.length === 3) {
+  if (((one === 'post-cooldown' && two === 'clear') || (one === 'clear' && two === 'post-cooldown')) && third && parts.length === 3) {
     return { action: 'post_cooldown.clear', target: third, destructive: false };
   }
-  if (first.toLowerCase() === 'comment-cooldown' && second.toLowerCase() === 'clear' && third && parts.length === 3) {
+  if (((one === 'comment-cooldown' && two === 'clear') || (one === 'clear' && two === 'comment-cooldown')) && third && parts.length === 3) {
     return { action: 'comment_cooldown.clear', target: third, destructive: false };
   }
-  if (first.toLowerCase() === 'role' && second.toLowerCase() === 'set' && third && fourth && parts.length === 4) {
+  if (((one === 'role' && two === 'set') || (one === 'set' && two === 'role')) && third && fourth && parts.length === 4) {
     return { action: 'role.set', target: third, value: fourth.toLowerCase(), destructive: true };
   }
-  if (first.toLowerCase() === 'status' && second.toLowerCase() === 'set' && third && fourth && parts.length === 4) {
+  if (((one === 'status' && two === 'set') || (one === 'set' && two === 'status')) && third && fourth && parts.length === 4) {
     return { action: 'status.set', target: third, value: fourth.toLowerCase(), destructive: true };
   }
-  if (first.toLowerCase() === 'posts' && second.toLowerCase() === 'delete-all' && third && parts.length === 3) {
+  if (((one === 'posts' && two === 'delete-all') || (one === 'delete-all' && two === 'posts')) && third && parts.length === 3) {
     return { action: 'posts.delete_all', target: third, destructive: true };
   }
-  if (first.toLowerCase() === 'comments' && second.toLowerCase() === 'delete-all' && third && parts.length === 3) {
+  if (((one === 'comments' && two === 'delete-all') || (one === 'delete-all' && two === 'comments')) && third && parts.length === 3) {
     return { action: 'comments.delete_all', target: third, destructive: true };
   }
-  if (first.toLowerCase() === 'content' && second.toLowerCase() === 'delete-all' && third && parts.length === 3) {
+  if (((one === 'content' && two === 'delete-all') || (one === 'delete-all' && two === 'content')) && third && parts.length === 3) {
     return { action: 'content.delete_all', target: third, destructive: true };
   }
   throw new AppError('Cú pháp không hợp lệ. Gõ help để xem danh sách lệnh.');
@@ -175,7 +225,31 @@ async function resolveTarget(identifier = ''): Promise<Profile> {
     : query.eq('username', clean.toLowerCase());
   const { data, error } = await query.maybeSingle();
   if (error) throw new AppError(`Không thể tìm tài khoản: ${error.message}`, 500);
-  if (!data) throw new AppError(`Không tìm thấy tài khoản ${identifier}.`, 404);
+  if (!data) {
+    const { data: candidates } = await service
+      .from('profiles')
+      .select('id, username, display_name, role, account_status')
+      .limit(1000);
+    const ranked = (candidates || [])
+      .map(candidate => {
+        const username = String(candidate.username || '');
+        const displayName = String(candidate.display_name || '');
+        return {
+          candidate: candidate as Profile,
+          distance: Math.min(editDistance(clean, username), editDistance(clean, displayName)),
+          similarity: Math.max(bigramSimilarity(clean, username), bigramSimilarity(clean, displayName))
+        };
+      })
+      .filter(item =>
+        item.distance <= Math.max(2, Math.ceil(clean.length * 0.4))
+        || item.similarity >= 0.45
+      )
+      .sort((left, right) => right.similarity - left.similarity || left.distance - right.distance)
+      .slice(0, 3)
+      .map(item => `@${item.candidate.username}`);
+    const hint = ranked.length ? ` Có phải bạn muốn dùng ${ranked.join(', ')}?` : '';
+    throw new AppError(`Không tìm thấy tài khoản ${identifier}.${hint}`, 404);
+  }
   return data as Profile;
 }
 
@@ -232,12 +306,22 @@ async function userInfo(target: Profile) {
   if (postCooldownError || commentCooldownError) {
     throw new AppError(postCooldownError?.message || commentCooldownError?.message || 'Không thể đọc thời gian chờ.', 500);
   }
+  const postAvailableAt = postCooldown?.last_post_at
+    ? new Date(new Date(postCooldown.last_post_at).getTime() + 15 * 60 * 1000)
+    : null;
+  const commentAvailableAt = commentCooldown?.last_commented_at
+    ? new Date(new Date(commentCooldown.last_commented_at).getTime() + 2 * 60 * 1000)
+    : null;
   return {
     user: target,
     counts: { posts: postCount || 0, comments: commentCount || 0 },
     cooldowns: {
-      post: postCooldown?.last_post_at || null,
-      comment: commentCooldown?.last_commented_at || null
+      post: postAvailableAt && postAvailableAt.getTime() > Date.now()
+        ? postAvailableAt.toISOString()
+        : null,
+      comment: commentAvailableAt && commentAvailableAt.getTime() > Date.now()
+        ? commentAvailableAt.toISOString()
+        : null
     }
   };
 }
@@ -260,7 +344,28 @@ async function clearCooldown(targetId: string, post: boolean, comment: boolean) 
     if (error) throw new AppError(`Không thể xóa thời gian chờ bình luận: ${error.message}`, 500);
     result.comment = count || 0;
   }
-  return { cleared: result };
+  const checks = await Promise.all([
+    post
+      ? service.from('forum_post_cooldowns').select('author_id', { head: true, count: 'exact' }).eq('author_id', targetId)
+      : Promise.resolve({ count: 0, error: null }),
+    comment
+      ? service.from('forum_comment_rate_limits').select('user_id', { head: true, count: 'exact' }).eq('user_id', targetId)
+      : Promise.resolve({ count: 0, error: null })
+  ]);
+  if (checks[0].error || checks[1].error) {
+    throw new AppError(checks[0].error?.message || checks[1].error?.message || 'Không thể xác minh thời gian chờ.', 500);
+  }
+  if ((post && checks[0].count) || (comment && checks[1].count)) {
+    throw new AppError('Đã gửi lệnh nhưng mốc thời gian chờ vẫn còn trong database.', 500);
+  }
+  return {
+    cleared: result,
+    verified: true,
+    message: [
+      post ? (result.post ? 'Đã xóa thời gian chờ đăng bài.' : 'Tài khoản vốn không còn thời gian chờ đăng bài.') : '',
+      comment ? (result.comment ? 'Đã xóa thời gian chờ bình luận.' : 'Tài khoản vốn không còn thời gian chờ bình luận.') : ''
+    ].filter(Boolean).join(' ')
+  };
 }
 
 async function updateAccess(
@@ -290,6 +395,10 @@ async function updateAccess(
   });
   if (error) throw new AppError(error.message, 409);
   if (!data) throw new AppError('Database không xác nhận thay đổi tài khoản.', 500);
+  const confirmed = Array.isArray(data) ? data[0] : data;
+  if (confirmed?.role !== nextRole || confirmed?.account_status !== nextStatus) {
+    throw new AppError('Database trả về trạng thái không khớp với yêu cầu.', 500);
+  }
   return {
     before: { role: target.role, status: target.account_status },
     after: { role: nextRole, status: nextStatus }
@@ -441,12 +550,29 @@ async function deleteContent(targetId: string, action: CommandAction) {
   if (includeOwnComments) deletedComments = await deleteIds('forum_comments', media.commentIds);
   if (includePosts) deletedPosts = await deleteIds('forum_posts', media.postIds);
 
+  const verification = await Promise.all([
+    includePosts
+      ? service.from('forum_posts').select('id', { head: true, count: 'exact' }).eq('author_id', targetId)
+      : Promise.resolve({ count: 0, error: null }),
+    includeOwnComments
+      ? service.from('forum_comments').select('id', { head: true, count: 'exact' }).eq('author_id', targetId)
+      : Promise.resolve({ count: 0, error: null })
+  ]);
+  if (verification[0].error || verification[1].error) {
+    throw new AppError(verification[0].error?.message || verification[1].error?.message || 'Không thể xác minh thao tác xóa.', 500);
+  }
+  if ((includePosts && verification[0].count) || (includeOwnComments && verification[1].count)) {
+    throw new AppError('Database vẫn còn nội dung của tài khoản sau khi chạy lệnh.', 500);
+  }
+
   return {
     deleted: { posts: deletedPosts, comments: deletedComments },
+    cascadedComments: includePosts ? Math.max(0, media.commentIds.length - deletedComments) : 0,
     media: {
       r2: r2Files,
       supabase: postStorageFiles + commentStorageFiles
-    }
+    },
+    verified: true
   };
 }
 

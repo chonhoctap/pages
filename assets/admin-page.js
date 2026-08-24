@@ -506,8 +506,55 @@ async function loadPermissions() {
 
 function commandIsDestructive(command) {
   const normalized = command.trim();
-  return /^(posts|comments|content)\s+delete-all\s+\S+$/iu.test(normalized)
-    || /^(role|status)\s+set\s+\S+\s+\S+$/iu.test(normalized);
+  return /^(?:(posts|comments|content)\s+delete-all|delete-all\s+(posts|comments|content))\s+\S+$/iu.test(normalized)
+    || /^(?:(role|status)\s+set|set\s+(role|status))\s+\S+\s+\S+$/iu.test(normalized);
+}
+
+function consoleDateTime(value) {
+  if (!value) return 'Không còn thời gian chờ';
+  return new Intl.DateTimeFormat('vi-VN', {
+    dateStyle: 'short',
+    timeStyle: 'medium'
+  }).format(new Date(value));
+}
+
+function formatConsoleResult(data) {
+  const result = data?.result || {};
+  if (data?.action === 'help') {
+    return (result.commands || [])
+      .map(item => `${item.syntax}\n  ${item.description}`)
+      .join('\n\n');
+  }
+  if (data?.action === 'user.info') {
+    return [
+      `Tài khoản: @${result.user?.username || data.target?.username || '—'}`,
+      `Role: ${roleLabel(result.user?.role || 'member')}`,
+      `Trạng thái: ${statusLabel(result.user?.account_status || 'active')}`,
+      `Bài viết: ${result.counts?.posts || 0} · Bình luận: ${result.counts?.comments || 0}`,
+      `Được đăng bài lúc: ${consoleDateTime(result.cooldowns?.post)}`,
+      `Được bình luận lúc: ${consoleDateTime(result.cooldowns?.comment)}`
+    ].join('\n');
+  }
+  if (['cooldown.clear', 'post_cooldown.clear', 'comment_cooldown.clear'].includes(data?.action)) {
+    return `${result.message || 'Đã xử lý thời gian chờ.'}\nĐã xác minh lại trong database.`;
+  }
+  if (['role.set', 'status.set'].includes(data?.action)) {
+    return [
+      `Đã cập nhật @${data.target?.username || '—'}.`,
+      `${roleLabel(result.before?.role)} · ${statusLabel(result.before?.status)}`,
+      `→ ${roleLabel(result.after?.role)} · ${statusLabel(result.after?.status)}`,
+      'Database đã xác nhận trạng thái mới.'
+    ].join('\n');
+  }
+  if (['posts.delete_all', 'comments.delete_all', 'content.delete_all'].includes(data?.action)) {
+    return [
+      `Đã xóa ${result.deleted?.posts || 0} bài viết và ${result.deleted?.comments || 0} bình luận trực tiếp.`,
+      result.cascadedComments ? `${result.cascadedComments} bình luận liên quan được xóa theo bài viết.` : '',
+      `Đã xóa ${result.media?.r2 || 0} tệp R2 và ${result.media?.supabase || 0} tệp Supabase Storage.`,
+      result.verified ? 'Đã kiểm tra lại: không còn nội dung thuộc phạm vi lệnh.' : ''
+    ].filter(Boolean).join('\n');
+  }
+  return result;
 }
 
 function consoleTimestamp() {
@@ -625,8 +672,8 @@ async function runConsoleCommand(command, confirm = false) {
     });
     if (error) throw error;
     if (!data?.ok) throw new Error(data?.error || 'Máy chủ không xác nhận kết quả.');
-    appendConsoleOutput('Hoàn tất', data.result, 'success');
-    if (/^(role|status)\s+set\s+/iu.test(command)) await loadMembers();
+    appendConsoleOutput('Hoàn tất', formatConsoleResult(data), 'success');
+    if (['role.set', 'status.set'].includes(data.action)) await loadMembers();
     await loadConsoleHistory();
   } catch (error) {
     const message = await edgeFunctionError(error);

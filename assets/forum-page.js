@@ -483,6 +483,9 @@ function beginPostProgress(title, stage, expectedSeconds = 0) {
   elements.postProgressEta.textContent = expectedSeconds
     ? `Ước tính còn ${durationLabel(expectedSeconds)}`
     : 'Đang tính thời gian còn lại...';
+  window.requestAnimationFrame(() => {
+    elements.postProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
 }
 
 function updatePostProgress(progress, stage = '') {
@@ -1097,7 +1100,11 @@ async function publishPost(event) {
 
     elements.form.reset();
     resetPreview();
-    closeComposer();
+    editingPost = null;
+    elements.media.disabled = false;
+    elements.publish.textContent = 'Đăng bài';
+    delete elements.publish.dataset.originalText;
+    configureAccount();
     setInfo(
       editing
         ? 'Đã lưu thay đổi. Gemini đang kiểm tra lại bài viết.'
@@ -3181,12 +3188,8 @@ elements.media.addEventListener('change', () => {
 });
 elements.openComposer.addEventListener('click', openComposer);
 elements.closeComposer.addEventListener('click', closeComposer);
-elements.composerDialog.addEventListener('click', event => {
-  if (event.target === elements.composerDialog) closeComposer();
-});
 elements.composerDialog.addEventListener('cancel', event => {
   event.preventDefault();
-  closeComposer();
 });
 elements.search.addEventListener('input', renderPosts);
 elements.sortButtons.forEach(button => {

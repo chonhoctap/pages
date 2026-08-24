@@ -461,7 +461,16 @@ function normalizeSearch(value) {
     .trim();
 }
 
+function isPostCooldownNotice(value) {
+  return /(?:một bài sau mỗi 15\s*phút|15\s*minutes?|one post.*15)/iu
+    .test(String(value || ''));
+}
+
 function setInfo(message, type = 'info') {
+  if (isPostCooldownNotice(message)) {
+    showMessage(elements.message, '', 'info');
+    return;
+  }
   showMessage(elements.message, message, type);
   if (message) elements.message.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -555,6 +564,11 @@ function startModerationProgress(mediaItems = []) {
 
 function finishPostProgress(message, status = 'success') {
   clearPostProgressTimers();
+  if (status === 'error' && isPostCooldownNotice(message)) {
+    postProgressState = null;
+    if (elements.postProgress) elements.postProgress.hidden = true;
+    return;
+  }
   if (!elements.postProgress) return;
   if (!postProgressState) beginPostProgress('Tiến trình đăng bài', message);
   postProgressState.progress = 1;
@@ -1160,8 +1174,7 @@ async function publishPost(event) {
       error?.hint,
       readableError
     ].filter(Boolean).join(' ');
-    const cooldownRejected = /(?:15\s*phút|15\s*minutes?|one post.*15)/iu
-      .test(cooldownDiagnostic);
+    const cooldownRejected = isPostCooldownNotice(cooldownDiagnostic);
     if (cooldownRejected) {
       await refreshPostCooldown().catch(() => {});
       updatePostCooldownUi();

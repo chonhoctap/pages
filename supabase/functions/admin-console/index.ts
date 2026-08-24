@@ -43,6 +43,7 @@ const R2_CLEANUP_SECRET = Deno.env.get('R2_CLEANUP_SECRET') || '';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 const TARGET_PATTERN = /^[a-z0-9_.-]{1,80}$/iu;
 const BATCH_SIZE = 100;
+const PAGE_SIZE = 1000;
 
 const service = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false, autoRefreshToken: false }
@@ -298,9 +299,37 @@ async function updateAccess(
 async function collectRows(table: string, select: string, column: string, values: string[]) {
   const rows: Record<string, unknown>[] = [];
   for (const group of chunks(values)) {
-    const { data, error } = await service.from(table).select(select).in(column, group);
+    let offset = 0;
+    while (true) {
+      const { data, error } = await service
+        .from(table)
+        .select(select)
+        .in(column, group)
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (error) throw new AppError(`Không thể đọc ${table}: ${error.message}`, 500);
+      const page = data || [];
+      rows.push(...page);
+      if (page.length < PAGE_SIZE) break;
+      offset += PAGE_SIZE;
+    }
+  }
+  return rows;
+}
+
+async function collectAuthorRows(table: string, select: string, authorId: string) {
+  const rows: Record<string, unknown>[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await service
+      .from(table)
+      .select(select)
+      .eq('author_id', authorId)
+      .range(offset, offset + PAGE_SIZE - 1);
     if (error) throw new AppError(`Không thể đọc ${table}: ${error.message}`, 500);
-    rows.push(...(data || []));
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
   }
   return rows;
 }
@@ -308,12 +337,7 @@ async function collectRows(table: string, select: string, column: string, values
 async function collectContentMedia(targetId: string, includePosts: boolean, includeOwnComments: boolean): Promise<MediaCollection> {
   const posts: Record<string, unknown>[] = [];
   if (includePosts) {
-    const { data, error } = await service
-      .from('forum_posts')
-      .select('id, media_path')
-      .eq('author_id', targetId);
-    if (error) throw new AppError(`Không thể đọc bài viết: ${error.message}`, 500);
-    posts.push(...(data || []));
+    posts.push(...await collectAuthorRows('forum_posts', 'id, media_path', targetId));
   }
   const postIds = unique(posts.map(row => row.id as string));
   const comments = new Map<string, Record<string, unknown>>();
@@ -323,12 +347,12 @@ async function collectContentMedia(targetId: string, includePosts: boolean, incl
     nested.forEach(row => comments.set(row.id as string, row));
   }
   if (includeOwnComments) {
-    const { data, error } = await service
-      .from('forum_comments')
-      .select('id, post_id, media_path')
-      .eq('author_id', targetId);
-    if (error) throw new AppError(`Không thể đọc bình luận: ${error.message}`, 500);
-    (data || []).forEach(row => comments.set(row.id, row));
+    const ownComments = await collectAuthorRows(
+      'forum_comments',
+      'id, post_id, media_path',
+      targetId
+    );
+    ownComments.forEach(row => comments.set(row.id as string, row));
   }
   const commentRows = [...comments.values()];
   const commentIds = [...comments.keys()];

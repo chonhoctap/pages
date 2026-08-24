@@ -336,7 +336,7 @@ function isForumAdmin() {
 function adminMediaTypes(mediaItems = []) {
   return [...new Set(mediaItems
     .map(item => item?.media_type || item?.type)
-    .filter(type => ['audio', 'video'].includes(type)))];
+    .filter(type => type === 'audio'))];
 }
 
 function containsAdminMedia(mediaItems = []) {
@@ -351,6 +351,61 @@ function adminMediaLabel(mediaItems = []) {
 
 function canReviewContent() {
   return canModerate();
+}
+
+function canReviewComment(comment) {
+  if (!canModerate()) return false;
+  return !containsAdminMedia(comment?.mediaItems) || isForumAdmin();
+}
+
+async function queueHumanReview(targetType, targetId) {
+  const { error } = await supabase.rpc('queue_forum_human_review_v13', {
+    target_type: targetType,
+    target_id: targetId,
+    review_reason: 'Không thể hoàn tất kiểm tra tự động; cần Staff hoặc quản trị viên xem xét.'
+  });
+  if (error) console.warn('Could not queue human review', error);
+}
+
+function moderateInBackground(targetType, targetId, onSettled = null) {
+  void (async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('moderate-forum', {
+        body: { targetType, targetId }
+      });
+      if (error) throw error;
+      if (data?.decision === 'safe') {
+        setInfo(
+          targetType === 'post'
+            ? 'Gemini đã kiểm tra và công khai bài viết.'
+            : 'Gemini đã kiểm tra và công khai bình luận.',
+          'success'
+        );
+      } else if (data?.decision === 'violation') {
+        setInfo(
+          targetType === 'post'
+            ? 'Bài viết vi phạm tiêu chuẩn cộng đồng nên đã bị xóa.'
+            : 'Bình luận vi phạm tiêu chuẩn cộng đồng nên đã bị xóa.',
+          'error'
+        );
+      } else if (data?.decision === 'manual') {
+        setInfo('Nội dung có âm thanh đang chờ quản trị viên duyệt.', 'info');
+      } else {
+        setInfo('Gemini chưa đủ chắc chắn; nội dung đã chuyển cho Staff hoặc quản trị viên.', 'info');
+      }
+    } catch (error) {
+      console.warn('Automatic forum moderation unavailable', error);
+      await queueHumanReview(targetType, targetId);
+      setInfo(
+        'Kiểm tra tự động tạm thời chưa hoàn tất; nội dung đã chuyển cho Staff hoặc quản trị viên.',
+        'info'
+      );
+    } finally {
+      if (typeof onSettled === 'function') {
+        await onSettled().catch(error => console.warn('Moderation UI refresh failed', error));
+      }
+    }
+  })();
 }
 
 function authorOf(record) {
@@ -863,8 +918,8 @@ async function publishPost(event) {
     closeComposer();
     setInfo(
       editing
-        ? 'Đã lưu thay đổi. Bài viết đang chờ Staff hoặc quản trị viên duyệt lại.'
-        : 'Đã gửi bài viết. Bài đang chờ Staff hoặc quản trị viên duyệt.',
+        ? 'Đã lưu thay đổi. Gemini đang kiểm tra lại bài viết.'
+        : 'Đã gửi bài viết. Gemini đang kiểm tra trước khi công khai.',
       'info'
     );
     if (!editing) {
@@ -873,6 +928,7 @@ async function publishPost(event) {
     }
     updatePostCooldownUi();
     await loadPosts();
+    moderateInBackground('post', createdPostId, loadPosts);
   } catch (error) {
     if (createdPostId && !editing) {
       await supabase.from('forum_posts').delete().eq('id', createdPostId);
@@ -2027,8 +2083,13 @@ async function reviewPost(post, action, button) {
 }
 
 async function reviewComment(comment, post, card, action, button) {
-  if (!isForumAdmin()) {
-    setInfo('Bình luận có âm thanh hoặc video chỉ quản trị viên được duyệt.', 'error');
+  if (!canReviewComment(comment)) {
+    setInfo(
+      containsAdminMedia(comment.mediaItems)
+        ? 'Bình luận có âm thanh chỉ quản trị viên được duyệt.'
+        : 'Chỉ Staff hoặc quản trị viên được duyệt bình luận này.',
+      'error'
+    );
     return;
   }
   const note = action === 'reject'
@@ -2046,7 +2107,9 @@ async function reviewComment(comment, post, card, action, button) {
     if (!data) throw new Error('Không tìm thấy bình luận cần duyệt.');
     setInfo(
       action === 'approve'
-        ? `Đã duyệt bình luận có ${adminMediaLabel(comment.mediaItems) || 'âm thanh/video'}.`
+        ? (containsAdminMedia(comment.mediaItems)
+            ? `Đã duyệt bình luận có ${adminMediaLabel(comment.mediaItems)}.`
+            : 'Đã duyệt bình luận.')
         : 'Đã từ chối bình luận.',
       'success'
     );
@@ -2419,9 +2482,9 @@ function renderComments(comments, post, card) {
       const adminMediaPending = containsAdminMedia(comment.mediaItems);
       pending.textContent = adminMediaPending
         ? `Chờ quản trị viên duyệt ${adminMediaLabel(comment.mediaItems)}`
-        : 'Đang chờ quản trị viên xem xét';
+        : (comment.moderation_reason || 'Gemini đang kiểm tra bình luận');
       footer.appendChild(pending);
-      if (adminMediaPending && isForumAdmin()) {
+      if (canReviewComment(comment)) {
         const controls = document.createElement('div');
         controls.className = 'moderation-actions comment-moderation-actions';
         const approve = document.createElement('button');
@@ -2571,11 +2634,17 @@ async function addComment(event, post, card) {
     setInfo(
       waitingForAdmin
         ? `Đã gửi bình luận. ${adminMediaLabel(uploaded)} đang chờ quản trị viên xem xét.`
-        : 'Đã gửi bình luận.',
-      waitingForAdmin ? 'info' : 'success'
+        : 'Đã gửi bình luận. Gemini đang kiểm tra trước khi công khai.',
+      'info'
     );
     void loadComments(post, card);
     void refreshPostEngagement(post.id, true);
+    moderateInBackground('comment', createdCommentId, async () => {
+      await Promise.all([
+        loadComments(post, card),
+        refreshPostEngagement(post.id, true)
+      ]);
+    });
   } catch (error) {
     if (createdCommentId) {
       await supabase.from('forum_comments').delete().eq('id', createdCommentId);

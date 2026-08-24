@@ -853,10 +853,8 @@ function openComposer() {
   }
   const remaining = editingPost ? 0 : cooldownSeconds();
   if (remaining > 0) {
-    setInfo(
-      `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`,
-      'error'
-    );
+    updatePostCooldownUi();
+    setInfo('');
     return;
   }
   if (typeof elements.composerDialog.showModal === 'function') {
@@ -1038,10 +1036,9 @@ async function publishPost(event) {
   const editing = editingPost;
   const remaining = editing ? 0 : cooldownSeconds();
   if (remaining > 0) {
-    setInfo(
-      `Bạn chỉ có thể đăng một bài sau mỗi 15 phút. Hãy đợi ${cooldownLabel(remaining)}.`,
-      'error'
-    );
+    updatePostCooldownUi();
+    setInfo('');
+    closeComposer();
     return;
   }
   await previewPreparePromise;
@@ -1137,6 +1134,7 @@ async function publishPost(event) {
       rememberPostCooldown(postCooldownUntil);
     }
     updatePostCooldownUi();
+    if (!editing) closeComposer();
     await loadPosts();
     startModerationProgress(uploaded);
     moderateInBackground('post', createdPostId, loadPosts, decision => {
@@ -1155,8 +1153,18 @@ async function publishPost(event) {
     await Promise.allSettled(
       uploaded.map(item => removeStoredMedia(item.path, 'forum-media'))
     );
-    if (/15\s*phút/iu.test(error?.message || '')) {
+    const cooldownRejected = /15\s*phút/iu.test(error?.message || '');
+    if (cooldownRejected) {
       await refreshPostCooldown().catch(() => {});
+      updatePostCooldownUi();
+      clearPostProgressTimers();
+      postProgressState = null;
+      if (elements.postProgress) elements.postProgress.hidden = true;
+      setInfo('');
+      if (elements.composerDialog.open || elements.composerDialog.hasAttribute('open')) {
+        closeComposer();
+      }
+      return;
     }
     setInfo(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');
     finishPostProgress(`Không thể đăng bài: ${humanizeAuthError(error)}`, 'error');

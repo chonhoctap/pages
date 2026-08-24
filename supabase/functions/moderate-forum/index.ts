@@ -755,7 +755,8 @@ async function clearModerationNotifications(targetType: TargetType, target: Reco
 async function notifyReviewers(
   targetType: TargetType,
   target: Record<string, unknown>,
-  adminOnly = false
+  adminOnly = false,
+  reviewMessage = ''
 ) {
   let profiles = service.from('profiles')
     .select('id')
@@ -785,9 +786,9 @@ async function notifyReviewers(
       type: 'moderation',
       post_id: target.post_id,
       comment_id: targetType === 'comment' ? target.id : null,
-      message: adminOnly
+      message: reviewMessage || (adminOnly
         ? `Có ${targetType === 'post' ? 'bài viết' : 'bình luận'} chứa âm thanh đang chờ bạn duyệt.`
-        : `Hệ thống chưa đủ chắc chắn về ${targetType === 'post' ? 'một bài viết' : 'một bình luận'}; cần bạn xem xét.`
+        : `Hệ thống chưa đủ chắc chắn về ${targetType === 'post' ? 'một bài viết' : 'một bình luận'}; cần bạn xem xét.`)
     }));
   if (rows.length) {
     const { error: insertError } = await service.from('forum_notifications').insert(rows);
@@ -882,13 +883,15 @@ Deno.serve(async request => {
   });
 
   let result: ModerationResult;
+  let quotaLimited = false;
   try {
     result = await moderate(typedTarget, target);
   } catch (error) {
     const diagnostic = errorMessage(error, 'Lỗi Gemini không xác định.');
     const rateLimited = error instanceof GeminiHttpError && error.status === 429;
+    quotaLimited = rateLimited;
     const log = rateLimited ? console.warn : console.error;
-    log(rateLimited ? 'Gemini quota unavailable; queued human review' : 'Gemini moderation failed', {
+    log(rateLimited ? 'Gemini đã đạt giới hạn yêu cầu; chuyển Staff/Admin duyệt' : 'Gemini moderation failed', {
       diagnostic,
       name: error instanceof Error ? error.name : typeof error,
       stack: error instanceof Error ? error.stack : undefined,
@@ -897,7 +900,7 @@ Deno.serve(async request => {
     result = {
       decision: rateLimited ? 'suspicious' : 'error',
       reason: rateLimited
-        ? 'Hệ thống đang tạm quá tải; nội dung đã chuyển cho Staff/Quản trị viên xem xét.'
+        ? 'Gemini đã đạt giới hạn yêu cầu tạm thời (HTTP 429/quota exceeded). Nội dung đã chuyển cho Staff/Quản trị viên xem xét.'
         : 'Không thể hoàn tất kiểm tra tự động; nội dung đã chuyển cho Staff/Quản trị viên.',
       categories: [], confidence: 0,
       evidence: [diagnostic.slice(0, 1800)]
@@ -963,10 +966,11 @@ Deno.serve(async request => {
     values.ai_moderation_result = result;
   }
   await updateTarget(typedTarget, targetId, values);
-  await notifyReviewers(typedTarget, target, manual);
+  await notifyReviewers(typedTarget, target, manual, quotaLimited ? result.reason : '');
   return json(request, {
     ok: true,
     decision: manual ? 'manual' : 'suspicious',
+    quotaLimited,
     reason: result.reason,
     durationMs
   });

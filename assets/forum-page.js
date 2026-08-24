@@ -118,6 +118,8 @@ let selectedPostMedia = [];
 let reportingPost = null;
 let postCooldownUntil = 0;
 let postCooldownTimer = 0;
+let postCooldownSyncTimer = 0;
+let postCooldownRefreshPromise = null;
 let commentCooldownUntil = 0;
 let commentCooldownTimer = 0;
 let notificationTimer = 0;
@@ -288,16 +290,25 @@ async function refreshCommentCooldown() {
   updateCommentCooldownUi();
 }
 
-async function refreshPostCooldown() {
-  if (!session?.user?.id || !canInteract()) return;
-  let serverCooldownUntil = 0;
-  const { data: nextPostAt, error: rpcError } = await supabase
-    .rpc('get_forum_post_cooldown');
+function refreshPostCooldown() {
+  if (!session?.user?.id || !canInteract()) return Promise.resolve();
+  if (postCooldownRefreshPromise) return postCooldownRefreshPromise;
 
-  if (!rpcError) {
-    serverCooldownUntil = nextPostAt ? new Date(nextPostAt).getTime() : 0;
-  } else {
-    // Tương thích trong lúc website mới đã lên nhưng migration V8 chưa chạy.
+  postCooldownRefreshPromise = (async () => {
+    const { data: nextPostAt, error: rpcError } = await supabase
+      .rpc('get_forum_post_cooldown');
+
+    if (!rpcError) {
+      // Supabase là nguồn chính. Khi admin xóa mốc chờ, giá trị NULL phải
+      // thắng cache cũ trong localStorage thay vì tiếp tục đếm hết 15 phút.
+      postCooldownUntil = nextPostAt ? new Date(nextPostAt).getTime() : 0;
+      rememberPostCooldown(postCooldownUntil);
+      updatePostCooldownUi();
+      return;
+    }
+
+    // Chỉ dùng bài mới nhất và localStorage làm phương án dự phòng nếu RPC
+    // chưa tồn tại hoặc tạm thời không truy cập được.
     const { data, error } = await supabase
       .from('forum_posts')
       .select('created_at')
@@ -306,14 +317,24 @@ async function refreshPostCooldown() {
       .limit(1);
     if (error) throw error;
     const latestAt = data?.[0]?.created_at;
-    serverCooldownUntil = latestAt
+    const fallbackCooldownUntil = latestAt
       ? new Date(latestAt).getTime() + 15 * 60 * 1000
       : 0;
-  }
+    postCooldownUntil = Math.max(fallbackCooldownUntil, storedPostCooldown());
+    rememberPostCooldown(postCooldownUntil);
+    updatePostCooldownUi();
+  })().finally(() => {
+    postCooldownRefreshPromise = null;
+  });
 
-  postCooldownUntil = Math.max(serverCooldownUntil, storedPostCooldown());
-  rememberPostCooldown(postCooldownUntil);
-  updatePostCooldownUi();
+  return postCooldownRefreshPromise;
+}
+
+function syncPostCooldown() {
+  if (document.visibilityState === 'hidden') return;
+  void refreshPostCooldown().catch(error => {
+    console.warn('Không thể đồng bộ thời gian chờ đăng bài', error);
+  });
 }
 
 function closeReactionPicker(action = openReactionAction) {
@@ -3153,6 +3174,9 @@ async function init() {
     configureAccount();
     await Promise.all([refreshPostCooldown(), refreshCommentCooldown()]);
     postCooldownTimer = window.setInterval(updatePostCooldownUi, 1000);
+    postCooldownSyncTimer = window.setInterval(() => {
+      if (cooldownSeconds() > 0) syncPostCooldown();
+    }, 10000);
     commentCooldownTimer = window.setInterval(updateCommentCooldownUi, 1000);
     notificationTimer = window.setInterval(() => loadNotifications().catch(() => {}), 45000);
     const editId = new URLSearchParams(window.location.search).get('edit');
@@ -3190,6 +3214,11 @@ elements.openComposer.addEventListener('click', openComposer);
 elements.closeComposer.addEventListener('click', closeComposer);
 elements.composerDialog.addEventListener('cancel', event => {
   event.preventDefault();
+});
+window.addEventListener('focus', syncPostCooldown);
+document.addEventListener('visibilitychange', syncPostCooldown);
+window.addEventListener('storage', event => {
+  if (event.key === postCooldownStorageKey()) syncPostCooldown();
 });
 elements.search.addEventListener('input', renderPosts);
 elements.sortButtons.forEach(button => {

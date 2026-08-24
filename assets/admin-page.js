@@ -15,6 +15,7 @@ import {
 initThemeToggle();
 
 const ROLE_ORDER = ['member', 'vip', 'moderator', 'admin'];
+const POST_COOLDOWN_STORAGE_PREFIX = 'chonhoctap-forum-post-cooldown:';
 const ROLE_DESCRIPTIONS = {
   member: 'Quyền cơ bản của thành viên thường',
   vip: 'Quyền chức năng của thành viên VIP',
@@ -680,6 +681,18 @@ async function runConsoleCommand(command, confirm = false) {
     if (error) throw error;
     if (!data?.ok) throw new Error(data?.error || 'Máy chủ không xác nhận kết quả.');
     appendConsoleOutput('Hoàn tất', formatConsoleResult(data), 'success');
+    if (
+      ['cooldown.clear', 'post_cooldown.clear'].includes(data.action)
+      && data.target?.id
+    ) {
+      try {
+        window.localStorage.removeItem(
+          `${POST_COOLDOWN_STORAGE_PREFIX}${data.target.id}`
+        );
+      } catch {
+        // Forum vẫn tự hỏi lại Supabase khi localStorage bị chặn.
+      }
+    }
     if (['role.set', 'status.set'].includes(data.action)) await loadMembers();
     await loadConsoleHistory();
   } catch (error) {

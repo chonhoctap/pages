@@ -64,6 +64,30 @@ function textValue(value: unknown, max = 5000) {
   return String(value ?? '').trim().slice(0, max);
 }
 
+function errorMessage(payload: unknown, fallback: string) {
+  if (!payload || typeof payload !== 'object') {
+    return textValue(payload, 1000) || fallback;
+  }
+  const object = payload as Record<string, unknown>;
+  const nested = object.error;
+  if (nested && typeof nested === 'object') {
+    const error = nested as Record<string, unknown>;
+    const parts = [error.status, error.code, error.message]
+      .map(value => textValue(value, 700))
+      .filter(Boolean);
+    if (parts.length) return parts.join(' | ').slice(0, 1200);
+  }
+  const direct = [object.status, object.code, object.message]
+    .map(value => textValue(value, 700))
+    .filter(Boolean);
+  if (direct.length) return direct.join(' | ').slice(0, 1200);
+  try {
+    return JSON.stringify(payload).slice(0, 1200) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function clampConfidence(value: unknown) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.min(1, number)) : 0;
@@ -239,7 +263,7 @@ async function callGemini(input: Record<string, unknown>[]) {
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': GEMINI_API_KEY,
-        'Api-Revision': '2026-05-20'
+        Accept: 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -259,8 +283,7 @@ async function callGemini(input: Record<string, unknown>[]) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const message = textValue((payload as Record<string, unknown>)?.error, 300)
-        || `Gemini HTTP ${response.status}`;
+      const message = errorMessage(payload, `Gemini HTTP ${response.status}`);
       throw new Error(message);
     }
     const output = modelText(payload as Record<string, unknown>);

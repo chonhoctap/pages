@@ -307,6 +307,85 @@ $$;
 revoke execute on function public.queue_forum_manual_media_for_admin()
   from public, anon, authenticated;
 
+-- Staff duyệt được nội dung AI đánh dấu nghi ngờ; riêng bài có âm thanh vẫn
+-- chỉ admin được nghe và đưa ra quyết định cuối cùng.
+create or replace function public.review_forum_post(
+  target_post_id uuid,
+  review_action text,
+  review_note text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  changed integer;
+  post_author uuid;
+begin
+  if not public.is_moderator_or_admin() then
+    raise exception 'Chỉ Staff hoặc quản trị viên được duyệt bài';
+  end if;
+  if public.forum_content_requires_admin_review(target_post_id, null)
+    and not public.is_active_forum_admin() then
+    raise exception 'Bài viết có âm thanh chỉ quản trị viên được duyệt';
+  end if;
+  if review_action not in ('approve', 'reject', 'hide') then
+    raise exception 'Thao tác kiểm duyệt không hợp lệ';
+  end if;
+
+  update public.forum_posts
+  set moderation_status = case when review_action = 'approve' then 'published' else 'rejected' end,
+      visibility = case when review_action = 'approve' then 'visible' else 'hidden' end,
+      moderation_reason = nullif(btrim(coalesce(review_note, '')), ''),
+      hidden_at = case when review_action = 'approve' then null else now() end,
+      hidden_by = case when review_action = 'approve' then null else (select auth.uid()) end,
+      reviewed_by = (select auth.uid()),
+      reviewed_at = now()
+  where id = target_post_id
+  returning author_id into post_author;
+  get diagnostics changed = row_count;
+
+  update public.forum_notifications
+  set read_at = coalesce(read_at, now())
+  where type = 'moderation'
+    and post_id = target_post_id
+    and comment_id is null;
+
+  if changed = 1 and post_author is distinct from (select auth.uid()) then
+    insert into public.forum_notifications(recipient_id, actor_id, type, post_id, message)
+    values (
+      post_author,
+      (select auth.uid()),
+      'review',
+      target_post_id,
+      case when review_action = 'approve' then 'Bài viết của bạn đã được duyệt.'
+      else 'Bài viết của bạn đã bị ẩn hoặc từ chối.' end
+    );
+  end if;
+
+  if changed = 1 and review_action = 'approve' then
+    insert into public.forum_notifications(recipient_id, actor_id, type, post_id, message)
+    select m.user_id, post_author, 'mention', target_post_id,
+      'Bạn được nhắc đến trong một bài viết.'
+    from public.forum_post_mentions m
+    where m.post_id = target_post_id
+      and not exists (
+        select 1 from public.forum_notifications n
+        where n.recipient_id = m.user_id
+          and n.post_id = target_post_id
+          and n.type = 'mention'
+      );
+  end if;
+  return changed = 1;
+end;
+$$;
+
+revoke execute on function public.review_forum_post(uuid, text, text)
+  from public, anon;
+grant execute on function public.review_forum_post(uuid, text, text)
+  to authenticated;
+
 -- V12 thông báo tất cả bài ngay khi vừa insert. V13 chỉ thông báo con người
 -- khi Gemini trả về "nghi ngờ"; Edge Function chịu trách nhiệm tạo thông báo.
 drop trigger if exists forum_posts_notify_admin_v12 on public.forum_posts;

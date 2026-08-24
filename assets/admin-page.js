@@ -109,13 +109,27 @@ const elements = {
   accountsPanel: document.getElementById('accountsPanel'),
   permissionsPanel: document.getElementById('permissionsPanel'),
   permissionLoading: document.getElementById('permissionLoading'),
-  permissionGrid: document.getElementById('permissionGrid')
+  permissionGrid: document.getElementById('permissionGrid'),
+  consolePanel: document.getElementById('consolePanel'),
+  consoleForm: document.getElementById('consoleForm'),
+  consoleInput: document.getElementById('consoleInput'),
+  consoleRunButton: document.getElementById('consoleRunButton'),
+  consoleOutput: document.getElementById('consoleOutput'),
+  consoleTargets: document.getElementById('consoleTargets'),
+  consoleConfirm: document.getElementById('consoleConfirm'),
+  consoleConfirmText: document.getElementById('consoleConfirmText'),
+  consoleCancelButton: document.getElementById('consoleCancelButton'),
+  consoleConfirmButton: document.getElementById('consoleConfirmButton'),
+  consoleRefreshButton: document.getElementById('consoleRefreshButton'),
+  consoleHistory: document.getElementById('consoleHistory'),
+  consoleExamples: document.querySelectorAll('[data-console-command]')
 };
 
 let session;
 let currentProfile;
 let profiles = [];
 let permissionRows = [];
+let pendingDestructiveCommand = '';
 
 function renderCounts() {
   const counts = profiles.reduce((result, item) => {
@@ -281,6 +295,17 @@ function renderMembers() {
   }
 }
 
+function renderConsoleTargets() {
+  const fragment = document.createDocumentFragment();
+  profiles.forEach(member => {
+    const option = document.createElement('option');
+    option.value = `@${member.username}`;
+    option.label = `${profileName(member)} · ${roleLabel(member.role)}`;
+    fragment.appendChild(option);
+  });
+  elements.consoleTargets.replaceChildren(fragment);
+}
+
 function permissionRow(role, permissionKey) {
   return permissionRows.find(item =>
     item.role_name === role && item.permission_key === permissionKey
@@ -441,16 +466,22 @@ function renderPermissions() {
 }
 
 function switchAdminTab(tabName) {
-  const showPermissions = tabName === 'permissions';
-  elements.accountsPanel.hidden = showPermissions;
-  elements.permissionsPanel.hidden = !showPermissions;
+  const selected = ['accounts', 'permissions', 'console'].includes(tabName)
+    ? tabName
+    : 'accounts';
+  elements.accountsPanel.hidden = selected !== 'accounts';
+  elements.permissionsPanel.hidden = selected !== 'permissions';
+  elements.consolePanel.hidden = selected !== 'console';
   elements.tabs.forEach(tab => {
-    const active = tab.dataset.adminTab === tabName;
+    const active = tab.dataset.adminTab === selected;
     tab.classList.toggle('active', active);
     tab.setAttribute('aria-selected', String(active));
     tab.tabIndex = active ? 0 : -1;
   });
-  window.history.replaceState(null, '', showPermissions ? '#permissions' : '#accounts');
+  window.history.replaceState(null, '', `#${selected}`);
+  if (selected === 'console') {
+    requestAnimationFrame(() => elements.consoleInput.focus({ preventScroll: true }));
+  }
 }
 
 async function loadMembers() {
@@ -463,6 +494,7 @@ async function loadMembers() {
   profiles = data || [];
   renderCounts();
   renderMembers();
+  renderConsoleTargets();
 }
 
 async function loadPermissions() {
@@ -472,10 +504,190 @@ async function loadPermissions() {
   renderPermissions();
 }
 
+function commandIsDestructive(command) {
+  return /^(posts|comments|content)\s+delete-all\s+\S+$/iu.test(command.trim());
+}
+
+function consoleTimestamp() {
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).format(new Date());
+}
+
+function appendConsoleOutput(title, payload, type = 'info') {
+  const block = document.createElement('div');
+  block.className = `console-output-block ${type}`;
+  const heading = document.createElement('strong');
+  heading.textContent = `[${consoleTimestamp()}] ${title}`;
+  const content = document.createElement('pre');
+  content.textContent = typeof payload === 'string'
+    ? payload
+    : JSON.stringify(payload, null, 2);
+  block.append(heading, content);
+  if (elements.consoleOutput.childNodes.length === 1
+    && elements.consoleOutput.firstChild?.nodeType === Node.TEXT_NODE) {
+    elements.consoleOutput.replaceChildren(block);
+  } else {
+    elements.consoleOutput.appendChild(block);
+  }
+  while (elements.consoleOutput.children.length > 30) {
+    elements.consoleOutput.firstElementChild?.remove();
+  }
+  elements.consoleOutput.scrollTop = elements.consoleOutput.scrollHeight;
+}
+
+async function edgeFunctionError(error) {
+  const fallback = humanizeAuthError(error);
+  const response = error?.context;
+  if (!response || typeof response.clone !== 'function') return fallback;
+  try {
+    const payload = await response.clone().json();
+    return payload?.error || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function commandTargetName(targetId) {
+  const target = profiles.find(member => member.id === targetId);
+  return target ? `@${target.username}` : targetId ? targetId.slice(0, 8) : '—';
+}
+
+function renderConsoleHistory(rows) {
+  const fragment = document.createDocumentFragment();
+  (rows || []).forEach(row => {
+    const item = document.createElement('article');
+    item.className = 'console-history-item';
+    item.dataset.status = row.status;
+    const top = document.createElement('div');
+    const command = document.createElement('code');
+    command.textContent = row.command_text;
+    const status = document.createElement('span');
+    status.textContent = row.status === 'succeeded'
+      ? 'Thành công'
+      : row.status === 'failed' ? 'Thất bại' : 'Đang chạy';
+    top.append(command, status);
+    const meta = document.createElement('small');
+    const created = new Intl.DateTimeFormat('vi-VN', {
+      dateStyle: 'short',
+      timeStyle: 'medium'
+    }).format(new Date(row.created_at));
+    meta.textContent = `${created} · ${commandTargetName(row.target_user_id)}`;
+    item.append(top, meta);
+    if (row.error_message) {
+      const error = document.createElement('p');
+      error.textContent = row.error_message;
+      item.appendChild(error);
+    }
+    fragment.appendChild(item);
+  });
+  elements.consoleHistory.replaceChildren(fragment);
+  if (!rows?.length) {
+    const empty = document.createElement('div');
+    empty.className = 'console-history-empty';
+    empty.textContent = 'Chưa có lệnh nào trong nhật ký.';
+    elements.consoleHistory.appendChild(empty);
+  }
+}
+
+async function loadConsoleHistory() {
+  elements.consoleRefreshButton.disabled = true;
+  try {
+    const { data, error } = await supabase
+      .from('admin_console_logs')
+      .select('id, actor_id, target_user_id, command_text, action, status, result, error_message, created_at, finished_at')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    renderConsoleHistory(data || []);
+  } catch (error) {
+    elements.consoleHistory.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'console-history-empty error';
+    empty.textContent = `${humanizeAuthError(error)} Hãy chạy admin_console_migration.sql.`;
+    elements.consoleHistory.appendChild(empty);
+  } finally {
+    elements.consoleRefreshButton.disabled = false;
+  }
+}
+
+async function runConsoleCommand(command, confirm = false) {
+  setBusy(elements.consoleRunButton, true, 'Đang chạy...');
+  elements.consoleInput.disabled = true;
+  appendConsoleOutput(`admin $ ${command}`, 'Đang gửi lệnh đến máy chủ...', 'pending');
+  try {
+    const { data, error } = await supabase.functions.invoke('admin-console', {
+      body: { command, confirm }
+    });
+    if (error) throw error;
+    if (!data?.ok) throw new Error(data?.error || 'Máy chủ không xác nhận kết quả.');
+    appendConsoleOutput('Hoàn tất', data.result, 'success');
+    if (/^(role|status)\s+set\s+/iu.test(command)) await loadMembers();
+    await loadConsoleHistory();
+  } catch (error) {
+    const message = await edgeFunctionError(error);
+    appendConsoleOutput('Lệnh thất bại', message, 'error');
+    showMessage(elements.message, message, 'error');
+  } finally {
+    elements.consoleInput.disabled = false;
+    setBusy(elements.consoleRunButton, false);
+    elements.consoleInput.focus();
+  }
+}
+
+function requestConsoleExecution(command) {
+  const normalized = command.trim().replace(/\s+/gu, ' ');
+  if (!normalized) {
+    appendConsoleOutput('Chưa có lệnh', 'Nhập lệnh hoặc chọn một gợi ý bên dưới.', 'error');
+    return;
+  }
+  if (commandIsDestructive(normalized)) {
+    pendingDestructiveCommand = normalized;
+    elements.consoleConfirmText.textContent = normalized;
+    elements.consoleConfirm.hidden = false;
+    elements.consoleConfirmButton.focus();
+    return;
+  }
+  void runConsoleCommand(normalized, false);
+}
+
 elements.search.addEventListener('input', renderMembers);
 elements.tabs.forEach(tab => {
   tab.addEventListener('click', () => switchAdminTab(tab.dataset.adminTab));
 });
+
+elements.consoleForm.addEventListener('submit', event => {
+  event.preventDefault();
+  requestConsoleExecution(elements.consoleInput.value);
+});
+
+elements.consoleExamples.forEach(button => {
+  button.addEventListener('click', () => {
+    const command = button.dataset.consoleCommand || '';
+    elements.consoleInput.value = command;
+    elements.consoleInput.focus();
+    elements.consoleInput.setSelectionRange(command.length, command.length);
+    if (command.trim() === 'help') requestConsoleExecution(command);
+  });
+});
+
+elements.consoleCancelButton.addEventListener('click', () => {
+  pendingDestructiveCommand = '';
+  elements.consoleConfirm.hidden = true;
+  elements.consoleInput.focus();
+});
+
+elements.consoleConfirmButton.addEventListener('click', () => {
+  if (!pendingDestructiveCommand) return;
+  const command = pendingDestructiveCommand;
+  pendingDestructiveCommand = '';
+  elements.consoleConfirm.hidden = true;
+  void runConsoleCommand(command, true);
+});
+
+elements.consoleRefreshButton.addEventListener('click', () => void loadConsoleHistory());
 
 elements.logoutButton.addEventListener('click', async () => {
   setBusy(elements.logoutButton, true, 'Đang đăng xuất...');
@@ -505,7 +717,11 @@ async function init() {
       elements.permissionLoading.classList.add('permission-load-error');
     }
     elements.content.hidden = false;
-    switchAdminTab(window.location.hash === '#permissions' ? 'permissions' : 'accounts');
+    await loadConsoleHistory();
+    const requestedTab = window.location.hash.replace(/^#/u, '');
+    switchAdminTab(['accounts', 'permissions', 'console'].includes(requestedTab)
+      ? requestedTab
+      : 'accounts');
   } catch (error) {
     elements.loading.hidden = true;
     showMessage(

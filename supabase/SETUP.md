@@ -297,7 +297,33 @@ Từ thời điểm đó, tài khoản chủ có thể mở `admin.html` để c
 hoặc cấm tài khoản. Người dùng thông thường không thể tự thay đổi `role` hay
 `account_status`.
 
-## 6. Kiểm tra
+## 6. Bật kiểm duyệt Gemini 3.6 Flash
+
+1. Chạy toàn bộ `forum_v13_migration.sql` trong **SQL Editor** sau V12 và
+   migration phân quyền.
+2. Tạo hoặc cập nhật Edge Function tên `moderate-forum` bằng file
+   `functions/moderate-forum/index.ts`.
+3. Trong **Edge Functions → Secrets**, thêm:
+   - `GEMINI_API_KEY`: khóa Gemini API; không đưa khóa vào frontend/GitHub.
+   - `MEDIA_API_URL`: `https://chonhoctap-media.chonhoctap-vn.workers.dev`.
+   - `R2_CLEANUP_SECRET`: cùng secret đang đặt trong Cloudflare Worker để xóa
+     media vi phạm theo lô.
+   - `ALLOWED_ORIGINS` (tùy chọn): danh sách origin bổ sung, phân cách bằng dấu phẩy.
+4. Deploy Edge Function rồi mới đưa thay đổi frontend V13 lên nhánh chính.
+
+Luồng V13 áp dụng cho cả bài viết và bình luận:
+
+- **An toàn**: Gemini tự công khai.
+- **Vi phạm rõ ràng**: xóa object R2/Supabase Storage trước, sau đó xóa nội dung;
+  vẫn giữ một bản ghi kiểm duyệt không chứa nội dung trong
+  `forum_moderation_runs`.
+- **Nghi ngờ, hết thời gian hoặc lỗi quota**: giữ nội dung ở trạng thái ẩn và
+  gửi hộp thư cho Staff/Admin.
+- **Âm thanh**: không gửi Gemini, chuyển thẳng cho admin.
+- Request Gemini dùng `store=false`, structured JSON và mức suy luận thấp để
+  giảm độ trễ. Edge Function có timeout 70 giây, thấp hơn giới hạn 5 phút.
+
+## 7. Kiểm tra
 
 1. Đăng ký bằng email, username và mật khẩu.
 2. Xác nhận email nếu Supabase yêu cầu.
@@ -347,7 +373,9 @@ hoặc cấm tài khoản. Người dùng thông thường không thể tự tha
 32. Chạy `role_permissions_migration.sql`, mở `admin.html`, thử cả hai tab và
     tắt/bật một quyền không khóa của Staff; xác nhận thay đổi có hiệu lực ở một
     tài khoản Staff đang hoạt động.
-32. Đăng bài bất kỳ và xác nhận bài nằm trong hàng chờ, Staff/admin nhận thông
-    báo và đều có nút Duyệt/Từ chối. Staff được ẩn/hiện nhưng không được xóa bài
-    của người khác hoặc quản lý tài khoản. Bình luận văn bản/ảnh công khai ngay;
-    âm thanh/video trong bình luận vẫn chờ riêng admin.
+33. Chạy `forum_v13_migration.sql`, deploy lại `moderate-forum`, sau đó thử:
+    bài/bình luận văn bản an toàn tự công khai; ảnh và một video hợp lệ được
+    Gemini kiểm tra; nội dung nghi ngờ xuất hiện trong hộp thư Staff/Admin; âm
+    thanh chỉ admin duyệt; nội dung vi phạm bị xóa khỏi database và object R2
+    cũng không còn. Tắt tạm key hoặc gây lỗi quota để xác nhận nội dung chuyển
+    sang người kiểm duyệt thay vì bị treo.

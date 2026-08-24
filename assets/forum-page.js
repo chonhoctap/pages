@@ -737,6 +737,13 @@ async function prepareSelectedFiles(fileList, sequenceCheck) {
         return [];
       }
       const metadata = await mediaMetadata(prepared);
+      if (
+        ['video', 'audio'].includes(mediaKind(prepared))
+        && !metadata.durationSeconds
+      ) {
+        const sourceMetadata = await mediaMetadata(source);
+        metadata.durationSeconds = sourceMetadata.durationSeconds;
+      }
       const limits = currentMediaLimits();
       const landscape = (metadata.width || 0) >= (metadata.height || 0);
       const needsFrame = mediaKind(prepared) === 'video';
